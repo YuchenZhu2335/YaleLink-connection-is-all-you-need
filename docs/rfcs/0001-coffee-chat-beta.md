@@ -1,6 +1,6 @@
 # 0001 Coffee Chat 内测活动
 
-- **状态**：讨论中 —— 可点击的原型已完成，待会上拍板 §9 后进入上线开发
+- **状态**：讨论中 —— 可点击的原型已完成；上线范围与一周排期见 [PRD](../prd/coffee-chat-launch.md)
 - **负责人**：待会上确定（写进 `.github/CODEOWNERS`）
 - **原型**：`#/coffee`，代码在 `web/js/{domain,api,modules}/coffee.js`；演示登录用任意 `@yale.edu` 邮箱 + 验证码 `000000`
 
