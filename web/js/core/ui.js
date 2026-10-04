@@ -131,7 +131,7 @@ YL.ui = (function () {
     if (!btn) return;
     btn.disabled = !!on;
     btn.classList.toggle("is-busy", !!on);
-    if (on) btn.setAttribute("aria-busy", "true"); else btn.removeAttribute("aria-busy");
+    if (on) { btn.setAttribute("aria-busy", "true"); btn.setAttribute("data-busy-label", t("common.processing")); } else btn.removeAttribute("aria-busy");
   }
   function formValues(form) { const o = {}; new FormData(form).forEach((v, k) => { if (o[k] != null) { o[k] = [].concat(o[k], v); } else o[k] = v; }); return o; }
 

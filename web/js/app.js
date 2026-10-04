@@ -36,7 +36,7 @@
 
     $("footer").innerHTML = `
       <div class="footer__inner">
-        <div class="footer__brand"><span class="wordmark" aria-label="Yalelux">yale<i>lux</i></span><span>${esc(t("brand.tagline"))}</span></div>
+        <div class="footer__brand"><span class="wordmark" aria-label="Yalelux">yale<i>lux</i></span><span>${esc(t("brand.tagline"))}</span>${lang === "zh" ? `<span class="faint" lang="en">Where Yale's light connects resources and ideas</span>` : ""}</div>
         <nav class="footer__links" aria-label="${esc(t("nav.footer"))}">
           <a href="#/events">${esc(t("nav.events"))}</a>
           <a href="#/about">${esc(t("nav.about"))}</a>
@@ -85,9 +85,10 @@
   }
   document.title = `${YL_CONFIG.siteName} · ${t("brand.tagline")}`;
   renderShell();
-  YL.router.start();
-  refreshBadges();
   window.addEventListener("yl:route", () => setTimeout(markActive));
+  YL.router.start();
+  markActive();
+  refreshBadges();
   window.addEventListener("yl:badges", updateBadges);
   window.addEventListener("yl:langchange", () => { document.title = `${YL_CONFIG.siteName} · ${t("brand.tagline")}`; renderShell(); YL.router.render(); });
   window.addEventListener("yl:authchange", () => { renderShell(); refreshBadges(); });

@@ -60,7 +60,7 @@ function createMailer(ctx) {
       return false;
     }
     const unsubscribe = OPTIONAL.includes(kind) && user ? unsubscribeUrl(user.id, kind) : null;
-    const text = tpl.text + `\n\n——\nYalelux · Where Yale's light connects resources and ideas\n${ctx.cfg.publicUrl}` + (unsubscribe ? `\n不想再收这类邮件 / Unsubscribe: ${unsubscribe}` : "");
+    const text = tpl.text + `\n\n——\nYalelux · 耶鲁灯下，资源与想法相遇 · Where Yale's light connects resources and ideas\n${ctx.cfg.publicUrl}\nYalelux 由 ACSSY 志愿者开发和运营，不是耶鲁大学官方产品。/ Built by ACSSY volunteers; not affiliated with Yale University.` + (unsubscribe ? `\n不想再收这类邮件 / Unsubscribe: ${unsubscribe}` : "");
     let status = "sent", error = null;
     try { await drivers[ctx.cfg.mailDriver]({ kind, to, subject: tpl.subject, text, unsubscribe }); }
     catch (e) { status = "failed"; error = String(e.message || e).replace(/[^\s<>()"',;:@]+@[^\s<>()"',;:@]+/g, "***@***").slice(0, 300); console.error("mail failed:", error); } // 记录里不留邮箱地址
