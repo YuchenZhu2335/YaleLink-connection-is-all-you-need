@@ -1129,3 +1129,6 @@ body.has-modal { overflow: hidden; }
 @media (hover: hover) { .menu__item:hover { background: var(--c-surface-2); } }
 @media (max-width: 899px) { body.has-tabbar .menu { display: none; } }
 body[data-route="login"] .topbar__login { display: none; }
+
+/* 夜色横幅里的进度条：轨道用夜色细线色，否则和底色一样看不见 */
+.banner--event .progress, .inverse .progress { background: var(--c-inverse-line); }

@@ -450,7 +450,7 @@
   function statusHtml(st) {
     const free = freeCount(st);
     if (!free) {
-      return noticeHtml("accent", "arch", `<p>${esc(st.joined ? t("coffee.status.noneOpen") : t("coffee.status.none"))}</p>
+      return noticeHtml("accent", "arch", `<p>${esc(st.joined && list(st.slots).length ? t("coffee.status.noneOpen") : t("coffee.status.none"))}</p>
         ${joinInBanner(st) ? "" : `<div>${timesBtn("btn--sm")}</div>`}`, "status");
     }
     return `<nav class="statusbar" data-role="status" aria-label="${esc(t("coffee.status.label"))}">
@@ -950,11 +950,13 @@
           <h1 class="page-title">${esc(t("coffee.inbox.title"))}</h1>
           <p class="page-sub">${esc(t("coffee.inbox.sub"))}</p>
         </div></header>
-        <nav class="segmented" aria-label="${esc(t("coffee.inbox.title"))}">
-          ${segItem("incoming", "#/coffee/inbox", t("coffee.inbox.tabIncoming"), inc.length ? `<span class="count" data-role="inc-count">${esc(YL.ui.num(inc.length))}</span>` : "")}
-          ${segItem("sent", "#/coffee/inbox?tab=sent", t("coffee.inbox.tabSent"), out.length ? `<span class="count count--neutral">${esc(YL.ui.num(out.length))}</span>` : "")}
-        </nav>
-        ${panel}`;
+        <div class="stack">
+          <nav class="segmented" aria-label="${esc(t("coffee.inbox.title"))}">
+            ${segItem("incoming", "#/coffee/inbox", t("coffee.inbox.tabIncoming"), inc.length ? `<span class="count" data-role="inc-count">${esc(YL.ui.num(inc.length))}</span>` : "")}
+            ${segItem("sent", "#/coffee/inbox?tab=sent", t("coffee.inbox.tabSent"), out.length ? `<span class="count count--neutral">${esc(YL.ui.num(out.length))}</span>` : "")}
+          </nav>
+          ${panel}
+        </div>`;
     }
     await load();
   }

@@ -170,7 +170,9 @@ test("截图：手机与电脑", async ({ browser }) => {
     await signIn(page, `demo0${n}@demo.yale.edu`, `demo${n}@example.com`);
     for (const r of ["coffee", "coffee/browse", "coffee/times", "coffee/inbox", "coffee/matches", "profile", "events"]) {
       await page.goto("/#/" + r);
-      await page.waitForLoadState("networkidle");
+      await page.waitForFunction(() => !document.querySelector("#main .loading"));
+      await page.addStyleTag({ content: "#toast{display:none!important}*{transition:none!important}" });
+      await page.waitForTimeout(400);
       await page.screenshot({ path: path.join(SHOTS, `${name}-${r.replace(/\//g, "-")}.png`), fullPage: true });
     }
     await ctx.close();
