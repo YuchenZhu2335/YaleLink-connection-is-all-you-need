@@ -237,3 +237,38 @@ test("公开的轮次详情只给活动轮", async () => {
     assert.equal((await client(srv).get("/rounds/" + id)).status, 404);
   } finally { await srv.close(); }
 });
+
+test("「改发到耶鲁邮箱」不等 60 秒的例外对注册过和没注册过的邮箱表现一样（不能用来试探账号）", async () => {
+  const srv = await start();
+  try {
+    const a = await signUp(srv, "k1@yale.edu");
+    await a.post("/me/contact-email/verify", { code: lastCode(srv, "k1@example.com") });
+    rewindCodes(srv);
+    const c = client(srv);
+    for (const email of ["k1@yale.edu", "nobody-k2@yale.edu"]) {
+      assert.equal((await c.post("/auth/request-code", { email })).ok, true);
+      assert.equal((await c.post("/auth/request-code", { email, via: "yale" })).ok, true, email + "：第一次改发可以立刻");
+      assert.equal((await c.post("/auth/request-code", { email, via: "yale" })).error.reason, "resend_too_soon", email + "：再改发要等");
+    }
+  } finally { await srv.close(); }
+});
+
+test("活动开始通知发送失败：下一次定时任务补发，已发的不重发", async () => {
+  const srv = await start();
+  try {
+    await signUp(srv, "j1@yale.edu"); await signUp(srv, "j2@yale.edu");
+    const admin = await signUp(srv, "admin@yale.edu");
+    const C = srv.ctx.coffee, today = C.weeklyRound(new Date().toISOString()).startDate;
+    await admin.post("/admin/rounds", { title: { zh: "测试活动", en: "Test" }, startDate: today, endDate: C.addDays(today, 10), status: "published" });
+    const events = () => srv.ctx.mailer.outbox.filter((m) => m.kind === "event").length;
+    srv.ctx.cfg.mailDriver = "broken"; // 发信服务出故障
+    await srv.jobs.run();
+    assert.equal(events(), 0);
+    assert.equal(srv.db.get("SELECT COUNT(*) n FROM emails WHERE kind = 'event' AND status = 'failed'").n, 3);
+    srv.ctx.cfg.mailDriver = "console"; // 恢复
+    await srv.jobs.run();
+    assert.equal(events(), 3, "补发给所有人");
+    await srv.jobs.run();
+    assert.equal(events(), 3, "都发过了就不再发");
+  } finally { await srv.close(); }
+});

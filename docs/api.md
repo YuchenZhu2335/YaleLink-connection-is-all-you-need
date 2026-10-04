@@ -25,7 +25,7 @@
 
 | 方法 | 路径 | 鉴权 | 入参 | 返回 data / 错误 |
 |---|---|---|---|---|
-| POST | `/auth/request-code` | none | `{ email, via? }`（`via: "yale"` 强制发到耶鲁邮箱） | `{ sent: true }`——**对任何邮箱都一样**，不透露是否注册过、发到了哪里（老用户默认发到已验证的联系邮箱；界面要一直提供"改发到耶鲁邮箱"）；错误 `fields.email = "not_yale"`、`rate_limited / resend_too_soon`（60 秒内重发）、`rate_limited / too_many_requests`（每小时上限）、`rate_limited / busy`（全站上限）、`internal / mail_failed`（邮件没发出去，可立即重试） |
+| POST | `/auth/request-code` | none | `{ email, via? }`（`via: "yale"` 强制发到耶鲁邮箱；上一次是不带 `via` 的普通请求时，可以不等 60 秒立即改发一次——只看上一次是不是 `via: "yale"`，不看实际发到了哪里，所以不泄露是否注册） | `{ sent: true }`——**对任何邮箱都一样**，不透露是否注册过、发到了哪里（老用户默认发到已验证的联系邮箱；界面要一直提供"改发到耶鲁邮箱"）；错误 `fields.email = "not_yale"`、`rate_limited / resend_too_soon`（60 秒内重发）、`rate_limited / too_many_requests`（每小时上限）、`rate_limited / busy`（全站上限）、`internal / mail_failed`（邮件没发出去，可立即重试） |
 | POST | `/auth/verify` | none | `{ email, code }` | `{ user: Me }`；错误 `fields.code = "wrong" \| "expired" \| "too_many_attempts"` |
 | GET | `/auth/me` | none | — | `{ user: Me \| null }` |
 | POST | `/auth/logout` | user | `{ all?: true }`（所有设备都退出） | `{ ok: true }` |

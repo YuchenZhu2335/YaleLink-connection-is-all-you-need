@@ -17,17 +17,19 @@ function create(ctx, coffee) {
     if (weekRow && !weekRow.announced_at) {
       const week = coffee.toRound(weekRow);
       const createdAfterStart = Date.parse(weekRow.created_at) > C.slotStart(week, week.startDate + "T00:00"); // 系统在这周中途才第一次启动
+      let done = true;
       if (!createdAfterStart && round && round.kind === "weekly") {
-        for (const u of readyUsers()) await ctx.mailer.sendOnce("weekly", u, {}, "weekly:" + week.id);
+        for (const u of readyUsers()) done = (await ctx.mailer.sendOnce("weekly", u, {}, "weekly:" + week.id)) && done;
       }
-      db.run("UPDATE rounds SET announced_at = ? WHERE id = ?", t, week.id);
+      if (done) db.run("UPDATE rounds SET announced_at = ? WHERE id = ?", t, week.id); // 有人没发成功：下一轮定时任务接着补（已发的不重发，失败最多重试 3 次）
     }
 
     // 2) 活动开始
     for (const r of db.all("SELECT * FROM rounds WHERE kind = 'event' AND status = 'published' AND announced_at IS NULL").map(coffee.toRound)) {
       if (!C.isRoundOpen(r, t)) continue;
-      for (const u of readyUsers()) await ctx.mailer.sendOnce("event", u, { title: r.title }, "event:" + r.id);
-      db.run("UPDATE rounds SET announced_at = ? WHERE id = ?", t, r.id);
+      let done = true;
+      for (const u of readyUsers()) done = (await ctx.mailer.sendOnce("event", u, { title: r.title }, "event:" + r.id)) && done;
+      if (done) db.run("UPDATE rounds SET announced_at = ? WHERE id = ?", t, r.id);
     }
 
     // 3) 每天一封的邀请汇总

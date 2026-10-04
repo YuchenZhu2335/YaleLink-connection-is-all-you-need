@@ -54,10 +54,11 @@ function install(app, ctx) {
   const me = (req) => ctx.meDTO(db.get("SELECT * FROM users WHERE id = ?", req.user.id), req.session.via);
 
   // 发码前的检查（被拒绝的请求不消耗这个邮箱的额度）：60 秒间隔、每小时上限、全站上限
-  // wantYale：上一封发到了联系邮箱、这次用户要求改发耶鲁邮箱时，不受 60 秒间隔限制（每小时上限照算）
+  // wantYale：上一次是默认请求、这次用户主动要求"改发到耶鲁邮箱"时，不受 60 秒间隔限制（每小时上限照算）。
+  // 只看上一次是不是主动要求，不看它实际发到了哪里，所以不能用来试探某个邮箱有没有注册
   function checkQuota(purpose, userKey, wantYale) {
-    const last = db.get("SELECT created_at, target FROM login_codes WHERE purpose = ? AND user_key = ? ORDER BY id DESC LIMIT 1", purpose, userKey);
-    if (last && Date.now() - Date.parse(last.created_at) < RESEND_GAP && !(wantYale && last.target === "contact")) throw fail("rate_limited", { reason: "resend_too_soon" });
+    const last = db.get("SELECT created_at, forced_yale FROM login_codes WHERE purpose = ? AND user_key = ? ORDER BY id DESC LIMIT 1", purpose, userKey);
+    if (last && Date.now() - Date.parse(last.created_at) < RESEND_GAP && !(wantYale && !last.forced_yale)) throw fail("rate_limited", { reason: "resend_too_soon" });
     if (db.get("SELECT COUNT(*) n FROM login_codes WHERE purpose = ? AND user_key = ? AND created_at > ?", purpose, userKey, ago(HOUR)).n >= PER_EMAIL_HOURLY) throw fail("rate_limited", { reason: "too_many_requests" });
     if (db.get("SELECT COUNT(*) n FROM login_codes WHERE created_at > ?", ago(HOUR)).n >= GLOBAL_HOURLY) {
       console.error("ALERT: login code global hourly ceiling reached");
@@ -68,7 +69,7 @@ function install(app, ctx) {
     checkQuota(purpose, userKey, wantYale);
     const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
     db.run("UPDATE login_codes SET used_at = ? WHERE purpose = ? AND user_key = ? AND used_at IS NULL", now(), purpose, userKey); // 旧码作废
-    const r = db.run("INSERT INTO login_codes (purpose, user_key, target, code_hash, created_at, expires_at, ip) VALUES (?, ?, ?, ?, ?, ?, ?)", purpose, userKey, target, hashCode(code), now(), new Date(Date.now() + CODE_TTL).toISOString(), ip || null);
+    const r = db.run("INSERT INTO login_codes (purpose, user_key, target, code_hash, created_at, expires_at, ip, forced_yale) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", purpose, userKey, target, hashCode(code), now(), new Date(Date.now() + CODE_TTL).toISOString(), ip || null, wantYale ? 1 : 0);
     return { code, id: r.lastInsertRowid };
   }
   // 邮件没发出去：作废这个码（不占 60 秒间隔），告诉用户稍后重试
