@@ -4,12 +4,15 @@
   "private": true,
   "description": "耶鲁校友社群开源基础平台 · Open-source community platform for Yale alumni (static prototype)",
   "scripts": {
+    "start": "node server/index.js",
+    "seed": "node server/seed.js",
     "serve": "python3 -m http.server 8000 --directory web",
     "validate": "node scripts/validate-data.mjs",
     "lint:arch": "node scripts/check-architecture.mjs",
     "test:unit": "node --test tests/unit/*.test.js",
+    "test:server": "node --test tests/server/*.test.js",
     "test:e2e": "playwright test",
-    "check": "npm run validate && npm run lint:arch && npm run test:unit",
+    "check": "npm run validate && npm run lint:arch && npm run test:unit && npm run test:server",
     "test": "npm run check && npm run test:e2e"
   },
   "engines": {

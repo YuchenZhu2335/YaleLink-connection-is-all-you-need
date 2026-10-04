@@ -4,7 +4,7 @@ on:
     branches: [main]
   pull_request:
 jobs:
-  # 秒级检查：数据与词典、架构规则、业务规则单测（全部零依赖）
+  # 秒级检查：数据与词典、架构规则、业务规则单测、后端接口测试（全部零依赖）
   check:
     runs-on: ubuntu-latest
     steps:
@@ -14,6 +14,7 @@ jobs:
       - run: node scripts/validate-data.mjs
       - run: node scripts/check-architecture.mjs
       - run: node --test tests/unit/*.test.js
+      - run: node --test tests/server/*.test.js
   smoke:
     runs-on: ubuntu-latest
     needs: check

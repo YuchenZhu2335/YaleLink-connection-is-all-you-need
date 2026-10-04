@@ -74,58 +74,11 @@ const depts = new Set([...config.matchAll(/acssyDepartments:\s*\[([^\]]*)\]/g)].
 (data.contacts || []).forEach((k) => { ref(k.kind, term("contactKinds"), `contacts.${k.id}.kind`); ref(k.ownerId, users, `contacts.${k.id}.ownerId`, true); });
 (data.templates || []).forEach((t) => { ref(t.kind, term("templateKinds"), `templates.${t.id}.kind`); ref(t.maintainerId, users, `templates.${t.id}.maintainerId`, true); });
 
-// Coffee Chat 内测活动：直接调用业务规则（web/js/domain/coffee.js）校验种子数据 —— 规则只写一次，前端、校验脚本、后端共用
+// 约咖啡问卷配置：直接调用业务规则（web/js/domain/coffee.js）校验 —— 规则只写一次，前端、校验脚本、后端共用
 const coffee = createRequire(import.meta.url)("../web/js/domain/coffee.js");
-const coffeeEvent = (data.coffeeEvents || [])[0];
-(data.coffeeEvents || []).forEach((ev) => {
-  const p = `coffeeEvents.${ev.id}`;
-  for (const k of ["startDate", "endDate"]) if (!/^\d{4}-\d{2}-\d{2}$/.test(ev[k] || "")) err(`${p}.${k} must be YYYY-MM-DD`);
-  for (const k of ["dayStart", "dayEnd"]) if (!/^\d{2}:\d{2}$/.test(ev[k] || "")) err(`${p}.${k} must be HH:MM`);
-  for (const k of ["slotMinutes", "gapMinutes", "cutoffHours", "maxPending"]) if (!Number.isInteger(ev[k]) || ev[k] < 0) err(`${p}.${k} must be a non-negative integer`);
-  if (ev.startDate > ev.endDate) err(`${p}: startDate is after endDate`);
-  try { new Intl.DateTimeFormat("en-US", { timeZone: ev.timezone }); } catch (e) { err(`${p}.timezone "${ev.timezone}" is not an IANA time zone`); }
-  if (!coffee.slotTimes(ev).length) err(`${p}: the daily template yields no slots`);
-});
-const coffeeProfiles = data.coffeeProfiles || [], coffeeProfileIds = idsOf("coffeeProfiles");
-const coffeeYear = coffeeEvent ? Number(coffeeEvent.startDate.slice(0, 4)) : new Date().getFullYear();
-coffeeProfiles.forEach((cp) => {
-  const p = `coffeeProfiles.${cp.id}`, u = (data.users || []).find((x) => x.id === cp.id);
-  if (!u) err(`${p}: id must be a user id from users.json`);
-  const name = cp.name || (u && u.name && u.name.zh);
-  Object.entries(coffee.validateProfile(Object.assign({}, cp, { name }), coffeeYear).fields).forEach(([k, code]) => err(`${p}.${k}: ${code}`));
-  if (!/@example\.com$/.test(cp.email || "")) err(`${p}.email must be a fictional @example.com address`);
-  if (coffeeEvent) { const bad = (cp.slots || []).filter((s) => !coffee.isValidSlot(coffeeEvent, s)); if (bad.length) err(`${p}.slots outside the event template: ${bad.join(", ")}`); }
-});
-const bookedSlots = new Set();
-(data.coffeeBookings || []).forEach((b) => {
-  const p = `coffeeBookings.${b.id}`;
-  ref(b.requesterId, coffeeProfileIds, `${p}.requesterId`); ref(b.hostId, coffeeProfileIds, `${p}.hostId`);
-  if (coffeeEvent && b.eventId !== coffeeEvent.id) err(`${p}.eventId must be "${coffeeEvent.id}"`);
-  const host = coffeeProfiles.find((x) => x.id === b.hostId);
-  if (host && (host.slots || []).indexOf(b.slot) < 0) err(`${p}.slot ${b.slot} is not one of the host's free slots`);
-  if (bookedSlots.has(b.hostId + "@" + b.slot)) err(`${p}: ${b.hostId}'s slot ${b.slot} is booked twice`);
-  bookedSlots.add(b.hostId + "@" + b.slot);
-  if (!coffee.STORED.includes(b.status)) err(`${p}.status must be ${coffee.STORED.join(" | ")}`);
-  // 用状态机重放历史：种子里的每条预约都必须是合法操作一步步走出来的
-  const h = b.history || [];
-  if (!h.length || h[0].action !== "create" || h[0].by !== b.requesterId || h[0].to !== "pending") { err(`${p}.history must start with "create" by the requester`); return; }
-  if (!coffeeEvent) return;
-  let cur = Object.assign({}, b, { status: "pending", history: [h[0]] });
-  for (const s of h.slice(1)) {
-    const r = coffee.transition(cur, s.action, s.by, coffeeEvent, s.at);
-    if (!r.ok) { err(`${p}.history: "${s.action}" by ${s.by} at ${s.at} is not allowed (${r.code}${r.reason ? " / " + r.reason : ""})`); return; }
-    cur = r.next;
-  }
-  if (cur.status !== b.status) err(`${p}: history ends in "${cur.status}" but status is "${b.status}"`);
-});
-(data.coffeeNotices || []).forEach((n) => {
-  ref(n.bookingId, idsOf("coffeeBookings"), `coffeeNotices.${n.id}.bookingId`);
-  if (!["booking_new", "booking_accepted", "booking_declined"].includes(n.kind)) err(`coffeeNotices.${n.id}.kind invalid`);
-});
-(data.coffeeFeedback || []).forEach((f) => {
-  ref(f.userId, users, `coffeeFeedback.${f.id}.userId`);
-  Object.entries(coffee.validateFeedback(f).fields).forEach(([k, code]) => err(`coffeeFeedback.${f.id}.${k}: ${code}`));
-});
+try {
+  coffee.validateQuestions(readJson(resolve(root, "data", "matchQuestions.json"))).forEach((e) => err(`matchQuestions.json: ${e}`));
+} catch (e) { err(`data/matchQuestions.json: ${e.message}`); }
 
 // 4. 词典一致 + 模块中使用的 key 都存在
 const zh = readJson(resolve(root, "i18n/zh.json")), en = readJson(resolve(root, "i18n/en.json"));

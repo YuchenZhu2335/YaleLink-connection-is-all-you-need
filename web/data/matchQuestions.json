@@ -1,0 +1,92 @@
+{
+  "_comment": "匹配问卷配置。加题、改选项、调权重只改这里（走 PR）。overlapWeight：两人选了同一个选项，每个加几分（最多算 overlapCap 个）；complements：互补选项对，一方选 A、另一方选 B 时加 complementWeight 分；public：是否在资料卡上公开；reasons 是推荐理由模板，{items} 会替换成具体选项。校验规则见 web/js/domain/coffee.js 的 validateQuestions。",
+  "version": 1,
+  "questions": [
+    {
+      "id": "goals",
+      "type": "multi",
+      "required": true,
+      "public": true,
+      "label": { "zh": "这次想聊什么（可多选）", "en": "What would you like to chat about? (pick any)" },
+      "options": [
+        { "id": "academic", "label": { "zh": "学界求职", "en": "Academic careers" } },
+        { "id": "industry", "label": { "zh": "业界求职", "en": "Industry careers" } },
+        { "id": "friends", "label": { "zh": "交朋友", "en": "Making friends" } },
+        { "id": "share", "label": { "zh": "分享经验、带学弟学妹", "en": "Sharing experience with juniors" } }
+      ],
+      "overlapWeight": 1,
+      "overlapCap": 1,
+      "complements": [["industry", "share"], ["academic", "share"]],
+      "complementWeight": 3,
+      "reasons": {
+        "overlap": { "zh": "你们都想{items}", "en": "You both want: {items}" },
+        "complement": { "zh": "一方想聊{items}，另一方愿意分享经验", "en": "One of you wants {items}; the other is happy to share" }
+      }
+    },
+    {
+      "id": "interests",
+      "type": "tags",
+      "required": true,
+      "public": true,
+      "max": 5,
+      "allowCustom": true,
+      "label": { "zh": "兴趣爱好（选 1–5 个，也可以自己加）", "en": "Interests (pick 1–5, or add your own)" },
+      "options": [
+        { "id": "hiking", "label": { "zh": "徒步", "en": "Hiking" } },
+        { "id": "running", "label": { "zh": "跑步", "en": "Running" } },
+        { "id": "ball", "label": { "zh": "球类运动", "en": "Ball sports" } },
+        { "id": "fitness", "label": { "zh": "健身", "en": "Fitness" } },
+        { "id": "food", "label": { "zh": "美食探店", "en": "Food" } },
+        { "id": "cooking", "label": { "zh": "做饭", "en": "Cooking" } },
+        { "id": "coffee", "label": { "zh": "咖啡", "en": "Coffee" } },
+        { "id": "travel", "label": { "zh": "旅行", "en": "Travel" } },
+        { "id": "photo", "label": { "zh": "摄影", "en": "Photography" } },
+        { "id": "music", "label": { "zh": "音乐", "en": "Music" } },
+        { "id": "art", "label": { "zh": "看展、艺术", "en": "Art" } },
+        { "id": "film", "label": { "zh": "电影剧集", "en": "Film & TV" } },
+        { "id": "reading", "label": { "zh": "读书", "en": "Reading" } },
+        { "id": "boardgames", "label": { "zh": "桌游", "en": "Board games" } },
+        { "id": "gaming", "label": { "zh": "游戏", "en": "Gaming" } },
+        { "id": "tech", "label": { "zh": "科技、AI", "en": "Tech & AI" } },
+        { "id": "investing", "label": { "zh": "投资理财", "en": "Investing" } },
+        { "id": "podcasts", "label": { "zh": "播客", "en": "Podcasts" } }
+      ],
+      "overlapWeight": 2,
+      "overlapCap": 3,
+      "reasons": { "overlap": { "zh": "你们都喜欢{items}", "en": "You both like {items}" } }
+    },
+    {
+      "id": "field",
+      "type": "single",
+      "required": true,
+      "public": true,
+      "label": { "zh": "你在 / 想去的领域", "en": "Your field (current or target)" },
+      "options": [
+        { "id": "finance", "label": { "zh": "金融", "en": "Finance" } },
+        { "id": "consulting", "label": { "zh": "咨询", "en": "Consulting" } },
+        { "id": "tech", "label": { "zh": "科技互联网", "en": "Tech" } },
+        { "id": "data", "label": { "zh": "数据与量化", "en": "Data & quant" } },
+        { "id": "biotech", "label": { "zh": "医药生物", "en": "Biotech & health" } },
+        { "id": "academia", "label": { "zh": "学术科研", "en": "Academia" } },
+        { "id": "law", "label": { "zh": "法律", "en": "Law" } },
+        { "id": "public", "label": { "zh": "公共政策与非营利", "en": "Policy & nonprofit" } },
+        { "id": "arts", "label": { "zh": "文化艺术与传媒", "en": "Arts & media" } },
+        { "id": "startup", "label": { "zh": "创业", "en": "Startups" } },
+        { "id": "other", "label": { "zh": "其他 / 还没想好", "en": "Other / undecided" } }
+      ],
+      "overlapWeight": 2,
+      "overlapCap": 1,
+      "ignoreForOverlap": ["other"],
+      "reasons": { "overlap": { "zh": "你们都在{items}领域", "en": "You're both in {items}" } }
+    },
+    {
+      "id": "intro",
+      "type": "text",
+      "required": false,
+      "public": true,
+      "max": 200,
+      "label": { "zh": "一句话介绍自己（可选）", "en": "One line about you (optional)" },
+      "placeholder": { "zh": "比如：SOM 二年级，想转科技行业，周末爱爬山", "en": "e.g. 2nd-year SOM, moving into tech, hikes on weekends" }
+    }
+  ]
+}

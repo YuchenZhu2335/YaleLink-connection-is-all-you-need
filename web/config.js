@@ -30,6 +30,5 @@ window.YL_CONFIG = {
 
   // 数据文件清单：新增一个模块的数据 = 在这里加一个名字 + 在 data/ 放同名 JSON
   // Data manifest: add a name here + a JSON file in data/ to expose a new collection.
-  dataFiles: ["regions", "taxonomy", "users", "posts", "jobs", "timelines", "groups", "events", "resources", "projects", "circles", "playbooks", "campaigns", "contacts", "templates",
-              "coffeeEvents", "coffeeProfiles", "coffeeBookings", "coffeeNotices", "coffeeFeedback"]
+  dataFiles: ["regions", "taxonomy", "users", "posts", "jobs", "timelines", "groups", "events", "resources", "projects", "circles", "playbooks", "campaigns", "contacts", "templates"]
 };
