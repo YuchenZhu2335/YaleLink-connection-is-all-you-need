@@ -149,7 +149,9 @@
     }
     function focusHeading() { const h = card.querySelector("[data-focus]"); if (h) h.focus(); }
 
-    // 倒计时：重发 / 改发到耶鲁邮箱 都要等 60 秒（后端同一邮箱 60 秒内只发一次）
+    // 倒计时：重发要等 60 秒（后端同一邮箱 60 秒内只发一次）。
+    // "改发到耶鲁邮箱"紧跟在普通请求之后可以马上点一次（后端只看上一次是不是主动改发，不泄露发到了哪里）；
+    // 这次没有新发（already：60 秒内别处刚请求过，不知道那次是不是改发）时也要等
     function tick() {
       const resend = card.querySelector('[data-act="resend"]');
       if (!ctx.isActive() || !resend || !document.body.contains(resend)) { clearInterval(timer); return; }
@@ -157,7 +159,8 @@
       resend.disabled = s > 0;
       resend.textContent = s > 0 ? t("login.resendIn", { s }) : t("login.resend");
       const yale = card.querySelector('[data-act="use-yale"]');
-      if (yale) { yale.disabled = s > 0; yale.textContent = s > 0 ? t("login.useYaleWait", { s }) : t("login.useYale"); }
+      const wait = flow && flow.already ? s : 0;
+      if (yale) { yale.disabled = wait > 0; yale.textContent = wait > 0 ? t("login.useYaleWait", { s: wait }) : t("login.useYale"); }
       if (!s) {
         clearInterval(timer);
         // 验证码已经作废、焦点又没地方放（输入框被禁用了）：倒计时结束时把焦点放到"重新发送"上

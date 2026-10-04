@@ -92,7 +92,15 @@ test("登录：非耶鲁邮箱被拒；新同学走完首次填写，选时间�
   await page.fill("#login-email", "someone@gmail.com");
   await page.locator('[data-form="email"] button[type="submit"]').click();
   await expect(page.locator(".field__error")).toBeVisible();
-  await signIn(page, "e2e.new@yale.edu");
+  // 普通请求之后，"重新发送"要等倒计时，"改发到耶鲁邮箱"可以马上点一次
+  await page.fill("#login-email", "e2e.new@yale.edu");
+  await page.locator('[data-form="email"] button[type="submit"]').click();
+  await expect(page.locator('[data-act="resend"]')).toBeDisabled();
+  await page.locator('[data-act="use-yale"]').click();
+  await expect(page.locator(".notice--success")).toBeVisible();
+  await expect(page.locator('[data-act="use-yale"]')).toHaveCount(0);
+  await page.fill("#login-code", await codeFor(page.request, "e2e.new@yale.edu"));
+  await expect(page).not.toHaveURL(/#\/login/);
   await onboard(page, "e2e.new@yale.edu", "新同学");
   await joinRound(page);
   await page.goto("/#/coffee");
