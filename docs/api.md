@@ -54,7 +54,7 @@
 | GET | `/coffee/pool?identity&goal&interest&field` | 筛选都可选 | `[Card + { overlapCount, relation }]`，共同空闲多的在前；错误 `forbidden / not_joined`、`forbidden / browse_closed` |
 | GET | `/coffee/people/:id` | — | `Card + { overlap: [slotId], relation }` |
 | POST | `/coffee/invites` | `{ toId, note?（≤200 字）, source: "rec"\|"browse" }` | `{ id, matched }`（`matched: true` = 对方之前已邀请你，直接匹配——包括上一周还没结束的邀请）；错误 `conflict / already_invited \| already_matched \| round_closed`、`rate_limited / too_many_open`（所有进行中的轮合计最多 5 个；对方跳过的也算，直到那一轮结束）、`forbidden / not_joined \| self`、`not_found` |
-| GET | `/coffee/inbox` | — | `{ incoming: [Card + { inviteId, note, createdAt, roundId }], outgoing: [Card + { inviteId, createdAt, roundId, state: "waiting" }] }` |
+| GET | `/coffee/inbox` | — | `{ incoming: [Card + { inviteId, note, createdAt, roundId, inRound }], outgoing: [Card + { inviteId, createdAt, roundId, inRound, state: "waiting" }] }`（`inRound`：你和对方现在都在当前这一轮里，可以打开 `/coffee/people/:id`；对方清空时间退出后为 `false`，邀请照样可以回应） |
 | POST | `/coffee/invites/:id/accept` 或 `/skip` | — | `{ id, status: "accepted"\|"skipped" }`；错误 `conflict / expired \| already_answered`、`forbidden / wrong_role` |
 | GET | `/coffee/matches` | — | `[Card + { matchId, roundId, roundTitle, timezone, contactMethod, slot, scheduledBy: "me"\|"them"\|null, available: [slotId], canSchedule, myOutcome: "met"\|"missed"\|null, canReport }]` |
 | POST | `/coffee/matches/:id/schedule` | `{ slot }`（`null` = 取消约定） | `{ id, slot }`（重复提交同一个时间不会重复发邮件）；错误 `conflict / slot_unavailable \| already_started \| not_matched` |
@@ -76,7 +76,7 @@
 |---|---|---|---|
 | GET | `/admin/overview` | — | `{ users: { total, profileDone, contactVerified, smartRecOff }, round: { id, kind, title, participants, invites, pending, matches, skipped, scheduled, fromRecs, engines } \| null, allTime: { matches, met, missed }, emails7d: [{ kind, status, n }], feedback }` |
 | GET | `/admin/rounds` | — | 轮次数组（RoundDTO + `status: "draft"\|"published"`） |
-| POST | `/admin/rounds` | `{ id?（改已有活动轮）, title: {zh,en}, startDate, endDate, themeTags: [], recCount, openBrowse, status: "draft"\|"published", post: { title, body, wechat } }` | 保存后的轮次；错误 `fields.title / startDate / endDate`、`conflict / overlaps_event`（与另一个已发布活动轮时间重叠） |
+| POST | `/admin/rounds` | `{ id?（改已有活动轮）, title: {zh,en}, startDate, endDate, themeTags: [], recCount, openBrowse, status: "draft"\|"published", post: { title, body, wechat } }` | 保存后的轮次；错误 `fields.title / startDate / endDate`、`fields.themeTags`（`too_many`：超过 5 个；`too_long`：某个超过 20 个字符，按码点计）、`conflict / overlaps_event`（与另一个已发布活动轮时间重叠） |
 | GET | `/admin/feedback` | — | `[{ id, kind, text, created_at, name }]` |
 | GET | `/admin/emails` | — | `[{ id, kind, status: "sent"\|"failed"\|"skipped", error, created_at }]` |
 | GET | `/admin/audit` | — | `[{ id, at, actor, op, target, ok, code }]` |

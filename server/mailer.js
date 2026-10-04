@@ -62,7 +62,8 @@ function createMailer(ctx) {
     const unsubscribe = OPTIONAL.includes(kind) && user ? unsubscribeUrl(user.id, kind) : null;
     const text = tpl.text + `\n\n——\nYalelux · 耶鲁灯下，资源与想法相遇 · Where Yale's light connects resources and ideas\n${ctx.cfg.publicUrl}\nYalelux 由 ACSSY 志愿者开发和运营，不是耶鲁大学官方产品。/ Built by ACSSY volunteers; not affiliated with Yale University.` + (unsubscribe ? `\n不想再收这类邮件 / Unsubscribe: ${unsubscribe}` : "");
     let status = "sent", error = null;
-    try { await drivers[ctx.cfg.mailDriver]({ kind, to, subject: tpl.subject, text, unsubscribe }); }
+    const subject = tpl.subject.replace(/[\r\n]+/g, " "); // 标题里不能有换行（防邮件头注入；资料字段在规则层已清洗，这里再兜一层）
+    try { await drivers[ctx.cfg.mailDriver]({ kind, to, subject, text, unsubscribe }); }
     catch (e) { status = "failed"; error = String(e.message || e).replace(/[^\s<>()"',;:@]+@[^\s<>()"',;:@]+/g, "***@***").slice(0, 300); console.error("mail failed:", error); } // 记录里不留邮箱地址
     // 记录里不存标题（标题里有对方名字或验证码），只存类型
     ctx.db.run("INSERT INTO emails (user_id, to_addr, kind, subject, status, error, ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", user && user.id, to, kind, kind, status, error, ref || null, new Date().toISOString());

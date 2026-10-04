@@ -45,6 +45,9 @@
   const ms = (t) => (typeof t === "number" ? t : t instanceof Date ? t.getTime() : Date.parse(t));
   const iso = (t) => new Date(ms(t)).toISOString();
   const text = (v) => (typeof v === "string" ? v.trim() : "");
+  // 单行字段（姓名、职位、城市、联系方式）：控制字符（换行、NUL…）和双向文字控制符换成空格，连续空白并成一个，再去掉首尾空白。
+  // 防止名字里的换行混进邮件标题 / 正文，或用 RLO 之类把页面上整句话倒过来
+  const line = (v) => (typeof v === "string" ? v.replace(/[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim() : "");
   const list = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]);
   const uniq = (a) => a.filter((x, i) => a.indexOf(x) === i);
   const deny = (code, reason, fields) => Object.assign({ ok: false, code }, reason ? { reason } : {}, fields ? { fields } : {});
@@ -182,7 +185,7 @@
   function validateProfile(p, questions, year) {
     p = p || {};
     const f = {};
-    const need = (key, max) => { const v = text(p[key]); if (!v) f[key] = "required"; else if (v.length > max) f[key] = "too_long"; };
+    const need = (key, max) => { const v = line(p[key]); if (!v) f[key] = "required"; else if (v.length > max) f[key] = "too_long"; };
     need("name", LIMITS.name);
     if (IDENTITIES.indexOf(p.identity) < 0) f.identity = "invalid";
     if (p.identity === "student") {
@@ -199,10 +202,10 @@
   function cleanProfile(p, questions) {
     const student = p.identity === "student";
     return {
-      name: text(p.name), identity: p.identity,
+      name: line(p.name), identity: p.identity,
       stage: student ? p.stage : "", gradYear: student ? Number(p.gradYear) : null,
-      job: student ? "" : text(p.job), city: student ? "" : text(p.city),
-      contactMethod: text(p.contactMethod),
+      job: student ? "" : line(p.job), city: student ? "" : line(p.city),
+      contactMethod: line(p.contactMethod),
       answers: cleanAnswers(questions, p.answers)
     };
   }

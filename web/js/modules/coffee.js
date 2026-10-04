@@ -472,7 +472,8 @@
   function homeHtml(st) {
     const r = st.round, ev = r.kind === "event", name = YL.auth.displayName();
     const upcoming = D.localDate(nowIso(), r.timezone) < r.startDate;
-    const eyebrow = ev ? t("coffee.home.eyebrowEvent") : upcoming ? t("coffee.home.eyebrowSoon") : t("coffee.home.eyebrowWeek");
+    // 下一周还没开始：已经参加的人只说"即将开始"，不再叫 TA "现在报名"
+    const eyebrow = ev ? t("coffee.home.eyebrowEvent") : upcoming ? (st.joined ? t("coffee.home.eyebrowSoonJoined") : t("coffee.home.eyebrowSoon")) : t("coffee.home.eyebrowWeek");
     const hello = !st.joined ? t("coffee.home.hello", { name }) : st.recsEnabled === false ? t("coffee.home.helloLocked", { name }) : t("coffee.home.helloJoined", { name });
     const n = st.participants || 0, threshold = Number(r.poolThreshold) || 0;
     const themes = list(r.themeTags).map((x) => {
@@ -895,7 +896,7 @@
     const page = mount(root, "page--medium");
     page.innerHTML = YL.ui.spinner();
     let roundId = null;
-    const linkable = (p) => !!roundId && p.roundId === roundId; // 详情页只能看本轮的人
+    const linkable = (p) => !!roundId && p.roundId === roundId && p.inRound !== false; // 详情页只能看本轮、并且还在这一轮里的人
     const sentAt = (p) => `<span class="person__overlap">${icon("mail")}${esc(t("coffee.inbox.sentAt", { date: YL.ui.formatDate(p.createdAt) }))}</span>`;
     // 想认识你的人：两个一样宽的按钮（想认识 / 跳过），下面一行"跳过不会通知对方"（§5.4）
     const env = {
@@ -1045,8 +1046,8 @@
     seenMatches.add(m.matchId);
     return `<header class="match-hero${fresh ? " is-new" : ""}">
       <div class="match-hero__pair">
-        <div class="match-hero__person">${avatar(me, "lg")}<span>${esc(me)}</span></div>
-        <div class="match-hero__person">${avatar(m.name, "lg")}<span>${esc(m.name)}</span></div>
+        <div class="match-hero__person">${avatar(me, "lg")}<span title="${esc(me)}">${esc(me)}</span></div>
+        <div class="match-hero__person">${avatar(m.name, "lg")}<span title="${esc(m.name)}">${esc(m.name)}</span></div>
       </div>
       <h2 class="match-hero__title">${esc(t("coffee.matches.heroTitle"))}</h2>
       <p class="match-hero__sub">${esc(total > 1 ? t("coffee.matches.heroSubMore", { name: m.name, n: total }) : t("coffee.matches.heroSub", { name: m.name }))}</p>

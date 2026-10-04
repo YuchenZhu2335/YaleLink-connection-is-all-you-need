@@ -74,6 +74,17 @@ test("清洗资料：另一身份的字段清空，多余字段丢弃，只公�
   assert.deepEqual(Object.keys(R.publicAnswers(QUESTIONS, p.answers)), ["goals", "interests", "field", "intro"]);
 });
 
+test("单行字段：换行、控制字符、双向文字控制符换成空格并合并，长度按清洗后的值算", () => {
+  const p = R.cleanProfile({
+    identity: "alumni", name: "Amy\n\n账号异常\r\nBcc: x@example.com", job: "‮evil.exe مرحبا", city: "\u0007\u0000Zed",
+    contactMethod: "  微信\tabc⁦x⁩ ", answers: answers()
+  }, QUESTIONS);
+  assert.deepEqual([p.name, p.job, p.city, p.contactMethod], ["Amy 账号异常 Bcc: x@example.com", "evil.exe مرحبا", "Zed", "微信 abc x"]);
+  const base = { identity: "student", stage: "master", gradYear: 2027, contactMethod: "x", answers: answers() };
+  assert.equal(R.validateProfile(Object.assign({}, base, { name: "‮\n\u0000 " }), QUESTIONS, 2026).fields.name, "required", "只有控制字符的名字算没填");
+  assert.equal(R.validateProfile(Object.assign({}, base, { name: "A" + "\n".repeat(60) + "B" }), QUESTIONS, 2026).ok, true, "换行合并后不超长");
+});
+
 test("邀请：必须参加本轮、不能邀请自己、同一人本轮只能邀请一次", () => {
   assert.deepEqual(check(), { ok: true });
   assert.deepEqual(check({ fromJoined: false }), { ok: false, code: "forbidden", reason: "not_joined" });

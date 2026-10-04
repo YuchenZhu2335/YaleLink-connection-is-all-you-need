@@ -17,6 +17,10 @@
   let pending = null;
   // 首次填写时停在"联系邮箱"这一步（发了验证码、还没验证也没选"稍后"）：值为用户 id
   let contactStepOpen = null;
+  // 首次填写时用户点过"稍后再验证"：值为用户 id。没点过的话，联系邮箱没验证就一直停在这一步（刷新后也是）
+  let laterChosen = null;
+  // 最近一次成功发出联系邮箱验证码：{ userId, at }。后端 60 秒内不让再发（换个邮箱也不行），"换一个邮箱"后照样倒计时
+  let lastSent = null;
   let timer = null;
   let prefSeq = 0;
   // 用耶鲁邮箱重新登录回来后（#/profile?change=contact）自动打开"更换联系邮箱"：只用一次
@@ -24,12 +28,27 @@
 
   /* 切换语言时路由会在同一个地址上重绘：正在填的内容先记在 draft 里，重绘后填回去。
      draft = { user, path, profile（collectProfile 的结果）, adds（自定义标签输入框里没加进去的字）, contactOpen, contactEmail }
-     去了别的页面（路由地址变了）、保存成功、取消时丢掉。 */
+     去了别的页面（路由地址变了）、保存成功、取消时丢掉。
+     例外：资料表单（修改资料、首次填写）里没保存的内容去了别的页面也留着（kept），回到同一个地址接着填，离开时提示一句
+     （和选时间页一样）；按"取消"、保存成功、退出登录时才丢掉。刷新 / 关闭页面前浏览器会先问一下。 */
+  const FORM_PATHS = ["profile/edit", "profile/setup"];
   let draft = null;
+  let kept = null;
   let lastPath = null;
   window.addEventListener("yl:route", (e) => {
     const path = e.detail && e.detail.path;
-    if (path !== lastPath) { draft = null; lastPath = path; }
+    if (path === lastPath) return;
+    if (draft && draft.profile && draft.path === lastPath && FORM_PATHS.indexOf(lastPath) >= 0) {
+      kept = { user: draft.user, path: draft.path, profile: draft.profile, adds: draft.adds };
+      if (YL.auth.isLoggedIn()) YL.ui.toast(t("profile.draftKept")); // 登录过期被带去登录页时不盖掉"登录已过期"的提示
+    }
+    draft = null;
+    lastPath = path;
+    if (kept && kept.path === path) { draft = kept; kept = null; }
+  });
+  window.addEventListener("beforeunload", (e) => {
+    const d = getDraft();
+    if (d && d.profile && FORM_PATHS.indexOf(d.path) >= 0 && document.querySelector("[data-profile-form]")) { e.preventDefault(); e.returnValue = ""; }
   });
   function getDraft() { const me = YL.auth.user(); return draft && me && draft.user === me.id && draft.path === lastPath ? draft : null; }
   function setDraft(patch) {
@@ -55,6 +74,7 @@
   const withoutSentTo = (data) => { const m = Object.assign({}, data); delete m.sentTo; return m; };
   const pendingFor = (u) => (pending && u && pending.userId === u.id && !u.contactVerified && u.contactEmail === pending.email && Date.now() - pending.sentAt < CODE_TTL_MS ? pending : null);
   const secondsLeft = () => (pending ? Math.max(0, RESEND_SECONDS - Math.floor((Date.now() - pending.sentAt) / 1000)) : 0);
+  const cooldownLeft = () => { const me = YL.auth.user(); return lastSent && me && lastSent.userId === me.id ? Math.max(0, RESEND_SECONDS - Math.floor((Date.now() - lastSent.at) / 1000)) : 0; };
   // 提示条：没有内容时隐藏（不占表单间距）；出现时用 role=alert / status 让读屏念出来
   function setMsg(scope, text, kind) {
     const box = scope.querySelector("[data-msg]");
@@ -80,11 +100,11 @@
 
   /* ---------- 退出登录 ----------
      退出请求没成功（断网、服务器出错）时，后端的会话 Cookie 还有效：不能假装已经退出，恢复本地状态并提示。
-     401 说明会话本来就没了，按已退出处理。返回 true = 已退出 */
-  async function signOut(btn, ctx) {
+     401 说明会话本来就没了，按已退出处理。all = true：退出所有设备。返回 true = 已退出 */
+  async function signOut(btn, ctx, all) {
     const prev = YL.auth.user();
     YL.ui.busy(btn, true);
-    const r = await YL.auth.logout();
+    const r = await YL.auth.logout(all);
     if (!r.ok && !(r.error && r.error.code === "unauthorized")) {
       YL.auth.set(prev);
       if (ctx.isActive() && document.body.contains(btn)) { YL.ui.busy(btn, false); btn.focus(); }
@@ -93,7 +113,10 @@
     }
     pending = null;
     contactStepOpen = null;
+    laterChosen = null;
+    lastSent = null;
     draft = null;
+    kept = null;
     return true;
   }
   // 换联系邮箱、进管理后台都要求这次是用耶鲁邮箱登录的：退出后去登录页，并指定验证码发到耶鲁邮箱
@@ -112,6 +135,9 @@
     let verifying = false;
     const alive = () => ctx.isActive() && document.body.contains(w);
     const cancelBtn = opts.onCancel ? `<button type="button" class="btn btn--ghost btn--block" data-cw="cancel">${esc(t("common.cancel"))}</button>` : "";
+    const laterHtml = () => (opts.onLater ? notice("", "clock", `<p>${esc(t("profile.contact.laterBody"))}</p><p><button type="button" class="link-btn" data-cw="later">${esc(t("profile.contact.later"))}</button></p>`) : "");
+    // 填邮箱这一屏也能"稍后再验证"：只在已经存了一个没验证的联系邮箱时（比如发了验证码后刷新了页面）
+    const savedUnverified = () => { const me = YL.auth.user(); return !!me && !!me.contactEmail && !me.contactVerified; };
 
     function enter(focus, email) {
       clearInterval(timer);
@@ -128,8 +154,24 @@
             <button type="submit" class="btn btn--primary btn--block">${esc(t("profile.contact.send"))}</button>
             ${cancelBtn}
           </div>
+          ${savedUnverified() ? laterHtml() : ""}
         </form>`;
+      cooldown();
       if (focus) w.querySelector("#cw-email").focus();
+    }
+    // 填邮箱这一屏的发送按钮：刚发过验证码（不管发给哪个邮箱）就倒计时，到 0 再能点
+    function enterTick() {
+      const b = w.querySelector('[data-cw-email] button[type="submit"]');
+      if (!alive() || !b) { clearInterval(timer); return; }
+      const s = cooldownLeft();
+      b.disabled = s > 0;
+      b.textContent = s > 0 ? t("profile.contact.resendIn", { s }) : t("profile.contact.send");
+      if (!s) clearInterval(timer);
+    }
+    function cooldown() {
+      clearInterval(timer);
+      enterTick();
+      if (cooldownLeft() > 0) timer = setInterval(enterTick, 1000);
     }
 
     function code(focus, note) {
@@ -147,7 +189,7 @@
             <button type="button" class="btn btn--ghost" data-cw="resend">${esc(t("profile.contact.resend"))}</button>
             <button type="button" class="link-btn" data-cw="change">${esc(t("profile.contact.change"))}</button>
           </div>
-          ${opts.onLater ? notice("", "clock", `<p>${esc(t("profile.contact.laterBody"))}</p><p><button type="button" class="link-btn" data-cw="later">${esc(t("profile.contact.later"))}</button></p>`) : ""}
+          ${laterHtml()}
           ${cancelBtn}
         </form>`;
       if (note) setMsg(w, note, "success");
@@ -183,18 +225,22 @@
       if (!r.ok) {
         const e = r.error || {};
         const me = YL.auth.user() || {};
+        // 后端说 60 秒内刚发过：不知道确切时间的话从现在开始算（宁可多等几秒）
+        if (e.reason === "resend_too_soon" && me.id && !cooldownLeft()) lastSent = { userId: me.id, at: Date.now() };
         // 60 秒内刚给同一个（未验证的）邮箱发过：之前的验证码还有效，直接去输入
         if (e.reason === "resend_too_soon" && !me.contactVerified && String(me.contactEmail || "") === email.toLowerCase()) {
-          pending = { userId: me.id, email: me.contactEmail, sentTo: "", sentAt: Date.now() };
+          pending = { userId: me.id, email: me.contactEmail, sentTo: "", sentAt: lastSent ? lastSent.at : Date.now() };
           code(true);
           return;
         }
         if (e.fields) YL.ui.showFieldErrors(form, e.fields, "profile");
         else if (e.reason === "reverify_yale") showReverify();
         else setMsg(w, YL.ui.errorText(e, "profile"));
+        if (form.matches("[data-cw-email]")) cooldown(); // 换了个邮箱但还在 60 秒内：按钮倒计时，不让一直点（每次都算进每小时 5 次）
         return;
       }
       const sentTo = r.data.sentTo;
+      if (sentTo) lastSent = { userId: r.data.id, at: Date.now() };
       YL.auth.set(withoutSentTo(r.data));
       if (!sentTo) { pending = null; clearDraft(["contactOpen", "contactEmail"]); opts.onDone(YL.auth.user()); return; } // 已经验证过的同一个邮箱
       const again = !!pending && pending.email === r.data.contactEmail;
@@ -362,7 +408,7 @@
         <div data-msg hidden></div>
         <div class="stack stack--s">
           <button type="submit" class="btn btn--primary btn--block btn--lg">${esc(submitLabel)}</button>
-          ${cancelHref ? `<a class="btn btn--ghost btn--block" href="${cancelHref}">${esc(t("common.cancel"))}</a>` : ""}
+          ${cancelHref ? `<a class="btn btn--ghost btn--block" href="${cancelHref}" data-discard>${esc(t("common.cancel"))}</a>` : ""}
         </div>
       </form>`;
   }
@@ -464,6 +510,7 @@
       }
     });
     form.addEventListener("click", (e) => {
+      if (e.target.closest("[data-discard]")) { clearDraft(); return; } // 取消 = 不要这些修改了（不再留草稿）
       const add = e.target.closest("[data-add-tag]");
       if (add) { addTag(form, add.closest("[data-tags]")); rememberForm(form); return; }
       const chip = e.target.closest("[data-custom-for]");
@@ -543,7 +590,8 @@
 
     const stepOf = (u) => {
       if (u.needsConsent) return "consent";
-      if (u.needsContact || contactStepOpen === u.id || pendingFor(u)) return "contact";
+      // 联系邮箱填了还没验证、也没点过"稍后再验证"（比如发了验证码就刷新了页面）：还停在这一步，不当作已完成
+      if (u.needsContact || contactStepOpen === u.id || pendingFor(u) || (u.needsProfile && u.contactEmail && !u.contactVerified && laterChosen !== u.id)) return "contact";
       if (u.needsProfile) return "profile";
       return null;
     };
@@ -630,7 +678,7 @@
         reloginNext: "profile/setup?next=" + encodeURIComponent(next),
         focus: false,
         onDone: done,
-        onLater: done
+        onLater: () => { laterChosen = u.id; done(); }
       });
     }
 
@@ -772,7 +820,10 @@
                 ${linkRow("#/about/feedback", "message", t("profile.links.feedback"), t("profile.links.feedbackSub"))}
               </div>
             </nav>
-            <button type="button" class="btn btn--secondary btn--block" data-act="logout">${icon("logout")}${esc(t("profile.logout"))}</button>
+            <div class="stack stack--s">
+              <button type="button" class="btn btn--secondary btn--block" data-act="logout">${icon("logout")}${esc(t("profile.logout"))}</button>
+              <button type="button" class="btn btn--ghost btn--block" data-act="logoutAll">${esc(t("profile.logoutAll"))}</button>
+            </div>
             <section class="card stack" aria-labelledby="me-danger">
               <div class="stack stack--s">
                 <h2 class="card__title" id="me-danger">${esc(t("profile.delete.title"))}</h2>
@@ -859,6 +910,11 @@
       else if (act === "logout") {
         if (!(await signOut(b, ctx))) return;
         YL.ui.toast(t("profile.loggedOut"));
+        YL.router.navigate("home");
+      } else if (act === "logoutAll") {
+        if (!(await YL.ui.confirm(t("profile.logoutAllConfirm"), { ok: t("profile.logoutAll") })) || !ctx.isActive()) return;
+        if (!(await signOut(b, ctx, true))) return;
+        YL.ui.toast(t("profile.logoutAllDone"));
         YL.router.navigate("home");
       } else if (act === "delete") openDelete(ctx);
     });

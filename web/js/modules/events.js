@@ -55,12 +55,12 @@
       return t("events.tzNote", { tz: tz === "America/New_York" ? t("events.tz.ny") : tz, start: md(r.startDate), bj });
     } catch (e) { return ""; }
   }
-  // 正文摘要（列表卡片用）：第一段的前 80 个字
+  // 正文摘要（列表卡片用）：第一段的前 80 个字（按码点截，不把 emoji 切成半个）
   function excerpt(r) {
     const body = String((r.post && r.post.body) || "").trim();
     if (!body) return "";
-    const first = body.split(/\n\s*\n|\n/)[0].trim();
-    return first.length > 80 ? first.slice(0, 80) + "…" : first;
+    const first = body.split(/\n\s*\n|\n/)[0].trim(), cp = Array.from(first);
+    return cp.length > 80 ? cp.slice(0, 80).join("") + "…" : first;
   }
   // 主题标签存的是问卷选项 id（推荐时命中加分），显示成选项的名字；兴趣、想聊的优先，找不到就原样显示
   function themeLabel(id) {

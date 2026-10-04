@@ -220,10 +220,14 @@ function install(app, ctx) {
     const inc = invites.filter((i) => i.toId === me && C.inviteStatus(i, i.round, t) === "pending");
     const out = invites.filter((i) => i.fromId === me && i.status !== "accepted");
     const u = users([...new Set(inc.map((i) => i.fromId).concat(out.map((i) => i.toId)))]);
+    // inRound：两人现在都在当前这一轮里（和 /coffee/people/:id 同一个条件），界面据此决定名字能不能点进详情页。
+    // 邀请本身在轮次结束前一直有效（对方清空了时间也还能回应），只是对方不在这一轮时看不了详情
+    const cur = currentRound(t), inCur = new Set(cur ? participants(cur).map((p) => p.id) : []);
+    const inRound = (otherId) => inCur.has(me) && inCur.has(otherId);
     return {
-      incoming: inc.filter((i) => u[i.fromId]).map((i) => Object.assign(card(u[i.fromId]), { inviteId: i.id, note: i.note, createdAt: i.createdAt, roundId: i.roundId })),
+      incoming: inc.filter((i) => u[i.fromId]).map((i) => Object.assign(card(u[i.fromId]), { inviteId: i.id, note: i.note, createdAt: i.createdAt, roundId: i.roundId, inRound: inRound(i.fromId) })),
       // 被跳过的邀请对发起人不可见：轮次结束前一律显示"等待回复"
-      outgoing: out.filter((i) => u[i.toId]).map((i) => Object.assign(card(u[i.toId]), { inviteId: i.id, createdAt: i.createdAt, roundId: i.roundId, state: "waiting" }))
+      outgoing: out.filter((i) => u[i.toId]).map((i) => Object.assign(card(u[i.toId]), { inviteId: i.id, createdAt: i.createdAt, roundId: i.roundId, inRound: inRound(i.toId), state: "waiting" }))
     };
   }, { auth: "ready" });
 

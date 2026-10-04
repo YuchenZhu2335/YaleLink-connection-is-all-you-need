@@ -40,6 +40,10 @@ function install(app, ctx, coffee) {
     const title = { zh: String((b.title && b.title.zh) || "").trim().slice(0, 60), en: String((b.title && b.title.en) || "").trim().slice(0, 80) };
     const v = C.validateRound({ title, startDate: b.startDate, endDate: b.endDate });
     if (!v.ok) throw fail("invalid", { fields: v.fields });
+    // 和前端（admin.js check）一样按字符（码点）计长度；超了就报错，不悄悄截断（截断会留下半个 emoji）
+    const themeTags = [].concat(b.themeTags || []).map((x) => String(x).trim()).filter(Boolean);
+    if (themeTags.length > 5) throw fail("invalid", { fields: { themeTags: "too_many" } });
+    if (themeTags.some((x) => Array.from(x).length > 20)) throw fail("invalid", { fields: { themeTags: "too_long" } });
     const status = b.status === "published" ? "published" : "draft";
     const id = b.id ? String(b.id) : "ev-" + crypto.randomBytes(4).toString("hex");
     const existing = db.get("SELECT * FROM rounds WHERE id = ?", id);
@@ -48,7 +52,6 @@ function install(app, ctx, coffee) {
       const clash = db.get("SELECT id FROM rounds WHERE kind = 'event' AND status = 'published' AND id != ? AND start_date <= ? AND end_date >= ?", id, b.endDate, b.startDate);
       if (clash) throw fail("conflict", { reason: "overlaps_event" });
     }
-    const themeTags = [].concat(b.themeTags || []).map((x) => String(x).trim().slice(0, 20)).filter(Boolean).slice(0, 5);
     const config = { recCount: Math.min(10, Math.max(1, Number(b.recCount) || 5)), openBrowse: b.openBrowse !== false };
     const post = { title: String((b.post && b.post.title) || title.zh).slice(0, 80), body: String((b.post && b.post.body) || "").slice(0, 4000), wechat: String((b.post && b.post.wechat) || "").slice(0, 2000) };
     if (existing) db.run("UPDATE rounds SET status = ?, title = ?, theme_tags = ?, config = ?, start_date = ?, end_date = ?, post = ?, updated_at = ? WHERE id = ?", status, JSON.stringify(title), JSON.stringify(themeTags), JSON.stringify(config), b.startDate, b.endDate, JSON.stringify(post), t, id);

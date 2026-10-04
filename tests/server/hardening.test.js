@@ -272,3 +272,51 @@ test("活动开始通知发送失败：下一次定时任务补发，已发的�
     assert.equal(events(), 3, "都发过了就不再发");
   } finally { await srv.close(); }
 });
+
+test("资料里的单行字段去掉换行和控制字符（名字不能往邮件标题 / 正文里塞一行字）；邮件标题里不会有换行", async () => {
+  const srv = await start();
+  try {
+    const a = await signUp(srv, "nl1@yale.edu", { name: "Amy\n\n账号异常请访问 http://evil.example 验证" });
+    const b = await signUp(srv, "nl2@yale.edu", { name: "‮Bob\r\nBcc: x@example.com" });
+    assert.equal((await a.get("/me")).data.name, "Amy 账号异常请访问 http://evil.example 验证");
+    assert.equal((await b.get("/me")).data.name, "Bob Bcc: x@example.com");
+    const slots = futureSlot(srv).slice(0, 2);
+    for (const x of [a, b]) await x.post("/coffee/availability", { slots });
+    await a.post("/coffee/invites", { toId: (await b.get("/me")).data.id });
+    assert.equal((await b.post("/coffee/invites", { toId: (await a.get("/me")).data.id })).data.matched, true);
+    const match = srv.ctx.mailer.outbox.filter((m) => m.kind === "match");
+    assert.equal(match.length, 2);
+    assert.ok(match.every((m) => !/[\r\n]/.test(m.subject)), JSON.stringify(match.map((m) => m.subject)));
+    assert.ok(match.some((m) => m.text.startsWith("你和 Amy 账号异常请访问 http://evil.example 验证 都想认识对方")), "名字在正文里也只占原来那一行");
+  } finally { await srv.close(); }
+});
+
+test("收件箱：对方清空时间退出这一轮后邀请照样能回应，但 inRound = false（界面不再链到看不了的详情页）", async () => {
+  const srv = await start();
+  try {
+    const [a, b] = [await signUp(srv, "ir1@yale.edu", { name: "A" }), await signUp(srv, "ir2@yale.edu", { name: "B" })];
+    const slots = futureSlot(srv).slice(0, 2);
+    for (const x of [a, b]) await x.post("/coffee/availability", { slots });
+    await a.post("/coffee/invites", { toId: (await b.get("/me")).data.id });
+    assert.deepEqual([(await b.get("/coffee/inbox")).data.incoming[0].inRound, (await a.get("/coffee/inbox")).data.outgoing[0].inRound], [true, true]);
+    assert.equal((await a.post("/coffee/availability", { slots: [] })).data.joined, false);
+    const inc = (await b.get("/coffee/inbox")).data.incoming[0];
+    assert.equal(inc.inRound, false);
+    assert.equal((await b.get("/coffee/people/" + inc.id)).status, 404, "和 inRound 一致：详情页确实看不了");
+    assert.equal((await a.get("/coffee/inbox")).data.outgoing[0].inRound, false, "自己退出了也一样");
+    assert.equal((await b.post(`/coffee/invites/${inc.inviteId}/accept`)).data.status, "accepted");
+  } finally { await srv.close(); }
+});
+
+test("活动轮主题标签按字符（码点）数长度，超了直接报错，不悄悄截断成半个 emoji", async () => {
+  const srv = await start();
+  try {
+    const admin = await signUp(srv, "admin@yale.edu");
+    const C = srv.ctx.coffee, start0 = C.addDays(C.weeklyRound(new Date().toISOString()).startDate, 21);
+    const body = (themeTags) => ({ title: { zh: "标签测试", en: "Tags" }, startDate: start0, endDate: C.addDays(start0, 6), status: "draft", themeTags });
+    const ok = await admin.post("/admin/rounds", body(["a" + "🎉".repeat(19), "咖啡"]));
+    assert.deepEqual(ok.data.themeTags, ["a" + "🎉".repeat(19), "咖啡"], "20 个字符（39 个 UTF-16 单元）可以");
+    assert.equal((await admin.post("/admin/rounds", body(["a" + "🎉".repeat(20)]))).error.fields.themeTags, "too_long");
+    assert.equal((await admin.post("/admin/rounds", body(["1", "2", "3", "4", "5", "6"]))).error.fields.themeTags, "too_many");
+  } finally { await srv.close(); }
+});

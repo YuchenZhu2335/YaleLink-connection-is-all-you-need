@@ -72,11 +72,15 @@ YL.ui = (function () {
   }
 
   /* ---------- 小部件 ---------- */
-  // 头像：名字首字（中文取后两个字），颜色按名字固定分配（.avatar--c0 … c5，见 components.css）
+  // 头像：名字首字（中文取后两个汉字），颜色按名字固定分配（.avatar--c0 … c5，见 components.css）。
+  // 按码点取字（扩展区汉字、emoji 不会被拆成半个代理对）；每个词取第一个字母，跳过 emoji 等非字母
+  const HAN = /\p{Script=Han}/u;
   function avatar(name, size) {
     const n = L(name) || "?";
     let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-    const initials = /^[一-龥]/.test(n) ? n.slice(-2) : n.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+    const initials = (/^\p{Script=Han}/u.test(n)
+      ? Array.from(n).filter((c) => HAN.test(c)).slice(-2).join("")
+      : n.split(/\s+/).map((w) => (w.match(/\p{L}/u) || [""])[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()) || "?";
     return `<span class="avatar avatar--c${h % 6}${size ? " avatar--" + esc(size) : ""}" aria-hidden="true">${esc(initials)}</span>`;
   }
   function tag(label, cls) { return `<span class="tag${cls ? " " + esc(cls) : ""}">${esc(L(label))}</span>`; }

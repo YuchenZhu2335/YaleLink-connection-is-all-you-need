@@ -36,6 +36,8 @@
 .cluster--end { justify-content: flex-end; }
 .cluster--between { justify-content: space-between; }
 .cluster > .icon { width: 16px; height: 16px; }
+/* 一串没有空格的长文字（姓名、邮箱）在 flex 里也能折行，不把页面撑宽（只对纯文字的 span，按钮不受影响，§3.5） */
+.cluster > span { min-width: 0; overflow-wrap: anywhere; }
 /* 卡片网格：手机单列；≥600 自动多列（最小 320） */
 .grid-cards { display: grid; gap: var(--sp-3); grid-template-columns: minmax(0, 1fr); }
 .split { display: grid; gap: var(--sp-6); align-items: start; grid-template-columns: minmax(0, 1fr); }
@@ -94,7 +96,7 @@
 .card__title { font-size: var(--fs-lg); line-height: 1.5; font-weight: var(--fw-bold); margin: 0; }
 .card:not(.stack) > .card__title:not(:last-child) { margin-bottom: var(--sp-2); }
 .card__title a, .card__title .list__link { color: inherit; text-decoration: none; }
-.card__title .list__link { display: inline-block; padding: 9.5px 0; margin: -9.5px 0; } /* 点击区 ≥44（标题行高 25.5 + 19） */
+.card__title .list__link { display: inline-block; max-width: 100%; padding: 9.5px 0; margin: -9.5px 0; } /* 点击区 ≥44（标题行高 25.5 + 19）；max-width：长标题在卡片里折行 */
 @media (hover: hover) { .card__title a:hover { text-decoration: underline; } }
 @media (min-width: 900px) { .card { padding: var(--sp-5); } .card--tight { padding: var(--sp-4); } }
 
@@ -497,7 +499,7 @@ a.person__name { position: relative; align-self: flex-start; max-width: 100%; pa
 @media (hover: hover) { a.person__name:hover { text-decoration: underline; text-decoration-thickness: 1.5px; } }
 /* 身份行：各段之间一个"·"；换行后行首的"·"落在盒子外面被裁掉 */
 .person__meta, .person__sub { display: flex; flex-wrap: wrap; align-items: center; column-gap: 13px; overflow: hidden; font-size: var(--fs-sm); line-height: 1.6; color: var(--c-ink-2); }
-.person__meta > span { position: relative; }
+.person__meta > span { position: relative; min-width: 0; overflow-wrap: anywhere; } /* 一段没有空格的长职位 / 城市在自己这段里折行，不被裁掉 */
 .person__meta > span::before { content: "·"; position: absolute; left: -9px; color: var(--c-ink-3); }
 .person__meta .icon { width: 14px; height: 14px; }
 .person__intro { font-size: var(--fs-sm); line-height: 1.6; color: var(--c-ink-2); }
@@ -518,6 +520,7 @@ a.person__name { position: relative; align-self: flex-start; max-width: 100%; pa
 .person__foot > :first-child:not(.person__actions) { flex: 1 1 auto; min-width: 0; }
 .person__overlap { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); line-height: 1.6; color: var(--c-ink-3); min-width: 0; }
 .person__overlap .icon { width: 16px; height: 16px; }
+.person__overlap > span { min-width: 0; overflow-wrap: anywhere; } /* 长邮箱当联系方式时在卡片里折行 */
 .person__overlap--none { color: var(--c-ink-3); }
 .person__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); flex: 1 1 100%; }
 .person__actions > .btn, .person__actions > .pill { flex: 1 1 0; min-height: var(--btn-h); }
@@ -558,7 +561,7 @@ a.person__name { position: relative; align-self: flex-start; max-width: 100%; pa
 
 /* ================= §5.6 本轮横幅（纸色卡片） ================= */
 .banner {
-  position: relative; display: grid; gap: var(--sp-3); min-width: 0;
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); min-width: 0; /* 列宽不随长名字 / 长标题撑开 */
   padding: var(--sp-4); border-radius: var(--radius-l);
   background-color: var(--c-surface); border: 1px solid var(--c-line); color: var(--c-ink);
 }
@@ -630,8 +633,10 @@ a.person__name { position: relative; align-self: flex-start; max-width: 100%; pa
 /* §5.17 匹配成功页头 .match-hero：夜色块（自带 .inverse 配色）。两个一样大的 72×84 拱形头像，
    中间一道 1.5px 灯色拱线立在两人头顶，拱的圆心处一个 10px 灯点——放大的 logo。
    新匹配第一次打开时加 is-new：拱线从中间展开（600ms），然后灯点亮起；减弱动效时直接是最终状态 */
-.match-hero { display: grid; justify-items: center; gap: var(--sp-2); text-align: center; padding: var(--sp-6); border-radius: var(--radius-xl); }
-.match-hero__pair { position: relative; display: flex; justify-content: center; gap: 64px; padding-top: 72px; margin-bottom: var(--sp-2); }
+.match-hero { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); text-align: center; padding: var(--sp-6); border-radius: var(--radius-xl); }
+.match-hero > * { max-width: 100%; } /* 副标题里一长串没有空格的名字也在块里折行，不把页头撑宽 */
+/* 每人一列 136 宽（= 拱的宽度），两个头像的圆心正好落在拱的两端；名字在自己这一列里放不下就省略号，不压到对方那一列 */
+.match-hero__pair { position: relative; display: flex; justify-content: center; gap: 0; max-width: 100%; padding-top: 72px; margin-bottom: var(--sp-2); }
 .match-hero__pair::before {
   content: ""; position: absolute; top: 4px; left: 50%; width: 136px; height: 68px; margin-left: -68px;
   border: var(--border-control) solid var(--c-accent); border-bottom: 0; border-radius: 68px 68px 0 0;
@@ -640,8 +645,8 @@ a.person__name { position: relative; align-self: flex-start; max-width: 100%; pa
   content: ""; position: absolute; top: 67px; left: 50%; width: 10px; height: 10px; margin-left: -5px;
   border-radius: 50%; background-color: var(--c-accent);
 }
-.match-hero__person { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); width: 72px; font-size: 15px; line-height: 1.4; font-weight: var(--fw-bold); color: var(--c-ink); }
-.match-hero__person > span { white-space: nowrap; }
+.match-hero__person { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); width: 136px; min-width: 0; padding-inline: var(--sp-1); font-size: 15px; line-height: 1.4; font-weight: var(--fw-bold); color: var(--c-ink); }
+.match-hero__person > span:not(.avatar) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .match-hero__title { font-size: var(--fs-xl); line-height: 1.45; color: var(--c-ink); }
 .match-hero__sub { font-size: var(--fs-sm); line-height: 1.6; color: var(--c-ink-2); }
 .match-hero.is-new .match-hero__pair::before { animation: yl-arch var(--dur-connect) var(--ease) both; }
@@ -986,6 +991,7 @@ a.list__item { transition: background-color var(--dur) var(--ease); }
   min-height: var(--btn-h); padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius); box-shadow: var(--shadow-l);
   font-size: 15px; line-height: 1.5; font-weight: var(--fw-medium);
+  overflow-wrap: anywhere; /* 只放纯文字（ui.toast 只设 textContent），长名字 / 长邮箱折行而不是被裁掉 */
   opacity: 0; transform: translateY(8px); pointer-events: none;
   transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
 }

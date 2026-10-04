@@ -11,6 +11,7 @@
 window.YL = window.YL || {};
 YL.auth = (function () {
   let me = null;
+  let leaving = false; // 正在主动退出：这时的 401 不算"登录过期"
   let meta = { consentVersion: "", dev: false, smartRecAvailable: false, questions: [] };
 
   function set(user) {
@@ -38,10 +39,14 @@ YL.auth = (function () {
     if (r.ok) set(r.data.user);
     return r;
   }
-  async function logout() {
-    const r = await YL.api.post("/auth/logout");
-    set(null);
-    return r;
+  // all = true：退出所有设备（后端删掉这个账号的全部会话）
+  async function logout(all) {
+    leaving = true;
+    try {
+      const r = await YL.api.post("/auth/logout", all ? { all: true } : {});
+      set(null);
+      return r;
+    } finally { leaving = false; }
   }
 
   const user = () => me;
@@ -69,8 +74,13 @@ YL.auth = (function () {
     return false;
   }
 
-  // 会话在后端过期或被注销：清掉本地状态，由路由决定去哪
-  window.addEventListener("yl:unauthorized", () => { if (me) { set(null); YL.router.render(); } });
+  // 会话在后端过期或被注销（比如在别的设备上"退出所有设备"）：清掉本地状态、告诉用户为什么，由路由决定去哪
+  window.addEventListener("yl:unauthorized", () => {
+    if (!me || leaving) return;
+    set(null);
+    YL.ui.toast(YL.ui.t("api.err.unauthorized"), "error");
+    YL.router.render();
+  });
 
   return { boot, refresh, set, requestCode, verify, logout, user, isLoggedIn, isReady, isAdmin, meta: getMeta, questions, nextStep, displayName, requireLogin };
 })();
