@@ -1,2 +1,13 @@
 # 所有文件的改动都需要维护者审核 / Every change requires maintainer review
 * @YuchenZhu2335
+
+# 核心层与守门规则：由维护者负责 / Core and guard rails: maintainer
+/web/js/core/   @YuchenZhu2335
+/scripts/       @YuchenZhu2335
+/.github/       @YuchenZhu2335
+
+# 模块负责人：会上确定后，把 GitHub 用户名加在维护者后面（列出的任一人审核通过即可）
+# Module owners: once agreed, append their GitHub handle after the maintainer (any listed owner can approve)
+# /web/js/*/coffee.js       @YuchenZhu2335 @<coffee-owner>
+# /web/data/coffee*.json    @YuchenZhu2335 @<coffee-owner>
+# /docs/rfcs/0001-*         @YuchenZhu2335 @<coffee-owner>

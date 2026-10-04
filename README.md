@@ -14,6 +14,7 @@
   <a href="docs/vision.md">愿景</a> ·
   <a href="docs/modules.md">模块</a> ·
   <a href="docs/architecture.md">架构</a> ·
+  <a href="docs/engineering.md">开发规则</a> ·
   <a href="CONTRIBUTING.md">共创指南</a> ·
   <a href="docs/deploy-china.md">国内部署</a>
 </p>
@@ -85,6 +86,7 @@ YaleLink 想做的是一个**属于耶鲁人自己的 APP**：
 | 模块 | 路由 | 说明 |
 |---|---|---|
 | 登录 | `#/login` | 邮箱域名白名单 → 验证码 → 首次完善资料（含学联身份） |
+| 约咖啡 · 内测 | `#/coffee` | 报名、选空闲时段（美东 15 分钟一格）、按身份 / 诉求找人、预约与确认、接受后交换联系方式、意见箱、管理统计 —— 三层拆分的参考实现，见 [RFC 0001](docs/rfcs/0001-coffee-chat-beta.md) |
 | 首页 | `#/home` | 学联推送（公告 / 志愿者招募 / 我的任务）、快捷入口、最新帖子、近期活动、精选校友 |
 | 职业发展 | `#/careers` | 机会 & 内推 · 求职时间线 · 简历工坊 · 求职小组 & Mock · 行业研究（含贡献值榜） |
 | 活动 | `#/events` | 按地区 / 类型筛选、RSVP、活动详情、「我想办活动」向导 |
@@ -111,7 +113,7 @@ python3 -m http.server 8000      # 或 npx serve .
 校验数据与词典：
 
 ```bash
-node scripts/validate-data.mjs
+npm run check      # 数据与词典校验 + 架构规则 + 单测（零依赖，Node ≥ 22）
 ```
 
 ## 目录结构
@@ -122,10 +124,12 @@ web/                 可部署的静态原型（部署根目录）
   config.js          邮箱白名单、演示验证码、数据文件清单、学联部门
   css/               tokens（耶鲁蓝设计令牌）/ base（布局）/ components（组件）
   js/core/           i18n · router · store · auth · registry · ui —— 平台基底
+  js/domain/         业务规则：纯函数，浏览器与将来的 Node 后端共用，配单测
+  js/api/            接口实现：原型版"后端"，每条 YL.api.route 就是一份后端契约
   js/modules/        每个功能一个文件，registerModule() 注册即出现在导航
   data/              示例数据（JSON，双语字段 {zh, en}）
   i18n/              界面词典 zh.json / en.json
-docs/                愿景 · 模块 · 架构 · 数据模型 · 路线图 · 国内部署
+docs/                愿景 · 模块 · 架构 · 开发规则 · 数据模型 · 路线图 · 国内部署 · RFC
 scripts/             数据校验脚本
 tests/               Playwright 冒烟测试
 .github/             Issue / PR 模板，CI 与 Pages 部署
@@ -134,7 +138,7 @@ tests/               Playwright 冒烟测试
 ## 如何共创
 
 1. **提功能**：用 [功能提案](../../issues/new?template=feature_proposal.yml) 模板开 Issue，说清楚问题、目标用户和方案；
-2. **加模块**：新建 `web/js/modules/xxx.js`，调用 `registerModule()`，补词典与数据 —— 五步流程见 [CONTRIBUTING.md](CONTRIBUTING.md)；
+2. **加模块**：先写一页 [RFC](docs/rfcs/README.md)；新建 `web/js/modules/xxx.js`，调用 `registerModule()`，补词典与数据 —— 五步流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，有写操作的模块按 [开发规则](docs/engineering.md) 拆成 domain / api / 界面三层；
 3. **补内容**：岗位、活动、指南、SOP、模板都只是 JSON，直接改 `web/data/` 提 PR；
 4. **改文档**：愿景、路线图、部署方案欢迎讨论。
 

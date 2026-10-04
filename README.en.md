@@ -61,6 +61,7 @@ The **"Host an event"** wizard connects them: community events publish through a
 | Module | Route | Notes |
 |---|---|---|
 | Login | `#/login` | Domain allowlist → code → first-time profile (incl. ACSSY role) |
+| Coffee chats · beta | `#/coffee` | Sign up, offer free slots (15-min boxes, Eastern Time), find people by identity / goal, book and confirm, swap contacts once accepted, feedback box, admin stats — reference implementation of the domain / api / UI split ([RFC 0001](docs/rfcs/0001-coffee-chat-beta.md)) |
 | Home | `#/home` | ACSSY push (notices / volunteer calls / my tasks), shortcuts, latest posts, upcoming events, featured alumni |
 | Careers | `#/careers` | Jobs & referrals · Timelines · Resume workshop · Study groups & mocks · Industry research |
 | Events | `#/events` | Filter by region / type, RSVP, detail, "Host an event" wizard |
@@ -82,12 +83,12 @@ cd YaleLink-connection-is-all-you-need/web
 python3 -m http.server 8000      # or: npx serve .
 ```
 
-No build, no dependencies. Validate data and dictionaries with `node scripts/validate-data.mjs`.
+No build, no dependencies. Run `npm run check` (data and dictionaries, architecture rules, unit tests; Node ≥ 22).
 
 ## Contributing
 
 1. **Propose** — open an issue with the feature proposal template.
-2. **Add a module** — create `web/js/modules/xxx.js`, call `registerModule()`, add dictionary keys and data. Five steps in [CONTRIBUTING.md](CONTRIBUTING.md).
+2. **Add a module** — write a one-page [RFC](docs/rfcs/README.md), create `web/js/modules/xxx.js`, call `registerModule()`, add dictionary keys and data. Five steps in [CONTRIBUTING.md](CONTRIBUTING.md); modules that write data follow the [engineering rules](docs/engineering.md) (domain / api / UI).
 3. **Add content** — jobs, events, guides, playbooks and templates are plain JSON under `web/data/`.
 4. **Improve docs** — vision, roadmap and deployment are open for discussion.
 

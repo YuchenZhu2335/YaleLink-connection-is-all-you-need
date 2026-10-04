@@ -12,6 +12,25 @@
 - 学联推送（学联公告、志愿者招募、我的任务）、快捷入口、最新分享、近期活动（按我的地区优先）、精选校友。
 - **扩展点**：推送区可接入站内通知系统；快捷入口数组 `quick` 直接加项。
 
+## Coffee Chat 内测 `coffee`（需登录）
+
+第一个按 [engineering.md](engineering.md) 三层拆分搭建的模块，也是新模块的参考实现。规则、数据、接口、待决问题与上线评估见 [RFC 0001](rfcs/0001-coffee-chat-beta.md)。
+
+| 子路由 | 内容 |
+|---|---|
+| `#/coffee`（未报名为活动介绍） | 怎么参加、参加须知（免责声明）、报名入口 |
+| `#/coffee/join` | 报名 / 我的资料：身份分支字段、兴趣、诉求、见面地点、首选联系方式 |
+| `#/coffee/schedule` | 我的时间：两周 × 每天 19 格（美东），点选 / 拖选 / 整行整列 |
+| `#/coffee/people` | 参与者总览：按身份、诉求筛选 |
+| `#/coffee/p/:id` | 某人资料 + 按天列出时段（可约 / 你约的 / 已被约 / 你那时有约 / 已截止），点击预约 |
+| `#/coffee/bookings` | 我的预约（等你确认的排前面）、通知、接受后可见的联系方式；"模拟有人约我"演示按钮 |
+| `#/coffee/feedback` | 意见箱（登录即可，不必报名） |
+| `#/coffee/admin` | 管理统计与意见箱（原型中学联负责人可见） |
+
+- 文件：`web/js/domain/coffee.js`（规则，单测 `tests/unit/coffee.test.js`）· `web/js/api/coffee.js`（12 条接口）· `web/js/modules/coffee.js`（界面）。
+- 跨模块入口：校友目录个人页的"约咖啡"按钮链接到 `#/coffee/p/:id`；首页快捷入口。
+- **扩展点**：邮件通知、提醒、日历文件（.ics）、取消 / 改期、爽约反馈——见 RFC"本期不做"。
+
 ## 职业发展 `careers`（启动模块）
 
 | Tab | 内容 | 数据 |
@@ -89,5 +108,17 @@ registerModule({
 ```
 
 - `nav.when()` 返回 false 时不显示（学联后台用它只对成员显示）；
-- `ctx = { path, segments, module, sub, id, query }`；
+- `ctx = { path, segments, module, sub, id, query, isActive }`；
+- `render` 可以是 `async`：每次 `await YL.api.*` 之后先检查 `ctx.isActive()`，用户可能已经切到别的页面；
 - 未登录访问 `requiresAuth` 模块会跳转到登录并在登录后返回。
+
+## 模块之间的公开接口
+
+跨模块优先用路由链接跳转。确需调用函数的，只能用下面这些（`scripts/check-architecture.mjs` 的 `PUBLIC_MODULE_API` 白名单，新增需在 PR 里说明）：
+
+| 接口 | 提供者 | 用途 |
+|---|---|---|
+| `YL.careers.postCard(post)` / `postForm(category, onDone)` | careers | 帖子卡片与发帖表单 |
+| `YL.acssy.openWizard({ scope, playbookId, circleId, region })` | acssy | "我想办活动"向导 |
+
+需要登录的操作统一用核心层的 `YL.auth.requireLogin()`（`YL.careers.requireLogin` 仅为兼容保留）。

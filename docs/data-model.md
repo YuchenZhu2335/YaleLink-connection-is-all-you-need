@@ -75,6 +75,36 @@
 ### Template `templates.json`
 `kind, name: Bi, scenario: Bi, body: Bi, tips?: Bi, maintainerId`
 
+## Coffee Chat 内测活动
+
+规则与表结构的讨论见 [RFC 0001](rfcs/0001-coffee-chat-beta.md)；字段校验以 `web/js/domain/coffee.js` 为准（校验脚本直接调用它）。
+
+### CoffeeEvent `coffeeEvents.json`
+`id, name: Bi, timezone（IANA，如 America/New_York）, startDate, endDate, dayStart "10:00", dayEnd "21:00", slotMinutes, gapMinutes, cutoffHours, maxPending`。
+时段 id = `"YYYY-MM-DDTHH:MM"`（活动时区的墙上时间）。
+
+### CoffeeProfile `coffeeProfiles.json`（id = 用户 id）
+| 字段 | 说明 |
+|---|---|
+| `email` | 取自登录；示例数据一律 `@example.com` |
+| `name`, `identity: student\|alumni` | 示例数据的姓名取自 users.json |
+| `stage: undergrad\|master\|phd`, `program`, `gradYear` | 仅在校生 |
+| `job`, `location` | 仅校友 |
+| `interests`, `goals[]: academic\|industry\|friends` | 兴趣与诉求 |
+| `meetMode: offline\|online`, `meetPlace` | 见面地点；线上须为 https 链接，接受后才对对方可见 |
+| `contact` | 首选联系方式，接受后才对对方可见 |
+| `slots[]` | 空闲时段 id |
+
+### CoffeeBooking `coffeeBookings.json`
+`eventId, requesterId, hostId, slot, note, status: pending|accepted|declined, createdAt, updatedAt, history[]: { at, by, action, from, to }`。
+`expired`（到开始时间仍未确认）不存库，读取时计算。真实版唯一索引 `(eventId, hostId, slot)`。
+
+### CoffeeNotice `coffeeNotices.json`
+`userId, kind: booking_new|booking_accepted|booking_declined, bookingId, actorId, slot, createdAt, readAt`。真实版写入时同时发邮件。
+
+### CoffeeFeedback `coffeeFeedback.json`
+`userId, kind: bug|idea|other, text, createdAt`。
+
 ## 用户状态（localStorage `yl.state`，真实版为关系表）
 
 `rsvp[eventId]`, `joined[groupId]`, `likes[postId]`, `helpful[resourceId]`, `savedJobs[jobId]`, `greeted[userId]`, `interested[projectId]`, `circle[circleId]`, `knows[contactId]`, `volunteer[campaignId:roleId]`
@@ -84,4 +114,4 @@
 - `Notification { userId, kind, refId, readAt }`
 - `Comment { postId, authorId, body, createdAt }`
 - `RoleRequest { userId, department, status, reviewedBy }`（学联身份审核）
-- `AuditLog`（联系人导出、SOP 修改等）
+- `AuditLog { actor, op, target, ok, code, at }`：所有写操作与管理员查看；原型中由 `core/api.js` 写入 `YL.audit`（localStorage `yl.audit`），真实版只追加、不可删除

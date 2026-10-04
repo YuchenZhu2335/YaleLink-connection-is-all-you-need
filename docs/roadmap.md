@@ -8,10 +8,15 @@
 - [x] 学联后台：项目看板（任务认领 / 分配 / 进度反馈 / 通知 / 志愿者岗位）、SOP 库、联系人、模板、志愿者
 - [x] "我想办活动"向导：社群轻量流程 / 学联 SOP 自动生成任务
 - [x] 数据校验脚本、Playwright 冒烟、GitHub Pages 部署工作流
+- [x] 分层框架：接口层 `YL.api`（本地 mock / 真实后端二选一）、审计日志、架构守门脚本、零依赖单测（见 [engineering.md](engineering.md)）
+- [x] Coffee Chat 内测活动原型：报名、时段表、预约与确认、通知、意见箱、管理统计（见 [RFC 0001](rfcs/0001-coffee-chat-beta.md)）
 - [ ] 收集 ACSSY 各部门真实 SOP（脱敏后）替换示例
 - [ ] 更多地区与社群示例
 
 ## v0.2 真实后端
+
+- **先上 Coffee Chat 内测**（RFC 0001）：Node.js 22 + Hono + PostgreSQL、邮箱验证码登录、邮件通知；预计 15–21 人日
+- 存量模块按 coffee 的样子迁到 `YL.api`（`LEGACY_STORE_MODULES` 名单清零）
 
 - 邮箱验证码登录（服务端白名单）、会话
 - Postgres + 对象存储；`store.js` / `auth.js` 切换到 API
