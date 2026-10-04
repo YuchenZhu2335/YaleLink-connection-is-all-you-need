@@ -8,7 +8,7 @@
 ## 页面骨架
 
 ```html
-<section class="page">                         <!-- 竖向排列，块间距 24（桌面 32）；窄页面加 page--narrow（560）/ page--medium（760） -->
+<section class="page">                         <!-- 竖向排列，块间距 32（桌面 48，§4.4）；页头和第一块之间自动收紧到 24 / 40；窄页面加 page--narrow（560）/ page--medium（760） -->
   <header class="page-head">
     <div class="page-head__text">
       <p class="eyebrow">本周 Coffee Chat</p>  <!-- 琥珀色眉题；英文自动全大写 -->
@@ -22,7 +22,8 @@
 ```
 
 - 布局：`stack`（竖排 16px，`stack--s` 8px / `stack--l` 24px）、`cluster`（横排换行，`cluster--between` / `cluster--end`）、`grid-cards`（手机单列，≥600 自动多列、最小 320）、`split`（桌面左主右侧栏 320px，`split--wide-aside` 384px；手机上下排）
-- 区块标题：`YL.ui.sectionTitle(title, actionHtml, sub)`
+- 区块标题：`YL.ui.sectionTitle(title, actionHtml, sub)`（行尾的 `btn--ghost` 链接自动和标题垂直居中、文字和下面卡片的右边对齐）
+- 返回：页面第一个子元素 `<div><a class="btn btn--ghost btn--sm" href="…">${icon("chevronLeft")}返回</a></div>`——chevron 的笔画自动和正文左边对齐，和下面标题的间距自动收紧
 - 文字：`muted`、`faint`、`small`、`xsmall`（13px，最小的段落字号）、`center`、`nowrap`、`break-all`（长邮箱 / 微信号）
 - 卡片：`card`（surface + 1px 细线 + 16 圆角，**不加阴影**）、`card--quiet`（下沉的 surface-2）、`card--tight`、`card__title`
 - 荧光笔 `<span class="lit">相遇</span>`（灯色平涂色带，每屏最多一处）；灯点 `<span class="lamp"></span>`（6px，"亮着"的记号）
@@ -85,7 +86,8 @@
 </form>
 ```
 
-- 控件：`input`、`textarea`、`select`；验证码 `input input--code`（一个 input：`inputmode="numeric" autocomplete="one-time-code" maxlength="6"`，Newsreader 等宽数字，按 6 格排开）；输入框 + 按钮同一行 `input-row`
+- 控件：`input`、`textarea`、`select`；验证码 `input input--code`（一个 input：`inputmode="numeric" autocomplete="one-time-code" maxlength="6"`，Newsreader 等宽数字，按 6 格排开；格距 48，视口 <400 / <360 自动缩到 42 / 36，320 宽也放得下，填满 6 位不会横向滚动）；输入框 + 按钮同一行 `input-row`
+- `.form` 和 `.field` 都是单列 `minmax(0, 1fr)` 网格：里面再宽的东西也不会把卡片撑出屏幕
 - 报错：`YL.ui.showFieldErrors(form, error.fields, "模块名")`（错误文字前自动画圆形叹号）；清除：`clearFieldErrors(form)`；字数 `field__count`（超出加 `is-over`）
 - 首次填写进度（圆圈里的数字 / 勾由 CSS 画）：`<ol class="steps"><li class="steps__item is-done">同意说明</li><li class="steps__item is-current" aria-current="step">联系邮箱</li><li class="steps__item">资料</li></ol>`
 
@@ -112,6 +114,8 @@
 </article>
 ```
 
+底部布局：单列列表里放得下就"说明 + 按钮"并排；在 `grid-cards` 网格里（找人、收件箱）永远是说明一行、按钮一整行（两个按钮各占一半），同一行卡片的分隔线和按钮对齐。
+
 关系状态（`relation.state`）→ 右下角（§5.4）：
 `none` → `btn btn--primary btn--sm`「想认识」（`plus`）；
 `invited` → `<span class="btn btn--invited btn--sm" aria-disabled="true">${icon("clock")}已邀请</span>`；
@@ -132,11 +136,12 @@
 - 我的进度：`<nav class="statusbar"><a class="statusbar__item" href="#/coffee/times"><strong>8</strong><span>空闲时间</span></a>…</nav>`（数字用 Newsreader）
 - 空闲时间：
   - 时区说明 `slots__tz`
-  - 日期条 `slots__days` 里放 `<button class="day is-active has-picks" aria-pressed="true"><span class="day__wd">周二</span><span class="day__d">10/6</span><span class="day__dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="sr-only">已选 3 个</span></button>`（最多 3 个点）。旧写法 `day__n`（文字）只显示 1 个点、文字留给读屏
+  - 日期条 `slots__days`（手机上横向滚动、伸到屏幕边；8 天以上每格 52 宽；桌面 ≥900 和用鼠标的平板改成换行网格，全部日期一次看见）里放 `<button class="day is-active has-picks" aria-pressed="true"><span class="day__wd">周二</span><span class="day__d">10/6</span><span class="day__dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="sr-only">已选 3 个</span></button>`（最多 3 个点）。旧写法 `day__n`（文字）只显示 1 个点、文字留给读屏
   - 格子 `slots__grid` 里放 `<button class="slot" aria-pressed="true">19:20<small>北京 次日 07:20</small></button>`（已选 = 亮灯 + 勾）
     - 已约定 `slot is-locked`（右上角锁），已截止 `slot is-closed`（斜纹）。两者都用 `aria-disabled="true"` 留在 Tab 顺序里（`disabled` 也能显示对）
   - 图例 `slot-legend`（`<span><i class="is-selected"></i>已选</span>`）
-  - 吸底保存条 `<div class="savebar"><span>已选 <strong>8</strong> 个</span><button class="btn btn--primary btn--sm">保存</button></div>`（`strong` 是 Newsreader 22）
+  - 吸底保存条 `<div class="savebar"><span>已选 <strong>8</strong> 个</span><button class="btn btn--primary btn--sm">保存</button></div>`（`strong` 是 Newsreader 22）。放在 `.page` 的最后：手机上 sticky 在标签栏上方、滚到底落在页脚细线上；桌面 ≥900 固定在距底 16、和 `page--medium` 同宽。
+    页面有保存条时模块在 `<body>` 上加 `has-savebar`（离开页面时去掉）：toast 抬到条上方、页脚留出条的高度。支持 `:has()` 的浏览器不加也对，老内核（Chrome <105 的 WebView）要靠这个类
 - 匹配成功页头（夜色块，自带 `.inverse` 配色；新匹配第一次打开加 `is-new` 播放拱线 + 灯点动画）：
 
   ```html
@@ -163,4 +168,5 @@
 - 首页：`hero`（`hero__eyebrow`、`hero__title` 里 `<em>` = `.lit` 荧光笔、`hero__lead`、`hero__cta`）、三步 `how` > `how__step`（序号 1 2 3 由 CSS 计数器画，Newsreader）
 - 活动文章：`article` > `article__hero`（`article__title`、`article__meta`；拱 + 地平线 + 升起的灯由 CSS 画）+ `prose`（长文，保留换行）+ `copybox`（`copybox__head`、`copybox__text`）
 - 后台：`admin-grid`、`stats`、`table-wrap`
+- 页脚品牌（§9 第 2 种组合，竖排左对齐）：`<div class="footer__brand"><span class="wordmark">yale<i>lux</i></span><span>中文 tagline</span><span lang="en">English tagline</span></div>`（第二行 14/500 ink-2，第三行 13/400 ink-3）
 - 外壳（`web/js/app.js`，样式在 base.css）：顶栏 `topbar` > `brand`（`brand__mark` + `wordmark brand__word`）、`topnav__item`（当前项 = 下沿 2px 横线）、`lang-toggle`、`topbar__me`；手机底部 `tabbar__item`（当前项 = 变色 + 600 + 图标上方灯点，`aria-current="page"`；收件箱带 `.count`）；字标活字 `<span class="wordmark">yale<i>lux</i></span>`

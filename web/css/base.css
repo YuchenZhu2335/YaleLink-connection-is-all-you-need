@@ -92,8 +92,8 @@ hr { border: 0; border-top: 1px solid var(--c-line); margin: 0; }
   height: var(--topbar-h);
   max-width: calc(var(--content-max) + 2 * var(--gutter));
   margin: 0 auto;
-  padding-left: max(var(--gutter), env(safe-area-inset-left));
-  padding-right: max(var(--gutter), env(safe-area-inset-right));
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
   display: flex; align-items: center; gap: var(--sp-4);
 }
 /* 横排组合（§9）：图形标 1.05F、间距 0.28F、字标 F；立柱底端落在字标基线上 */
@@ -127,6 +127,10 @@ hr { border: 0; border-top: 1px solid var(--c-line); margin: 0; }
   .lang-toggle:hover { background-color: var(--c-surface-2); color: var(--c-ink); }
   .topbar__me:hover .avatar { box-shadow: 0 0 0 2px var(--c-bg), 0 0 0 3.5px var(--c-line-strong); }
 }
+/* 桌面顶栏是 surface 底：光环内圈跟着换，不然头像外面会多一圈纸色 */
+@media (hover: hover) and (min-width: 900px) {
+  .topbar__me:hover .avatar { box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 3.5px var(--c-line-strong); }
+}
 
 .main {
   flex: 1 0 auto; width: 100%;
@@ -134,27 +138,36 @@ hr { border: 0; border-top: 1px solid var(--c-line); margin: 0; }
   margin: 0 auto;
   padding-top: var(--sp-5);
   padding-bottom: var(--sp-12);
-  padding-left: max(var(--gutter), env(safe-area-inset-left));
-  padding-right: max(var(--gutter), env(safe-area-inset-right));
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
   outline: none;
 }
 
-/* 页脚：横排双语组合（§9 第 2 种）+ 非官方声明在最后一行（§8.7） */
+/* 页脚：双语组合（§9 第 2 种：字标下方左对齐，先中文 tagline、再英文 tagline，行距 0.2F）+ 非官方声明在最后一行（§8.7） */
 .footer { border-top: 1px solid var(--c-line); color: var(--c-ink-3); font-size: var(--fs-sm); line-height: 1.6; }
 .footer__inner {
   max-width: calc(var(--content-max) + 2 * var(--gutter));
   margin: 0 auto;
   padding-top: var(--sp-8);
   padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom));
-  padding-left: max(var(--gutter), env(safe-area-inset-left));
-  padding-right: max(var(--gutter), env(safe-area-inset-right));
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
   display: grid; gap: var(--sp-4);
 }
-.footer__brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-3); color: var(--c-ink-2); font-weight: var(--fw-medium); }
-.footer__brand .wordmark { font-size: 20px; }
+/* §6.4 横屏安全区：左右内边距 = max(gutter, 安全区)。
+   不支持 max() 的老内核会把带 var() 的整条声明当成无效、内边距变成 0，所以先写上面的普通值，再在这里覆盖 */
+@supports (padding: max(0px)) {
+  .topbar__inner, .main, .footer__inner {
+    padding-left: max(var(--gutter), env(safe-area-inset-left));
+    padding-right: max(var(--gutter), env(safe-area-inset-right));
+  }
+}
+.footer__brand { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); min-width: 0; color: var(--c-ink-2); font-size: var(--fs-sm); line-height: 1.5; font-weight: var(--fw-medium); }
+.footer__brand .wordmark { font-size: 20px; margin-bottom: 2px; }
+.footer__brand > span:not(.wordmark) + span { font-size: var(--fs-tag); font-weight: var(--fw-regular); color: var(--c-ink-3); } /* 第二行（英文 tagline） */
 .footer__links { display: flex; flex-wrap: wrap; gap: 0 var(--sp-5); }
 .footer__links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--c-ink-2); text-decoration: none; }
-.footer__note { font-size: var(--fs-tag); color: var(--c-ink-3); }
+.footer__note { font-size: var(--fs-tag); color: var(--c-ink-3); text-wrap: pretty; }
 @media (hover: hover) { .footer__links a:hover { color: var(--c-ink); text-decoration: underline; } }
 
 /* ---------- §5.9 手机底部标签栏：5 项等宽，当前 = 变色 + 600 + 图标上方的灯点 ---------- */
@@ -185,10 +198,12 @@ hr { border: 0; border-top: 1px solid var(--c-line); margin: 0; }
   width: 6px; height: 6px; border-radius: var(--radius-pill);
   background-color: var(--c-accent); border: 1px solid var(--c-accent-edge);
 }
-/* 待回复：灯色计数徽标放在图标右上角 */
-.tabbar__item .count { position: absolute; top: 6px; left: 50%; margin-left: 5px; }
+/* 待回复：灯色计数徽标压在图标右上角（徽标左缘离图标中心 7px、顶边比图标高 4px），
+   外面一圈 2px 的 surface 色把它和图标、灯点隔开——灯点在图标正上方，两者至少隔 4px（§5.14） */
+.tabbar__item .count { position: absolute; top: 9px; left: 50%; margin-left: 7px; box-shadow: 0 0 0 2px var(--c-surface); }
 .tabbar__item:focus-visible { outline-offset: -4px; box-shadow: none; border-radius: var(--radius); }
-body.has-tabbar .main { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--sp-8)); }
+/* 底部留白只算一次：页脚在主区下面、是最后一个元素，标签栏（和安全区）的高度留在页脚里；主区只留区块间距 32 */
+body.has-tabbar .main { padding-bottom: var(--sp-8); }
 body.has-tabbar .footer__inner { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--sp-6)); }
 
 /* ---------- 桌面 ≥900：顶部导航 64，不透明 surface，没有标签栏 ---------- */
