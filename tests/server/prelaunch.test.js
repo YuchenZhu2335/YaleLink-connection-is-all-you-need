@@ -1,7 +1,7 @@
 // 上线前修改清单（PRD 附录 B.4）和 §7.4 里"还没有自动测试"的规则。测试名就是规则。
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { start, client, lastCode, PROFILE, signUp, rewindCodes } = require("./helpers");
+const { start, client, lastCode, PROFILE, signUp, futureSlot, rewindCodes } = require("./helpers");
 
 const DAY = 86400000;
 const iso = (ms) => new Date(ms).toISOString();
@@ -188,6 +188,36 @@ test("意见箱可以选「举报」类型；类型只能是问题 / 建议 / �
     assert.equal((await a.post("/feedback", { kind: "spam", text: "第 3 周的某某反复发骚扰消息" })).error.fields.kind, "invalid");
     const admin = await signUp(srv, "admin@yale.edu");
     assert.deepEqual((await admin.get("/admin/feedback")).data.map((f) => f.kind), ["report"]);
+  } finally { await srv.close(); }
+});
+
+/* ---------- B.4 第 6 条：见到了吗可以改 ---------- */
+
+test("没约时间时「其实还没聊」撤回回答（met: null，不记成没见到）；约了新时间会清空之前的回答；约了时间之后不能撤回", async () => {
+  const srv = await start();
+  try {
+    const a = await signUp(srv, "oc1@yale.edu", { name: "甲" });
+    const b = await signUp(srv, "oc2@yale.edu", { name: "乙", contactMethod: "微信 yi" });
+    const slots = futureSlot(srv).slice(0, 3);
+    await a.post("/coffee/availability", { slots }); await b.post("/coffee/availability", { slots });
+    await a.post("/coffee/invites", { toId: (await a.get("/coffee/pool")).data[0].id });
+    await b.post(`/coffee/invites/${(await b.get("/coffee/inbox")).data.incoming[0].inviteId}/accept`);
+    let m = (await a.get("/coffee/matches")).data[0];
+    const outcome = (met) => a.post(`/coffee/matches/${m.matchId}/outcome`, { met });
+    const stored = () => JSON.parse(srv.db.get("SELECT outcomes FROM invites").outcomes);
+
+    assert.equal((await outcome(true)).data.outcome, "met");
+    assert.equal((await outcome(null)).data.outcome, null, "其实还没聊：撤回");
+    assert.deepEqual(stored(), {}, "没有留下 missed");
+    await outcome(true); // 再说一次聊过了，然后对方约了一个新时间
+    const slot = m.available[0];
+    assert.equal((await b.post(`/coffee/matches/${m.matchId}/schedule`, { slot })).ok, true);
+    m = (await a.get("/coffee/matches")).data[0];
+    assert.deepEqual([m.slot, m.myOutcome, m.canReport], [slot, null, false], "约了新时间：之前的回答不算这次见面");
+    assert.deepEqual(stored(), {});
+    assert.equal((await outcome(null)).error.reason, "too_early", "约了时间：开始前不能回答，也不能撤回");
+    const admin = await signUp(srv, "admin@yale.edu");
+    assert.equal((await admin.get("/admin/overview")).data.allTime.missed, 0, "后台统计里没有多出没见到");
   } finally { await srv.close(); }
 });
 

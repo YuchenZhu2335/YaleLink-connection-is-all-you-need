@@ -286,16 +286,19 @@
     if (slot === null) return { ok: true, unchanged: !inv.slot, next: Object.assign({}, inv, { slot: null, scheduledBy: null, scheduledAt: null }) };
     if (slot === inv.slot) return { ok: true, unchanged: true, next: inv }; // 重复提交同一个时间：什么都不变，也不重复发邮件
     if ((available || []).indexOf(slot) < 0) return deny("conflict", "slot_unavailable");
-    return { ok: true, next: Object.assign({}, inv, { slot, scheduledBy: userId, scheduledAt: iso(now) }) };
+    // 约了新时间：之前（没约时间时）的"见到了吗"回答不算这次见面的，清掉
+    return { ok: true, next: Object.assign({}, inv, { slot, scheduledBy: userId, scheduledAt: iso(now), outcomes: {} }) };
   }
-  // "见到了吗"：约定时间开始之后（没约定时间则匹配后任何时候）
+  // "见到了吗"：约定时间开始之后（没约定时间则匹配后任何时候）。
+  // met = null：撤回自己的回答（只在没约时间时，"其实还没聊"——还没聊不等于没见到）
   function recordOutcome(inv, met, userId, r, now) {
     if (!roleOf(inv, userId)) return deny("not_found");
     if (inv.status !== "accepted") return deny("conflict", "not_matched");
     if (inv.slot && ms(now) < slotStart(r, inv.slot)) return deny("conflict", "too_early");
-    if (typeof met !== "boolean") return deny("invalid", null, { met: "invalid" });
+    if (typeof met !== "boolean" && !(met === null && !inv.slot)) return deny("invalid", null, { met: "invalid" });
     const outcomes = Object.assign({}, inv.outcomes);
-    outcomes[userId] = met ? "met" : "missed";
+    if (met === null) delete outcomes[userId];
+    else outcomes[userId] = met ? "met" : "missed";
     return { ok: true, next: Object.assign({}, inv, { outcomes }) };
   }
 

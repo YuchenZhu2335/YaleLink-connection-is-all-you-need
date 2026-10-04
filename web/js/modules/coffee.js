@@ -1025,7 +1025,7 @@
         if (r.ok) { expanded.delete(id); YL.ui.toast(t("coffee.matches.canceledToast")); }
       } else if (act === "outcome") {
         card.dataset.busy = "1"; YL.ui.busy(btn, true);
-        r = await YL.api.post(`/coffee/matches/${encodeURIComponent(id)}/outcome`, { met: btn.dataset.met === "1" });
+        r = await YL.api.post(`/coffee/matches/${encodeURIComponent(id)}/outcome`, { met: btn.dataset.met === "clear" ? null : btn.dataset.met === "1" });
         if (!ctx.isActive()) return;
         if (r.ok) YL.ui.toast(myAnswer(m) ? t("coffee.outcome.updated") : t("coffee.outcome.thanks"), "success");
       } else return;
@@ -1058,8 +1058,8 @@
     const wk = /^week-(\d{4}-\d{2}-\d{2})$/.exec(String(m.roundId || ""));
     return wk ? t("coffee.round.weeklyOf", { range: md(wk[1]) + "–" + md(D.addDays(wk[1], 6)) }) : L(m.roundTitle);
   }
-  // 我对"见到了吗"的回答。没约时间的匹配网页上不说"没见到"（§4.4.6 第 8 条）：点过"我们聊过了"又改成"其实还没聊"的
-  // （记为 missed）按还没回答显示，可以再点"我们聊过了"
+  // 我对"见到了吗"的回答。没约时间的匹配网页上不说"没见到"（§4.4.6 第 8 条）："其实还没聊"会撤回回答（met: null）；
+  // 万一有没约时间却记成 missed 的（直接调接口），也按还没回答显示，可以再点"我们聊过了"
   const myAnswer = (m) => (m.myOutcome === "missed" && !m.slot ? null : m.myOutcome || null);
   function matchHtml(m, expanded) {
     const tz = m.timezone || D.DEFAULT_ROUND.timezone, mid = esc(m.matchId);
@@ -1097,7 +1097,7 @@
       // 答过之后（§5.17）：见到了 → notice--success；没见到 → 中性的 notice--info。
       // 后端允许改答案（recordOutcome 覆盖）：还能回答时（canReport）给一个小按钮，直接改成另一个答案
       const change = !m.canReport ? ""
-        : !m.slot ? ["0", t("coffee.outcome.notYet")]
+        : !m.slot ? ["clear", t("coffee.outcome.notYet")] // 撤回回答（met: null），不记成"没见到"
         : metAlready ? ["0", t("coffee.outcome.changeToNo")] : ["1", t("coffee.outcome.changeToYes")];
       outcome = noticeHtml(metAlready ? "success" : "info", metAlready ? "check" : "info",
         `<p><strong>${esc(metAlready ? t("coffee.outcome.met") : t("coffee.outcome.missed"))}</strong></p><p>${esc(t("coffee.outcome.recorded"))}</p>

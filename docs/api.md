@@ -59,8 +59,8 @@
 | GET | `/coffee/inbox` | — | `{ incoming: [Card + { inviteId, note, createdAt, roundId, inRound }], outgoing: [Card + { inviteId, createdAt, roundId, inRound, state: "waiting" }] }`（`inRound`：你和对方现在都在当前这一轮里，可以打开 `/coffee/people/:id`；对方清空时间退出后为 `false`，邀请照样可以回应） |
 | POST | `/coffee/invites/:id/accept` 或 `/skip` | — | `{ id, status: "accepted"\|"skipped" }`；错误 `conflict / expired \| already_answered`、`forbidden / wrong_role` |
 | GET | `/coffee/matches` | — | `[Card + { matchId, roundId, roundTitle, timezone, contactMethod, slot, scheduledBy: "me"\|"them"\|null, available: [slotId], canSchedule, myOutcome: "met"\|"missed"\|null, canReport }]` |
-| POST | `/coffee/matches/:id/schedule` | `{ slot }`（`null` = 取消约定） | `{ id, slot }`（重复提交同一个时间不会重复发邮件）；错误 `conflict / slot_unavailable \| already_started \| not_matched` |
-| POST | `/coffee/matches/:id/outcome` | `{ met: true\|false }` | `{ id, outcome }`；错误 `conflict / too_early` |
+| POST | `/coffee/matches/:id/schedule` | `{ slot }`（`null` = 取消约定） | `{ id, slot }`（重复提交同一个时间不会重复发邮件；约了新时间会清空双方之前的"见到了吗"回答，取消约定不清）；错误 `conflict / slot_unavailable \| already_started \| not_matched` |
+| POST | `/coffee/matches/:id/outcome` | `{ met: true\|false\|null }`（`null` = 撤回自己的回答，只在没约时间时；约了新时间会清空双方之前的回答） | `{ id, outcome }`（撤回后 `outcome: null`）；错误 `conflict / too_early \| not_matched`、`fields.met = "invalid"`（不是布尔值；或约了时间还传 `null`） |
 | POST | `/feedback` | `{ kind: "bug"\|"idea"\|"report"\|"other", text（5–1000 字） }`（鉴权 `consented`：不需要完成资料，但要先同意当前版本的隐私说明；`report` = 举报） | `{ id }`；错误 `forbidden / needs_consent`、`fields.kind = "invalid"`、`fields.text = "too_short" \| "too_long"`、`rate_limited / too_many_requests`（每人每小时 10 条） |
 
 - `Card` = `{ id, name, identity, stage, gradYear, job, city, answers }`（`answers` 只含问卷里 `public: true` 的题目；**没有**邮箱和联系方式）

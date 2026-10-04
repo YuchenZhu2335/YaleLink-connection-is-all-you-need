@@ -153,6 +153,18 @@ test("约定时间：匹配后任一方选重叠时间；开始后不能再改�
   assert.equal(R.schedule(s, S2, "a", ROUND, [], NOW).unchanged, true, "重复提交同一个时间：不变（不重发邮件、不重置提醒）");
 });
 
+test("见到了吗：没约时间时 met: null 撤回自己的回答；约了新时间清空之前的回答；约了时间不能撤回", () => {
+  const m = inv("a", "b", { status: "accepted" });
+  const met = R.recordOutcome(m, true, "a", ROUND, NOW).next;
+  assert.deepEqual(met.outcomes, { a: "met" });
+  assert.deepEqual(R.recordOutcome(met, null, "a", ROUND, NOW).next.outcomes, {}, "其实还没聊：撤回，不记 missed");
+  const s = R.schedule(met, S2, "b", ROUND, [S2], NOW).next;
+  assert.deepEqual(s.outcomes, {}, "约了新时间：之前的回答不算这次见面");
+  const started = new Date(R.slotStart(ROUND, S2) + 60000).toISOString();
+  assert.equal(R.recordOutcome(s, null, "a", ROUND, started).fields.met, "invalid", "约了时间之后只能答见到 / 没见到");
+  assert.equal(R.recordOutcome(m, "yes", "a", ROUND, NOW).fields.met, "invalid");
+});
+
 test("打分：相同兴趣、相同领域、诉求互补都加分，并给出理由", () => {
   const s = R.scorePair(QUESTIONS, answers({ goals: ["industry"], interests: ["hiking", "coffee"] }), answers({ goals: ["share"], interests: ["hiking", "coffee", "music"] }));
   assert.equal(s.score, 3 + 4 + 2, "互补 3 + 两个共同兴趣 4 + 同领域 2");

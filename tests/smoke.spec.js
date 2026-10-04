@@ -164,6 +164,14 @@ test("见到了吗：回答之后还能改", async ({ browser }) => {
   await card.locator('.notice--success [data-act="outcome"]').click(); // "其实还没聊"
   await expect(card.locator(".notice--success")).toHaveCount(0);
   await expect(card.locator('.btn[data-act="outcome"][data-met="1"]')).toBeVisible();
+  // 撤回之后再约时间：不能变成"没见到 · 已记录"（之前的回答已撤回，约新时间也会清空）
+  const slot = card.locator('[data-act="schedule"]').first();
+  if (await slot.count()) {
+    await slot.click();
+    await expect(card.locator(".time.is-selected")).toBeVisible();
+    await expect(card.locator(".notice--info, .notice--success")).toHaveCount(0);
+    await expect(card).not.toContainText("谢谢告诉我们");
+  }
   expect(errors).toEqual([]);
 });
 

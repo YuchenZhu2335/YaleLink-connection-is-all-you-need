@@ -282,7 +282,7 @@ function install(app, ctx) {
     const r = C.schedule(inv, slot, me, round, available, t);
     if (!r.ok) throw fail(r.code, r.reason ? { reason: r.reason } : null);
     if (r.unchanged) return { id: inv.id, slot: inv.slot }; // 重复提交：不改、不重复发邮件
-    db.run("UPDATE invites SET slot = ?, scheduled_by = ?, scheduled_at = ?, reminded_at = NULL WHERE id = ?", r.next.slot, r.next.scheduledBy, r.next.scheduledAt, inv.id);
+    db.run("UPDATE invites SET slot = ?, scheduled_by = ?, scheduled_at = ?, reminded_at = NULL, outcomes = ? WHERE id = ?", r.next.slot, r.next.scheduledBy, r.next.scheduledAt, JSON.stringify(r.next.outcomes || {}), inv.id);
     if (r.next.slot) {
       const other = db.get("SELECT * FROM users WHERE id = ?", otherId);
       if (other) await ctx.mailer.send("scheduled", other, { name: req.user.name, when: ctx.mailer.when(round, r.next.slot) });
@@ -297,7 +297,7 @@ function install(app, ctx) {
     const r = C.recordOutcome(inv, req.body.met, req.user.id, round, t);
     if (!r.ok) throw fail(r.code, Object.assign({}, r.reason ? { reason: r.reason } : {}, r.fields ? { fields: r.fields } : {}));
     db.run("UPDATE invites SET outcomes = ? WHERE id = ?", JSON.stringify(r.next.outcomes), inv.id);
-    return { id: inv.id, outcome: r.next.outcomes[req.user.id] };
+    return { id: inv.id, outcome: r.next.outcomes[req.user.id] || null };
   }, { auth: "ready" });
 
   const feedbackHits = new Map();
