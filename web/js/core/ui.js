@@ -2,6 +2,8 @@
 window.YL = window.YL || {};
 YL.ui = (function () {
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // 数据里的外部链接只放行 http(s) / mailto，挡住 javascript: 等协议注入；返回值已转义，可直接放进 href。不合法时返回 ""
+  const safeUrl = (u) => { const s = String(u == null ? "" : u).trim(); return /^(https?:\/\/|mailto:)/i.test(s) ? esc(s) : ""; };
   const t = (k, v) => YL.i18n.t(k, v);
   const L = (f) => YL.i18n.L(f);
   const $ = (sel, el) => (el || document).querySelector(sel);
@@ -74,5 +76,5 @@ YL.ui = (function () {
   function userLink(u) { return u ? `<a class="user-link" href="#/directory/u/${esc(u.id)}">${avatar(u.name, "xs")} ${esc(L(u.name))}</a>` : ""; }
   function num(n) { return new Intl.NumberFormat(YL.i18n.getLang() === "zh" ? "zh-CN" : "en-US").format(n || 0); }
 
-  return { esc, t, L, $, $$, avatar, tag, tags, emptyState, sectionTitle, chips, tabs, stat, formatDate, daysUntil, deadlineBadge, toast, modal, closeModal, formValues, userLink, num };
+  return { esc, safeUrl, t, L, $, $$, avatar, tag, tags, emptyState, sectionTitle, chips, tabs, stat, formatDate, daysUntil, deadlineBadge, toast, modal, closeModal, formValues, userLink, num };
 })();

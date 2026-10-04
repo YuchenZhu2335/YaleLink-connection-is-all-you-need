@@ -32,12 +32,18 @@ YL.router = (function () {
       return;
     }
     current = ctx;
+    // 异步渲染（await YL.api.*）之后先检查 ctx.isActive()：用户可能已经切到别的页面
+    // Async renders must check ctx.isActive() after each await — the user may have navigated away.
+    ctx.isActive = () => current === ctx;
     root.innerHTML = "";
     root.scrollTop = 0;
     window.scrollTo({ top: 0 });
     document.querySelectorAll("[data-nav-id]").forEach((a) => a.classList.toggle("is-active", a.dataset.navId === ctx.module));
-    try { mod.render(root, ctx); }
-    catch (e) { console.error(e); root.innerHTML = YL.ui.emptyState("⚠️", "Module error: " + e.message); }
+    const fail = (e) => { console.error(e); if (ctx.isActive()) root.innerHTML = YL.ui.emptyState("⚠️", "Module error: " + e.message); };
+    try {
+      const pending = mod.render(root, ctx);
+      if (pending && typeof pending.then === "function") pending.catch(fail);
+    } catch (e) { fail(e); }
   }
   function start() { window.addEventListener("hashchange", render); render(); }
   function currentCtx() { return current; }

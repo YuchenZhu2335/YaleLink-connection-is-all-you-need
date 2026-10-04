@@ -41,12 +41,7 @@
       } });
   }
 
-  function requireLogin(action) {
-    if (YL.auth.isLoggedIn()) return true;
-    YL.ui.toast(YL.ui.t("common.loginFirst"), "error");
-    YL.router.navigate("login?next=" + encodeURIComponent(location.hash.slice(2)));
-    return false;
-  }
+  const requireLogin = () => YL.auth.requireLogin();
 
   registerModule({
     id: "careers",
@@ -120,7 +115,7 @@
             <dl class="kv"><dt>${t("careers.company")}</dt><dd><strong>${esc(L(j.company))}</strong></dd><dt>${t("careers.location")}</dt><dd>${r.emoji} ${esc(L(j.location))}</dd><dt>${t("careers.type")}</dt><dd>${esc(L(YL.store.term("jobTypes", j.type).label))}</dd><dt>${t("careers.deadline")}</dt><dd>${YL.ui.formatDate(j.deadline)} ${deadlineBadge(j.deadline)}</dd><dt>${t("careers.industry")}</dt><dd>${esc(L(YL.store.term("industries", j.industry).label))}</dd></dl>
             <div class="divider"></div><div class="prose"><p>${esc(L(j.description))}</p></div><div>${tags(j.tags || [], "tag--muted")}</div>
             ${ref ? `<div class="callout callout--green" style="margin-top:12px">🤝 ${t("careers.referralBy", { name: esc(L(ref.name)) })}</div>` : ""}
-            <div class="row" style="margin-top:16px">${j.link ? `<a class="btn btn--primary" href="${esc(j.link)}" target="_blank" rel="noopener">${t("careers.apply")}</a>` : ""}${ref ? `<button class="btn btn--accent" id="btn-askref">${t("careers.askReferral")}</button>` : ""}<button class="btn btn--ghost" id="btn-save">${YL.store.getState("savedJobs", j.id) ? "★ " + t("common.saved") : "☆ " + t("common.save")}</button></div>`, { onMount(panel) {
+            <div class="row" style="margin-top:16px">${YL.ui.safeUrl(j.link) ? `<a class="btn btn--primary" href="${YL.ui.safeUrl(j.link)}" target="_blank" rel="noopener">${t("careers.apply")}</a>` : ""}${ref ? `<button class="btn btn--accent" id="btn-askref">${t("careers.askReferral")}</button>` : ""}<button class="btn btn--ghost" id="btn-save">${YL.store.getState("savedJobs", j.id) ? "★ " + t("common.saved") : "☆ " + t("common.save")}</button></div>`, { onMount(panel) {
               const s = $("#btn-save", panel); s.onclick = () => { if (!requireLogin()) return; const on = YL.store.toggleState("savedJobs", j.id); s.textContent = on ? "★ " + t("common.saved") : "☆ " + t("common.save"); };
               const a = $("#btn-askref", panel); if (a) a.onclick = () => { if (!requireLogin()) return; YL.ui.closeModal(); YL.ui.toast(t("careers.referralSent", { name: L(ref.name) }), "success"); };
             } });
@@ -227,5 +222,6 @@
       YL.router.navigate("careers/jobs");
     }
   });
+  // 对外公开的组件。requireLogin 仅为兼容旧调用保留，新代码请用 YL.auth.requireLogin
   YL.careers = { postCard, postForm, requireLogin };
 })();

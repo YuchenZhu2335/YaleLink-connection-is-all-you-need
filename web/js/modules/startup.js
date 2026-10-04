@@ -5,7 +5,7 @@ registerModule({
   descriptionKey: "about.module.startup",
   render(root, ctx) {
     const { t, esc, L, $, $$, avatar, tags, chips, sectionTitle } = YL.ui;
-    const requireLogin = YL.careers.requireLogin;
+    const requireLogin = YL.auth.requireLogin;
     const TABS = [{ id: "resources", icon: "🏛️", labelKey: "startup.tab.resources" }, { id: "projects", icon: "🧪", labelKey: "startup.tab.projects" }, { id: "match", icon: "🔗", labelKey: "startup.tab.match" }];
     const sub = ctx.sub || "resources";
     const head = `<div class="page-head"><h1>${t("startup.title")}</h1><p>${t("startup.intro")}</p></div>${YL.ui.tabs(TABS, sub, "#/startup")}`;
@@ -20,7 +20,7 @@ registerModule({
             <div class="row row--between" style="margin-bottom:6px">${YL.ui.tag(YL.store.term("startupCategories", r.category).label)}${r.verified ? `<span class="badge badge--green">✓ ${t("common.verified")}</span>` : `<span class="badge badge--warn">${t("common.unverified")}</span>`}</div>
             <div class="card__title">${esc(L(r.name))}</div><div class="card__body">${esc(L(r.summary))}</div>
             ${r.tips ? `<div class="callout callout--info" style="margin-top:10px">💡 ${esc(L(r.tips))}</div>` : ""}
-            <div class="card__foot"><span class="row small muted">${c ? `${avatar(c.name, "xs")} ${esc(L(c.name))}` : ""}</span>${r.link ? `<a class="btn btn--ghost btn--sm" href="${esc(r.link)}" target="_blank" rel="noopener">${t("common.visit")} ↗</a>` : ""}</div></div>`; }).join("")}</div>
+            <div class="card__foot"><span class="row small muted">${c ? `${avatar(c.name, "xs")} ${esc(L(c.name))}` : ""}</span>${YL.ui.safeUrl(r.link) ? `<a class="btn btn--ghost btn--sm" href="${YL.ui.safeUrl(r.link)}" target="_blank" rel="noopener">${t("common.visit")} ↗</a>` : ""}</div></div>`; }).join("")}</div>
           <p class="notice">${t("startup.verifyNote")} <a href="${YL_CONFIG.github}/issues/new?template=content_contribution.yml" target="_blank" rel="noopener">${t("common.suggestEdit")}</a></p>`;
         $$("[data-cat]").forEach((b) => (b.onclick = () => { cat = b.dataset.cat; draw(); }));
       };

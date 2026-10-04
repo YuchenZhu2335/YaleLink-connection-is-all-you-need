@@ -53,7 +53,7 @@ YL.store = (function () {
   }
   function toggleState(ns, id) { return setState(ns, id, !getState(ns, id)); }
   function countState(ns) { return Object.keys(state[ns] || {}).length; }
-  function resetDemo() { localStorage.removeItem(OVERLAY_KEY); localStorage.removeItem(STATE_KEY); overlay = {}; state = {}; }
+  function resetDemo() { localStorage.removeItem(OVERLAY_KEY); localStorage.removeItem(STATE_KEY); overlay = {}; state = {}; if (YL.audit) YL.audit.clear(); }
   // 分类词条辅助：taxonomy.json 里的 {industries:[{id,label}], ...}
   function term(group, id) {
     const tax = seed.taxonomy || {};

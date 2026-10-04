@@ -5,7 +5,7 @@ registerModule({
   descriptionKey: "about.module.life",
   render(root, ctx) {
     const { t, esc, L, $, $$, avatar, chips, sectionTitle } = YL.ui;
-    const requireLogin = YL.careers.requireLogin;
+    const requireLogin = YL.auth.requireLogin;
     const cats = [{ id: "all", label: { zh: "全部", en: "All" }, emoji: "🗂️" }].concat(YL.store.terms("lifeCategories"));
     const regions = [{ id: "all", name: { zh: "全部地区", en: "All regions" }, emoji: "🌏" }].concat(YL.store.get("regions"));
     const me = YL.auth.isLoggedIn() && YL.auth.user().profile;
@@ -23,7 +23,7 @@ registerModule({
             <div class="row" style="margin-bottom:6px">${YL.ui.tag(YL.store.term("lifeCategories", r.category).label)}<span class="muted small">${r.region === "all" ? "🌏 " + t("life.everywhere") : rg.emoji + " " + esc(L(rg.name))}</span><span class="spacer"></span>${r.verified ? `<span class="badge badge--green">✓ ${t("common.verified")}</span>` : ""}</div>
             <div class="card__title">${esc(L(r.name))}</div><div class="card__body">${esc(L(r.summary))}</div>
             ${r.tips ? `<div class="callout callout--info" style="margin-top:10px">💡 ${esc(L(r.tips))}</div>` : ""}
-            <div class="card__foot"><span class="row small muted">${c ? `${avatar(c.name, "xs")} ${esc(L(c.name))}` : ""}</span><div class="row">${r.link ? `<a class="btn btn--ghost btn--sm" href="${esc(r.link)}" target="_blank" rel="noopener">${t("common.visit")} ↗</a>` : ""}<button class="icon-btn ${helpful ? "is-on" : ""}" data-help="${r.id}">👍 ${(r.helpful || 0) + (helpful ? 1 : 0)}</button></div></div></div>`; }).join("") : YL.ui.emptyState("🧭", t("common.noResults"))}</div>
+            <div class="card__foot"><span class="row small muted">${c ? `${avatar(c.name, "xs")} ${esc(L(c.name))}` : ""}</span><div class="row">${YL.ui.safeUrl(r.link) ? `<a class="btn btn--ghost btn--sm" href="${YL.ui.safeUrl(r.link)}" target="_blank" rel="noopener">${t("common.visit")} ↗</a>` : ""}<button class="icon-btn ${helpful ? "is-on" : ""}" data-help="${r.id}">👍 ${(r.helpful || 0) + (helpful ? 1 : 0)}</button></div></div></div>`; }).join("") : YL.ui.emptyState("🧭", t("common.noResults"))}</div>
         </div><div class="stack">
           <div class="card"><div class="card__title">${t("life.experience")}</div><p class="muted small">${t("life.experienceSub")}</p><div class="stack" style="margin-top:8px">${posts.map((p) => { const a = YL.store.user(p.authorId); return `<a class="list-row card--hover" href="#/careers/post/${p.id}" style="padding:10px 12px">${a ? avatar(a.name, "sm") : ""}<div class="list-row__main"><div class="list-row__title clamp-2 small">${esc(L(p.title))}</div><div class="list-row__sub">${a ? esc(L(a.name)) : ""} · 👍 ${p.likes}</div></div></a>`; }).join("")}</div></div>
           ${me && me.region && region === "all" ? `<div class="card card--flat" style="background:var(--surface-2);border:0"><div class="small muted">📍 ${t("life.yourRegion", { region: esc(L(YL.store.region(me.region).name)) })}</div><button class="btn btn--ghost btn--sm" style="margin-top:8px" id="btn-myregion">${t("events.filterMine")}</button></div>` : ""}

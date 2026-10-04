@@ -20,14 +20,23 @@
   </div>
   <noscript><p style="padding:2rem;text-align:center">YaleLink needs JavaScript. / 请启用 JavaScript。</p></noscript>
 
-  <!-- 配置与核心 / config & core -->
+  <!-- 装载顺序 = 分层顺序：config → core → domain → api → modules → app（scripts/check-architecture.mjs 会检查）
+       Load order mirrors the layers; enforced by scripts/check-architecture.mjs -->
+
+  <!-- 配置与核心 / config & core（维护者负责，改动需 RFC） -->
   <script src="config.js"></script>
   <script src="js/core/i18n.js"></script>
   <script src="js/core/ui.js"></script>
   <script src="js/core/registry.js"></script>
+  <script src="js/core/audit.js"></script>
   <script src="js/core/store.js"></script>
   <script src="js/core/auth.js"></script>
+  <script src="js/core/api.js"></script>
   <script src="js/core/router.js"></script>
+
+  <!-- 业务规则 / domain — 纯函数，浏览器与 Node 后端共用 -->
+
+  <!-- 接口实现 / api — 原型版"后端"，每条 route 就是一份后端契约 -->
 
   <!-- 功能模块 / feature modules — 新增模块在这里加一行 / add one line per new module -->
   <script src="js/modules/login.js"></script>

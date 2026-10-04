@@ -5,7 +5,7 @@ registerModule({
   descriptionKey: "about.module.circles",
   render(root, ctx) {
     const { t, esc, L, $, $$, avatar, chips, sectionTitle, formatDate } = YL.ui;
-    const requireLogin = YL.careers.requireLogin;
+    const requireLogin = YL.auth.requireLogin;
     const today = new Date().toISOString().slice(0, 10);
 
     if (ctx.sub === "c") {

@@ -6,7 +6,7 @@ registerModule({
   render(root, ctx) {
     const { t, esc, L, $, $$, avatar, tags, formatDate, chips } = YL.ui;
     const today = new Date().toISOString().slice(0, 10);
-    const requireLogin = YL.careers.requireLogin;
+    const requireLogin = YL.auth.requireLogin;
 
     if (ctx.sub === "e") {
       const e = YL.store.find("events", ctx.id);

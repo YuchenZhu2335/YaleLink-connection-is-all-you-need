@@ -59,5 +59,13 @@ YL.auth = (function () {
     if (session.profile && session.profile.name) return session.profile.name;
     return session.email.split("@")[0];
   }
-  return { isAllowedEmail, isValidEmail, requestCode, verify, completeProfile, logout, isLoggedIn, needsProfile, user, displayName, kindOf, acssyRole, isAcssy, isAcssyLead };
+  // 需要登录的操作入口：未登录时提示并跳到登录页，登录后回到当前页。返回 true 表示可以继续。
+  // Gate for actions that need a session; redirects to login and comes back afterwards.
+  function requireLogin() {
+    if (isLoggedIn()) return true;
+    YL.ui.toast(YL.ui.t("common.loginFirst"), "error");
+    YL.router.navigate("login?next=" + encodeURIComponent(location.hash.slice(2)));
+    return false;
+  }
+  return { isAllowedEmail, isValidEmail, requestCode, verify, completeProfile, logout, isLoggedIn, needsProfile, user, displayName, kindOf, acssyRole, isAcssy, isAcssyLead, requireLogin };
 })();

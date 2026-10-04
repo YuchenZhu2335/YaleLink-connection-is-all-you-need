@@ -15,6 +15,11 @@ window.YL_CONFIG = {
   // The static prototype has no backend; the verification code is a fixed demo code.
   demoVerificationCode: "000000",
 
+  // 接口地址：留空 = 浏览器内的本地 mock 后端（演示数据存在本机）；
+  // 填真实后端地址（如 "https://api.example.cn"）后，所有 YL.api 调用改为 HTTP 请求，模块代码不用改。
+  // API base: empty = in-browser mock backend; set a backend URL to send every YL.api call over HTTP.
+  apiBase: "",
+
   defaultLang: "zh",               // "zh" | "en"
   github: "https://github.com/YuchenZhu2335/YaleLink",
   acssy: "https://acssy.org",

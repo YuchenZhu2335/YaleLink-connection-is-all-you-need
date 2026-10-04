@@ -20,7 +20,7 @@
   function openWizard(opts) {
     opts = opts || {};
     const { t, esc, L, $, $$ } = YL.ui;
-    if (!YL.careers.requireLogin()) return;
+    if (!YL.auth.requireLogin()) return;
     const me = YL.auth.user().profile || {};
     const canAcssy = YL.auth.isAcssy();
     const state = { step: 1, scope: opts.scope || (canAcssy ? "acssy" : "community"), playbookId: opts.playbookId || "pb-gala", circleId: opts.circleId || "", region: opts.region || me.region || "" };
@@ -194,7 +194,7 @@
             <section class="card"><h2 style="margin-bottom:12px">${t("sop.phases")}</h2><ol class="timeline">${pb.phases.map((ph) => `<li><div class="timeline__when">${esc(L(ph.timing))}</div><div class="timeline__title">${esc(L(ph.name))}</div><ul class="small muted" style="padding-left:18px;margin:4px 0 0">${ph.tasks.map((tk) => `<li>${esc(L(tk.title))} <span class="tag tag--muted" style="font-size:.68rem">${t("dept." + tk.role)}</span></li>`).join("")}</ul></li>`).join("")}</ol></section>
             ${pb.history.length ? `<section class="card"><h2 style="margin-bottom:12px">${t("sop.history")}</h2><div class="stack">${pb.history.map((h) => `<div class="list-row"><div class="date-box"><strong>${h.year}</strong><span>${h.attendance}👥</span></div><div class="list-row__main"><div class="list-row__title">${esc(L(h.name))}</div><div class="list-row__sub">${esc(L(h.notes))}</div></div></div>`).join("")}</div></section>` : ""}
           </div><div class="stack">
-            <div class="card"><div class="card__title">📎 ${t("sop.materials")}</div>${pb.materials.length ? `<div class="stack" style="margin-top:8px">${pb.materials.map((x) => `<div class="row small">${kindIcon[x.kind] || "📎"} ${x.link ? `<a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(L(x.name))}</a>` : `<span>${esc(L(x.name))}</span> <span class="badge badge--muted">${t("sop.linkPending")}</span>`}</div>`).join("")}</div>` : `<p class="muted small" style="margin-top:6px">—</p>`}</div>
+            <div class="card"><div class="card__title">📎 ${t("sop.materials")}</div>${pb.materials.length ? `<div class="stack" style="margin-top:8px">${pb.materials.map((x) => `<div class="row small">${kindIcon[x.kind] || "📎"} ${YL.ui.safeUrl(x.link) ? `<a href="${YL.ui.safeUrl(x.link)}" target="_blank" rel="noopener">${esc(L(x.name))}</a>` : `<span>${esc(L(x.name))}</span> <span class="badge badge--muted">${t("sop.linkPending")}</span>`}</div>`).join("")}</div>` : `<p class="muted small" style="margin-top:6px">—</p>`}</div>
             <div class="card"><div class="card__title">✉️ ${t("acssy.tab.templates")}</div><div class="stack" style="margin-top:8px">${pb.templateIds.map((id) => { const x = YL.store.find("templates", id); return x ? `<a class="small" href="#/acssy/templates?open=${x.id}">${YL.store.term("templateKinds", x.kind).emoji} ${esc(L(x.name))}</a>` : ""; }).join("")}</div></div>
             <div class="card"><div class="card__title">📇 ${t("acssy.tab.contacts")}</div><div class="stack" style="margin-top:8px">${pb.contactIds.map((id) => { const k = YL.store.find("contacts", id); return k ? `<a class="small" href="#/acssy/contacts?kind=${k.kind}">${YL.store.term("contactKinds", k.kind).emoji} ${esc(L(k.name))}</a>` : ""; }).join("")}</div></div>
             <div class="card card--flat" style="background:var(--surface-2);border:0"><div class="small muted">${t("sop.editNote")}</div><a class="btn btn--ghost btn--sm" style="margin-top:8px" href="${YL_CONFIG.github}/blob/main/web/data/playbooks.json" target="_blank" rel="noopener">${t("common.suggestEdit")}</a></div>
