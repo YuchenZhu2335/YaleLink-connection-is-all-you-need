@@ -21,7 +21,10 @@ YL.ui = (function () {
     coffee: '<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c0 1 1 1.5 1 2.5M12 3.5c0 1 1 1.5 1 2.5"/>',
     people: '<circle cx="9" cy="8" r="3.25"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><path d="M15.5 4.9a3.25 3.25 0 0 1 0 6.2M18 14.4c1.6.7 2.7 2.3 3 4.6"/>',
     inbox: '<path d="M4 13l2.2-7.1A1.5 1.5 0 0 1 7.6 5h8.8a1.5 1.5 0 0 1 1.4.9L20 13v5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18v-5z"/><path d="M4 13h4.5l1.5 2.5h4l1.5-2.5H20"/>',
-    sparkle: '<path d="M12 3l1.9 5.6a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-2.1a2 2 0 0 0 1.3-1.3L12 3z"/>',
+    // 灯拱：拱门里一盏灯（logo 的线性版本）。用在"匹配"、"TA 想认识你"
+    arch: '<path d="M6 20v-8a6 6 0 0 1 12 0v8"/><circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none"/>',
+    alert: '<path d="M12 4.5 21 19.5H3z"/><path d="M12 10v4.5M12 17v.01"/>',
+    alertCircle: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V13M12 16.25v.01"/>',
     user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>',
     calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -49,14 +52,16 @@ YL.ui = (function () {
     message: '<path d="M4.5 19.5V6A1.5 1.5 0 0 1 6 4.5h12A1.5 1.5 0 0 1 19.5 6v9a1.5 1.5 0 0 1-1.5 1.5H8l-3.5 3z"/>',
     trash: '<path d="M4.5 7h15M9.5 7V5h5v2M6.5 7l1 12.5h9l1-12.5"/>',
     external: '<path d="M14 4.5h5.5V10M19.5 4.5L11 13M17 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 4 18.5v-10A1.5 1.5 0 0 1 5.5 7H10"/>',
-    bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
     chart: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
     edit: '<path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5 4 20z"/>',
     refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L19.5 9"/><path d="M19.5 4v5h-5"/>',
-    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
-    heart: '<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/>'
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>'
   };
+  // 兼容：sparkle 已弃用（看起来像 AI 标记），统一画成灯拱
+  ICONS.sparkle = ICONS.arch;
+  // iOS 上 :active 需要一个空的触摸监听才会生效
+  document.addEventListener("touchstart", () => {}, { passive: true });
   // icon("coffee") / icon("check", { size: 16, label: "已完成" })；不认识的名字返回空串
   function icon(name, opts) {
     const o = opts || {}, body = ICONS[name];

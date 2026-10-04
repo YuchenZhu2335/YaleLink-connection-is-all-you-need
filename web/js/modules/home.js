@@ -1,103 +1,169 @@
-/* 首页：欢迎 / 快捷入口 / 最新帖子 / 近期活动 / 精选校友 */
-registerModule({
-  id: "home",
-  nav: { icon: "🏠", labelKey: "nav.home", order: 10, mobile: true },
-  descriptionKey: "about.module.home",
-  render(root) {
-    const { t, esc, L, avatar, tags, formatDate, userLink, sectionTitle, num } = YL.ui;
-    const logged = YL.auth.isLoggedIn();
-    const me = logged ? YL.auth.user().profile : null;
-    const users = YL.store.get("users");
-    const byId = (id) => users.find((u) => u.id === id);
-    const posts = YL.store.get("posts").slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
-    const today = new Date().toISOString().slice(0, 10);
-    let events = YL.store.get("events").filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-    const myRegion = me && me.region;
-    if (myRegion) events = events.filter((e) => e.region === myRegion).concat(events.filter((e) => e.region !== myRegion));
-    events = events.slice(0, 4);
-    const featured = users.filter((u) => u.featured).slice(0, 4);
-    const jobs = YL.store.get("jobs").filter((j) => j.deadline >= today).length;
+/* 首页（未登录）：主视觉、怎么玩、本期活动、三条原则、结尾号召
+   Landing page for signed-out visitors.
 
-    const quick = [
-      { href: "#/coffee", icon: "☕", key: "home.quick.coffee" },
-      { href: "#/careers/jobs", icon: "💼", key: "home.quick.jobs" },
-      { href: "#/careers/groups", icon: "🎯", key: "home.quick.mock" },
-      { href: "#/events", icon: "📍", key: "home.quick.events" },
-      { href: "#/startup", icon: "🚀", key: "home.quick.startup" },
-      { href: "#/life", icon: "🧭", key: "home.quick.life" },
-      { href: "#/directory", icon: "🤝", key: "home.quick.directory" },
-      { href: "#/circles", icon: "🫂", key: "home.quick.circles" },
-      { href: "#/events", icon: "🎉", key: "home.quick.host" }
-    ];
-    const acssyPosts = YL.store.get("posts").filter((p) => p.category === "acssy").sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 2);
-    const volunteerCalls = YL.store.get("campaigns").filter((c) => c.status !== "done" && (c.volunteerRoles || []).some((r) => r.filled < r.count));
-    const myTasks = []; if (YL.auth.isAcssy()) YL.store.get("campaigns").forEach((c) => c.tasks.forEach((tk) => { if (tk.assigneeId === "me" && tk.status !== "done") myTasks.push({ c, tk }); }));
+   #/home（也是默认路由）
+     - 已登录且完成首次填写 → #/coffee
+     - 已登录但还没填完     → #/profile/setup
+     - 未登录               → 落地页
+   数据：GET /rounds/events（只用来显示本期活动；失败或没有活动就不显示，不打扰）。 */
+(function () {
+  "use strict";
+  const { t, L, esc, icon, avatar, tag } = YL.ui;
+  const D = YL.domain.coffee;
 
-    root.innerHTML = `
-      <section class="hero">
-        <div class="hero__eyebrow">ACSSY · Yale Alumni Network</div>
-        <h1>${logged ? t("home.helloName", { name: esc(YL.auth.displayName()) }) : t("home.hero")}</h1>
-        <p>${t("home.heroSub")}</p>
-        <div class="hero__actions">
-          ${logged ? `<a class="btn btn--primary" href="#/careers">${t("home.ctaCareers")}</a><a class="btn btn--ghost" href="#/events">${t("home.ctaEvents")}</a>`
-                   : `<a class="btn btn--primary" href="#/login">${t("home.ctaLogin")}</a><a class="btn btn--ghost" href="#/about">${t("home.ctaAbout")}</a>`}
+  /* ---------- 活动轮的显示 ---------- */
+  // 首页只展示一个活动：进行中的优先，其次最快要开始的
+  function pickEvent(list) {
+    const items = Array.isArray(list) ? list : [];
+    return items.find((r) => r && r.open) ||
+      items.filter((r) => r && r.upcoming).sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : 0))[0] || null;
+  }
+  function day(date, withYear) {
+    return YL.ui.formatDate(date, withYear ? { year: "numeric", month: "short", day: "numeric" } : { month: "short", day: "numeric" });
+  }
+  function rangeText(r) {
+    const thisYear = String(new Date().getFullYear());
+    const withYear = r.startDate.slice(0, 4) !== thisYear || r.endDate.slice(0, 4) !== thisYear;
+    return day(r.startDate, withYear) + " – " + day(r.endDate, withYear);
+  }
+  // 还有几天开始（按活动时区的日期算）
+  function daysUntil(r) {
+    try {
+      const today = D.localDate(new Date().toISOString(), r.timezone || D.DEFAULT_ROUND.timezone);
+      return Math.round((Date.parse(r.startDate + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
+    } catch (e) { return null; }
+  }
+  function eventMeta(r) {
+    if (r.open) return t("home.event.joined", { n: YL.ui.num(r.participants) });
+    const n = daysUntil(r);
+    if (n === 1) return t("home.event.startsTomorrow");
+    return n > 1 ? t("home.event.startsIn", { n }) : "";
+  }
+  function eventBanner(r) {
+    const meta = eventMeta(r);
+    return `
+      <section class="banner banner--event" aria-labelledby="home-ev-title">
+        <p class="banner__eyebrow">${esc(r.open ? t("home.event.eyebrowOpen") : t("home.event.eyebrowUpcoming"))}</p>
+        <h2 class="banner__title" id="home-ev-title">${esc(L(r.title))}</h2>
+        <div class="banner__meta">
+          <span>${icon("calendar")}${esc(rangeText(r))}</span>
+          ${meta ? `<span>${icon(r.open ? "people" : "clock")}${esc(meta)}</span>` : ""}
         </div>
-      </section>
-
-      <div class="stats section">
-        ${YL.ui.stat(num(users.length), t("home.stat.alumni"))}
-        ${YL.ui.stat(num(jobs), t("home.stat.jobs"))}
-        ${YL.ui.stat(num(YL.store.get("events").length), t("home.stat.events"))}
-        ${YL.ui.stat(num(YL.store.get("regions").length), t("home.stat.regions"))}
-      </div>
-
-      <section class="section acssy-push">
-        ${sectionTitle("📣 " + t("home.acssyPush"), YL.auth.isAcssy() ? `<a class="btn btn--ghost btn--sm" href="#/acssy">${t("nav.acssy")}</a>` : "", t("home.acssyPushSub"))}
-        <div class="grid grid-2">
-          ${acssyPosts.map((p) => `<a class="card card--hover" href="#/careers/post/${p.id}"><div class="row" style="margin-bottom:6px">${YL.ui.tag({ zh: "学联公告", en: "ACSSY notice" }, "tag--accent")}<span class="muted small">${formatDate(p.createdAt)}</span></div><div class="card__title">${esc(L(p.title))}</div><div class="card__body clamp-2">${esc(L(p.summary))}</div></a>`).join("")}
-          ${volunteerCalls.map((c) => { const need = c.volunteerRoles.reduce((s, r) => s + Math.max(0, r.count - r.filled), 0); return `<a class="card card--hover" href="${YL.auth.isAcssy() ? "#/acssy/volunteers" : "#/login/profile?next=acssy/volunteers"}"><div class="row" style="margin-bottom:6px">${YL.ui.tag({ zh: "志愿者招募", en: "Volunteers wanted" }, "tag--green")}<span class="muted small">🗓️ ${formatDate(c.date)}</span></div><div class="card__title">${esc(L(c.name))}</div><div class="card__body">${t("home.volunteersNeeded", { n: need })}</div></a>`; }).join("")}
-          ${myTasks.length ? `<a class="card card--hover card--primary" href="#/acssy/board"><div class="card__title">📋 ${t("home.myTasks", { n: myTasks.length })}</div><div class="card__body">${myTasks.slice(0, 3).map(({ tk }) => esc(L(tk.title))).join(" · ")}</div></a>` : ""}
+        <div class="banner__actions">
+          <a class="btn btn--primary" href="#/events/${esc(encodeURIComponent(r.id))}">${esc(t("home.event.view"))}${icon("arrowRight")}</a>
         </div>
-      </section>
+      </section>`;
+  }
 
-      <section class="section">
-        ${sectionTitle(t("home.quickTitle"))}
-        <div class="grid grid-3">
-          ${quick.map((q) => `<a class="card card--hover" href="${q.href}"><div style="font-size:1.6rem">${q.icon}</div><div class="card__title" style="margin-top:6px">${t(q.key)}</div><div class="card__meta">${t(q.key + "Sub")}</div></a>`).join("")}
+  /* ---------- 落地页的各个部分 ---------- */
+  function heroHtml() {
+    return `
+      <div class="hero">
+        <p class="hero__eyebrow">${icon("sun")}<span>${esc(t("home.hero.eyebrow"))}</span></p>
+        <h1 class="hero__title">${esc(t("home.hero.title"))}<br><em>${esc(t("home.hero.titleEm"))}</em></h1>
+        <p class="hero__lead">${esc(t("home.hero.lead"))}</p>
+        <div class="hero__cta" data-cta>
+          <a class="btn btn--primary btn--lg" href="#/login">${icon("mail")}${esc(t("home.hero.login"))}</a>
         </div>
-      </section>
-
-      <div class="two-col">
-        <section class="section">
-          ${sectionTitle(t("home.latestPosts"), `<a class="btn btn--ghost btn--sm" href="#/careers/research">${t("common.viewAll")}</a>`)}
-          <div class="stack">
-            ${posts.map((p) => { const a = byId(p.authorId); const cat = YL.store.term("postCategories", p.category); return `
-              <a class="card card--hover" href="#/careers/post/${p.id}">
-                <div class="row" style="margin-bottom:6px">${YL.ui.tag(cat.label)}<span class="muted small">${formatDate(p.createdAt)}</span></div>
-                <div class="card__title">${esc(L(p.title))}</div>
-                <div class="card__body clamp-2">${esc(L(p.summary))}</div>
-                <div class="card__foot"><span>${a ? `${avatar(a.name, "xs")} <span class="small">${esc(L(a.name))} · ${esc(L(a.title))}</span>` : ""}</span><span class="muted small">👍 ${p.likes} · 💬 ${p.commentsCount}</span></div>
-              </a>`; }).join("")}
-          </div>
-        </section>
-        <div>
-          <section class="section">
-            ${sectionTitle(t("home.upcoming"), `<a class="btn btn--ghost btn--sm" href="#/events">${t("common.viewAll")}</a>`)}
-            <div class="list">
-              ${events.map((e) => { const d = new Date(e.date + "T00:00:00"); const r = YL.store.region(e.region); return `
-                <a class="list-row card--hover" href="#/events/e/${e.id}">
-                  <div class="date-box"><strong>${d.getDate()}</strong><span>${d.toLocaleDateString(YL.i18n.getLang() === "zh" ? "zh-CN" : "en-US", { month: "short" })}</span></div>
-                  <div class="list-row__main"><div class="list-row__title clamp-2">${esc(L(e.title))}</div><div class="list-row__sub">${r.emoji} ${esc(L(r.name))} · ${esc(e.time)}</div></div>
-                </a>`; }).join("")}
-            </div>
-          </section>
-          <section class="section">
-            ${sectionTitle(t("home.featured"), `<a class="btn btn--ghost btn--sm" href="#/directory">${t("common.viewAll")}</a>`)}
-            <div class="stack">
-              ${featured.map((u) => `<a class="card card--hover" href="#/directory/u/${u.id}"><div class="person">${avatar(u.name)}<div><div class="person__name">${esc(L(u.name))} <span class="muted small">'${String(u.classYear).slice(-2)} ${esc(L(YL.store.term("schools", u.school).label))}</span></div><div class="person__sub">${esc(L(u.title))} · ${esc(L(u.company))}</div><div style="margin-top:6px">${tags(u.offers.map((o) => YL.store.term("offers", o).label), "tag--green")}</div></div></div></a>`).join("")}
-            </div>
-          </section>
-        </div>
+        <p class="small faint">${esc(t("home.hero.who"))}</p>
       </div>`;
   }
-});
+  // 右侧（手机上在下面）一张示例推荐卡：让人一眼看懂"推荐"长什么样。人物是虚构的
+  function sampleHtml() {
+    const name = t("home.sample.name");
+    return `
+      <aside class="stack stack--s" aria-labelledby="home-sample">
+        <p class="eyebrow" id="home-sample">${esc(t("home.sample.eyebrow"))}</p>
+        <article class="person person--rec">
+          <div class="person__head">
+            ${avatar(name)}
+            <div class="person__who">
+              <p class="person__name">${esc(name)}</p>
+              <p class="person__meta"><span>${esc(t("home.sample.meta1"))}</span><span>${esc(t("home.sample.meta2"))}</span></p>
+            </div>
+          </div>
+          <ul class="person__reasons">
+            <li class="reason">${icon("sparkle")}<span>${esc(t("home.sample.reason1"))}</span></li>
+            <li class="reason">${icon("sparkle")}<span>${esc(t("home.sample.reason2"))}</span></li>
+          </ul>
+          <div class="tags">${tag(t("home.sample.tagGoal"), "tag--goal")}${tag(t("home.sample.tag1"), "tag--shared")}${tag(t("home.sample.tag2"), "tag--shared")}${tag(t("home.sample.tag3"))}</div>
+          <div class="person__foot">
+            <span class="person__overlap">${icon("clock")}${esc(t("home.sample.overlap"))}</span>
+            <span class="pill pill--matched">${icon("check")}${esc(t("home.sample.mutual"))}</span>
+          </div>
+        </article>
+        <p class="small muted">${esc(t("home.sample.note"))}</p>
+      </aside>`;
+  }
+  function howHtml() {
+    const steps = ["s1", "s2", "s3"].map((s) => `
+      <div class="how__step"><h3>${esc(t("home.how." + s + ".title"))}</h3><p>${esc(t("home.how." + s + ".text"))}</p></div>`).join("");
+    return `
+      <section class="stack" aria-labelledby="home-how">
+        <div class="section-head"><div><h2 class="section-title" id="home-how">${esc(t("home.how.title"))}</h2><p class="section-sub">${esc(t("home.how.sub"))}</p></div></div>
+        <div class="how">${steps}</div>
+      </section>`;
+  }
+  function principlesHtml() {
+    const items = [["light", "clock"], ["respect", "heart"], ["privacy", "lock"]].map(([id, ic]) => `
+      <article class="card stack stack--s">
+        <div class="tags"><span class="tag tag--theme">${icon(ic, { size: 14 })}${esc(t("home.p." + id + ".tag"))}</span></div>
+        <h3>${esc(t("home.p." + id + ".title"))}</h3>
+        <p class="small muted">${esc(t("home.p." + id + ".text"))}</p>
+      </article>`).join("");
+    return `
+      <section class="stack" aria-labelledby="home-principles">
+        <div class="section-head"><div><h2 class="section-title" id="home-principles">${esc(t("home.principles.title"))}</h2></div></div>
+        <div class="grid-cards">${items}</div>
+      </section>`;
+  }
+  function closingHtml() {
+    return `
+      <section class="banner" aria-labelledby="home-cta">
+        <p class="banner__eyebrow">${esc(YL_CONFIG.siteName)}</p>
+        <h2 class="banner__title" id="home-cta">${esc(t("home.cta.title"))}</h2>
+        <p>${esc(t("home.cta.text"))}</p>
+        <div class="banner__actions">
+          <a class="btn btn--accent btn--lg" href="#/login">${esc(t("home.hero.login"))}</a>
+          <a class="btn btn--secondary btn--lg" href="#/about">${esc(t("home.cta.about"))}</a>
+        </div>
+      </section>`;
+  }
+
+  async function renderLanding(root, ctx) {
+    root.innerHTML = `
+      <div class="page" data-home>
+        <div class="split split--wide-aside">
+          ${heroHtml()}
+          ${sampleHtml()}
+        </div>
+        <div data-event aria-live="polite" hidden></div>
+        ${howHtml()}
+        ${principlesHtml()}
+        ${closingHtml()}
+      </div>`;
+
+    // 本期活动：拿不到就安静地跳过
+    const r = await YL.api.get("/rounds/events");
+    if (!ctx.isActive()) return;
+    const ev = r.ok ? pickEvent(r.data) : null;
+    const page = root.querySelector("[data-home]");
+    if (!ev || !page) return;
+    const slot = page.querySelector("[data-event]");
+    slot.innerHTML = eventBanner(ev);
+    slot.hidden = false;
+    const cta = page.querySelector("[data-cta]");
+    if (cta) cta.insertAdjacentHTML("beforeend", `<a class="btn btn--secondary btn--lg" href="#/events/${esc(encodeURIComponent(ev.id))}">${icon("flag")}${esc(t("home.hero.events"))}</a>`);
+  }
+
+  registerModule({
+    id: "home",
+    render(root, ctx) {
+      if (YL.auth.isLoggedIn()) {
+        YL.router.navigate(YL.auth.isReady() ? "coffee" : "profile/setup", { replace: true });
+        return;
+      }
+      return renderLanding(root, ctx);
+    }
+  });
+})();

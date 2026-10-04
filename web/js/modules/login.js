@@ -1,104 +1,216 @@
-/* 登录模块：邮箱域名校验 → 验证码 → 首次完善资料 */
-registerModule({
-  id: "login",
-  descriptionKey: "about.module.login",
-  render(root, ctx) {
-    const { t, esc, $ } = YL.ui;
-    const step = ctx.sub || "email";
-    const next = ctx.query.next || "home";
-    const email = ctx.query.email || "";
-    const steps = (n) => `<div class="steps">${[1, 2, 3].map((i) => `<span class="${i <= n ? "is-done" : ""}"></span>`).join("")}</div>`;
-    const head = `<img class="auth__logo" src="assets/logo.svg" alt=""><h1>${t("login.title")}</h1><p>${t("login.subtitle")}</p>`;
+/* 登录：耶鲁邮箱 → 6 位验证码（同一页面两步，不刷新）
+   Sign-in: Yale email → 6-digit code. 后端规则见 server/auth.js 与 docs/api.md「登录与账号」。
 
-    if (YL.auth.isLoggedIn() && !YL.auth.needsProfile() && step !== "profile") { YL.router.navigate(next); return; }
+   #/login[?next=…]
+   - 已登录：没完成首次填写 → #/profile/setup?next=…；否则回到 next（默认 coffee）
+   - 老用户验证过联系邮箱时，验证码默认发到联系邮箱（via = "contact"），可以改发到耶鲁邮箱
+   - 重发有 60 秒倒计时（后端同样限制）；切换语言时路由会重绘，进行中的步骤保存在模块内的 flow 里 */
+(function () {
+  const { t, esc, icon } = YL.ui;
+  const RESEND_SECONDS = 60;
+  const CODE_TTL_MS = 10 * 60000;
 
-    if (step === "email") {
-      root.innerHTML = `<div class="auth">${head}<div class="card">${steps(1)}
-        <form id="f-email" novalidate>
-          <div class="field"><label for="email">${t("login.emailLabel")}</label>
-            <input class="input" id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="netid@yale.edu" value="${esc(email)}" required>
-            <span class="field__error" id="email-err"></span>
-            <span class="field__hint">${t("login.emailHint", { domains: YL_CONFIG.allowedEmailDomains.map((d) => "@" + d).join(" / ") })}</span></div>
-          <button class="btn btn--primary btn--block" type="submit">${t("login.sendCode")}</button>
-        </form>
-        <div class="trust">🔒 <span>${t("login.trust")}</span></div></div>
-        <p class="notice">${t("login.demoNotice")}</p></div>`;
-      $("#f-email").onsubmit = async (e) => {
-        e.preventDefault();
-        const v = $("#email").value.trim();
-        const err = $("#email-err");
-        if (!YL.auth.isValidEmail(v)) { err.textContent = t("login.errInvalid"); return; }
-        if (!YL.auth.isAllowedEmail(v)) { err.textContent = t("login.errDomain"); return; }
-        const r = await YL.auth.requestCode(v);
-        if (r.ok) { YL.ui.toast(t("login.codeSent"), "success"); YL.router.navigate(`login/code?email=${encodeURIComponent(v)}&next=${encodeURIComponent(next)}`); }
-      };
-      return;
-    }
+  // 表单逐项报错由 YL.ui.showFieldErrors(form, fields, "login") 显示，文案键为 t("login.field." + 字段 + "." + 错误码)
+  // 进行中的登录：{ email, sentTo, via, forceYale, sentAt }；登录成功或"换一个邮箱"时清空
+  let flow = null;
+  let timer = null;
 
-    if (step === "code") {
-      root.innerHTML = `<div class="auth">${head}<div class="card">${steps(2)}
-        <p class="muted">${t("login.codeSentTo", { email: `<strong>${esc(email)}</strong>` })}</p>
-        <form id="f-code" novalidate>
-          <div class="field"><label for="code">${t("login.codeLabel")}</label>
-            <input class="input code-input" id="code" name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" required>
-            <span class="field__error" id="code-err"></span></div>
-          <div class="callout">${t("login.demoCode", { code: YL_CONFIG.demoVerificationCode })}</div>
-          <div style="height:12px"></div>
-          <button class="btn btn--primary btn--block" type="submit">${t("login.verify")}</button>
-          <div style="height:8px"></div>
-          <a class="btn btn--ghost btn--block" href="#/login?email=${encodeURIComponent(email)}&next=${encodeURIComponent(next)}">${t("login.changeEmail")}</a>
-        </form></div></div>`;
-      $("#code").focus();
-      $("#f-code").onsubmit = async (e) => {
-        e.preventDefault();
-        const r = await YL.auth.verify(email, $("#code").value);
-        if (!r.ok) { $("#code-err").textContent = r.reason === "code" ? t("login.errCode") : t("login.errDomain"); return; }
-        YL.ui.toast(t("login.verified"), "success");
-        YL.router.navigate(`login/profile?next=${encodeURIComponent(next)}`);
-      };
-      return;
-    }
+  // 把翻译好的句子转义后，再把 {占位符} 换成已转义的 HTML 片段
+  const fill = (text, parts) => esc(text).replace(/\{(\w+)\}/g, (m, k) => (parts[k] != null ? parts[k] : m));
+  const secondsLeft = () => (flow ? Math.max(0, RESEND_SECONDS - Math.floor((Date.now() - flow.sentAt) / 1000)) : 0);
 
-    if (step === "profile") {
-      if (!YL.auth.isLoggedIn()) { YL.router.navigate("login"); return; }
-      const u = YL.auth.user();
-      const p = u.profile || {};
-      const opt = (list, cur) => list.map((x) => `<option value="${esc(x.id)}" ${x.id === cur ? "selected" : ""}>${esc(YL.i18n.L(x.label || x.name))}</option>`).join("");
-      const years = []; for (let y = new Date().getFullYear() + 5; y >= 1980; y--) years.push({ id: String(y), label: String(y) });
-      root.innerHTML = `<div class="auth">${head}<div class="card">${steps(3)}
-        <h3 style="margin-bottom:12px">${t("login.profileTitle")}</h3>
-        <p class="muted small">${t("login.profileSub")}</p>
-        <form id="f-profile">
-          <div class="field"><label>${t("profile.name")}</label><input class="input" name="name" required value="${esc(p.name || "")}" placeholder="${t("profile.namePh")}"></div>
-          <div class="form-row">
-            <div class="field"><label>${t("profile.school")}</label><select class="select" name="school">${opt(YL.store.terms("schools"), p.school)}</select></div>
-            <div class="field"><label>${t("profile.classYear")}</label><select class="select" name="classYear">${opt(years, p.classYear || "2026")}</select></div>
-          </div>
-          <div class="form-row">
-            <div class="field"><label>${t("profile.region")}</label><select class="select" name="region">${opt(YL.store.get("regions"), p.region)}</select></div>
-            <div class="field"><label>${t("profile.industry")}</label><select class="select" name="industry">${opt(YL.store.terms("industries"), p.industry)}</select></div>
-          </div>
-          <div class="field"><label>${t("profile.offers")}</label>
-            <div class="checks">${YL.store.terms("offers").map((o) => `<label class="check"><input type="checkbox" name="offers" value="${o.id}" ${(p.offers || []).includes(o.id) ? "checked" : ""}>${o.emoji} ${esc(YL.i18n.L(o.label))}</label>`).join("")}</div>
-            <span class="field__hint">${t("profile.offersHint")}</span></div>
-          <div class="divider"></div>
-          <div class="form-row">
-            <div class="field"><label>${t("profile.acssyRole")}</label><select class="select" name="acssyRole"><option value="">${t("profile.acssy.none")}</option><option value="member" ${p.acssyRole === "member" ? "selected" : ""}>${t("profile.acssy.member")}</option><option value="lead" ${p.acssyRole === "lead" ? "selected" : ""}>${t("profile.acssy.lead")}</option></select></div>
-            <div class="field"><label>${t("profile.department")}</label><select class="select" name="department">${YL_CONFIG.acssyDepartments.map((d) => `<option value="${d}" ${p.department === d ? "selected" : ""}>${t("dept." + d)}</option>`).join("")}</select></div>
-          </div>
-          <span class="field__hint" style="display:block;margin:-8px 0 16px">${t("profile.acssyHint")}</span>
-          <button class="btn btn--primary btn--block" type="submit">${t("login.finish")}</button>
-        </form></div></div>`;
-      $("#f-profile").onsubmit = (e) => {
-        e.preventDefault();
-        const v = YL.ui.formValues(e.target);
-        v.offers = [].concat(v.offers || []);
-        YL.auth.completeProfile(v);
-        YL.ui.toast(t("login.welcome", { name: v.name }), "success");
-        YL.router.navigate(next);
-      };
-      return;
-    }
-    YL.router.navigate("login");
+  function goOn(next) {
+    if (!YL.auth.isReady()) YL.router.navigate("profile/setup?next=" + encodeURIComponent(next), { replace: true });
+    else YL.router.navigate(next, { replace: true });
   }
-});
+
+  function render(root, ctx) {
+    clearInterval(timer);
+    const next = YL.router.safeNext(ctx.query.next, "coffee");
+    if (YL.auth.isLoggedIn()) { goOn(next); return; }
+    if (flow && Date.now() - flow.sentAt > CODE_TTL_MS) flow = null;
+
+    const meta = YL.auth.meta();
+    root.innerHTML = `
+      <section class="page page--narrow" data-login>
+        <header class="stack stack--s">
+          <img src="assets/logo.svg" alt="" width="48" height="48">
+          <h1 class="page-title">${esc(YL_CONFIG.siteName)}</h1>
+          <p class="page-sub">${esc(t("brand.tagline"))}</p>
+        </header>
+        <div class="card" data-card></div>
+        ${meta.dev ? `<div class="notice notice--warn">${icon("info")}<div class="notice__body"><strong>${esc(t("login.devTitle"))}</strong><span>${esc(t("login.devBody"))} <a href="/api/dev/outbox" target="_blank" rel="noopener">/api/dev/outbox</a></span></div></div>` : ""}
+        <p class="xsmall faint">${fill(t("login.agree"), { link: `<a href="#/about/privacy">${esc(t("login.privacyLink"))}</a>` })}</p>
+      </section>`;
+    const el = root.querySelector("[data-login]");
+    const card = el.querySelector("[data-card]");
+
+    // 共用的小工具
+    const msgBox = () => card.querySelector("[data-msg]");
+    // 提示条：没有内容时隐藏（不占表单间距）；出现时用 role=alert / status 让读屏念出来
+    function showMsg(text, kind) {
+      const box = msgBox();
+      if (!box) return;
+      const ok = kind === "success";
+      box.hidden = !text;
+      box.innerHTML = text ? `<div class="notice notice--${ok ? "success" : "danger"}" role="${ok ? "status" : "alert"}">${icon(ok ? "check" : "info")}<div class="notice__body">${esc(text)}</div></div>` : "";
+    }
+
+    /* ---------- 第一步：邮箱 ---------- */
+    function showEmail(focus) {
+      clearInterval(timer);
+      card.innerHTML = `
+        <form class="form" data-form="email" novalidate>
+          <div class="stack stack--s">
+            <h2 class="card__title" tabindex="-1" data-focus>${esc(t("login.emailTitle"))}</h2>
+            <p class="small muted">${esc(t("login.emailSub"))}</p>
+          </div>
+          <div class="field" data-field="email">
+            <label class="field__label" for="login-email">${esc(t("login.emailLabel"))}</label>
+            <input class="input" id="login-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required
+              placeholder="${esc(t("login.emailPlaceholder"))}" aria-describedby="login-email-hint" value="${esc(flow ? flow.email : "")}">
+            <p class="field__hint" id="login-email-hint">${esc(t("login.emailHint"))}</p>
+          </div>
+          <div data-msg hidden></div>
+          <button class="btn btn--primary btn--block btn--lg" type="submit">${esc(t("login.send"))}</button>
+        </form>`;
+      if (focus) card.querySelector("#login-email").focus();
+    }
+
+    async function sendCode(email, forceYale, btn) {
+      const form = card.querySelector("form");
+      YL.ui.clearFieldErrors(form);
+      showMsg("");
+      YL.ui.busy(btn, true);
+      const r = await YL.auth.requestCode(email, forceYale ? "yale" : undefined);
+      if (!ctx.isActive()) return;
+      YL.ui.busy(btn, false);
+      if (r.ok) {
+        const resend = !!flow && flow.email === email;
+        flow = { email, sentTo: r.data.sentTo, via: r.data.via, forceYale: !!forceYale, sentAt: Date.now() };
+        showCode(true, resend ? t("login.resent") : "");
+        return;
+      }
+      const e = r.error || {};
+      if (e.fields) { YL.ui.showFieldErrors(form, e.fields, "login"); return; }
+      // 60 秒内刚发过：验证码已经在路上了，直接去输入
+      if (e.reason === "resend_too_soon" && (!flow || flow.email !== email)) {
+        flow = { email, sentTo: "", via: "", forceYale: !!forceYale, sentAt: Date.now() };
+        showCode(true);
+        return;
+      }
+      showMsg(YL.ui.errorText(e, "login"));
+    }
+
+    /* ---------- 第二步：验证码 ---------- */
+    function showCode(focus, notice) {
+      const sent = flow.sentTo
+        ? fill(t("login.sentTo"), { to: `<strong>${esc(flow.sentTo)}</strong>` })
+        : esc(t("login.alreadySent"));
+      card.innerHTML = `
+        <form class="form" data-form="code" novalidate>
+          <div class="stack stack--s">
+            <h2 class="card__title" tabindex="-1" data-focus>${esc(t("login.codeTitle"))}</h2>
+            <p class="muted" aria-live="polite">${sent}</p>
+          </div>
+          ${flow.via === "contact" ? `<div class="notice notice--info">${icon("mail")}<div class="notice__body"><span>${esc(t("login.viaContact"))}</span><span><button type="button" class="link-btn" data-act="use-yale">${esc(t("login.useYale"))}</button></span></div></div>` : ""}
+          <div class="field" data-field="code">
+            <label class="field__label" for="login-code">${esc(t("login.codeLabel"))}</label>
+            <input class="input input--code" id="login-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required aria-describedby="login-code-hint">
+            <p class="field__hint" id="login-code-hint">${esc(t("login.codeHint"))}</p>
+          </div>
+          <div data-msg hidden></div>
+          <button class="btn btn--primary btn--block btn--lg" type="submit" data-act="verify">${esc(t("login.verify"))}</button>
+          <div class="cluster cluster--between">
+            <button type="button" class="btn btn--ghost" data-act="resend">${esc(t("login.resend"))}</button>
+            <button type="button" class="link-btn" data-act="change-email">${esc(t("login.changeEmail"))}</button>
+          </div>
+        </form>`;
+      if (notice) showMsg(notice, "success");
+      tick();
+      clearInterval(timer);
+      timer = setInterval(tick, 1000);
+      if (focus) card.querySelector("#login-code").focus();
+    }
+
+    // 倒计时：重发 / 改发到耶鲁邮箱 都要等 60 秒（后端同一邮箱 60 秒内只发一次）
+    function tick() {
+      const resend = card.querySelector('[data-act="resend"]');
+      if (!ctx.isActive() || !resend || !document.body.contains(resend)) { clearInterval(timer); return; }
+      const s = secondsLeft();
+      resend.disabled = s > 0;
+      resend.textContent = s > 0 ? t("login.resendIn", { s }) : t("login.resend");
+      const yale = card.querySelector('[data-act="use-yale"]');
+      if (yale) { yale.disabled = s > 0; yale.textContent = s > 0 ? t("login.useYaleWait", { s }) : t("login.useYale"); }
+      if (!s) clearInterval(timer);
+    }
+
+    let verifying = false;
+    async function verify() {
+      if (verifying) return;
+      const form = card.querySelector('[data-form="code"]');
+      const input = form.querySelector("#login-code");
+      const btn = form.querySelector('[data-act="verify"]');
+      const code = input.value.replace(/\D/g, "");
+      showMsg("");
+      if (!/^\d{6}$/.test(code)) { YL.ui.showFieldErrors(form, { code: "format" }, "login"); return; }
+      YL.ui.clearFieldErrors(form);
+      verifying = true;
+      YL.ui.busy(btn, true);
+      const r = await YL.auth.verify(flow.email, code);
+      if (r.ok) {
+        const u = r.data.user || {};
+        flow = null;
+        clearInterval(timer);
+        YL.ui.toast(u.name ? t("login.welcomeBack", { name: u.name }) : t("login.welcome"), "success");
+        if (ctx.isActive()) goOn(next);
+        return;
+      }
+      if (!ctx.isActive()) return;
+      verifying = false;
+      YL.ui.busy(btn, false);
+      const e = r.error || {};
+      if (e.fields) {
+        YL.ui.showFieldErrors(form, e.fields, "login");
+        if (e.fields.code === "too_many_attempts" || e.fields.code === "expired") {
+          input.value = "";
+          const resend = form.querySelector('[data-act="resend"]');
+          if (resend && !resend.disabled) resend.focus();
+        } else input.select();
+        return;
+      }
+      showMsg(YL.ui.errorText(e, "login"));
+    }
+
+    /* ---------- 事件（委托在本页根元素上）---------- */
+    el.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const form = e.target;
+      if (form.dataset.form === "email") {
+        const email = form.querySelector("#login-email").value.trim();
+        if (!email) { YL.ui.showFieldErrors(form, { email: "required" }, "login"); return; }
+        sendCode(email, false, form.querySelector('button[type="submit"]'));
+      } else if (form.dataset.form === "code") verify();
+    });
+    el.addEventListener("input", (e) => {
+      const field = e.target.closest(".field.is-invalid");
+      if (field) { field.classList.remove("is-invalid"); YL.ui.$$(".field__error", field).forEach((x) => x.remove()); e.target.removeAttribute("aria-invalid"); }
+      if (e.target.id !== "login-code") return;
+      const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
+      if (digits !== e.target.value) e.target.value = digits;
+      if (digits.length === 6) verify(); // 输满 6 位自动提交（也兼容短信 / 邮件的自动填充）
+    });
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b || !el.contains(b)) return;
+      const act = b.dataset.act;
+      if (act === "resend") sendCode(flow.email, flow.forceYale, b);
+      else if (act === "use-yale") sendCode(flow.email, true, b);
+      else if (act === "change-email") { const keep = flow ? flow.email : ""; flow = null; showEmail(true); card.querySelector("#login-email").value = keep; card.querySelector("#login-email").select(); }
+    });
+
+    if (flow) showCode(false); else showEmail(false);
+  }
+
+  registerModule({ id: "login", render });
+})();

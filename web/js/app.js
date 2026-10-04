@@ -17,14 +17,12 @@
     $("topbar").innerHTML = `
       <div class="topbar__inner">
         <a class="brand" href="#/${me && me.ready ? "coffee" : "home"}" aria-label="${esc(YL_CONFIG.siteName)}">
-          <img class="brand__mark" src="assets/logo.svg" alt="" width="32" height="32">
-          <span class="brand__word">${esc(YL_CONFIG.siteName)}</span>
+          <img class="brand__mark" src="assets/logo.svg" alt="" width="28" height="28">
+          <span class="wordmark brand__word" aria-hidden="true">yale<i>lux</i></span>
         </a>
         <nav class="topnav" aria-label="${esc(t("nav.primary"))}">${items.map((n) => navLink(n, "topnav__item")).join("")}</nav>
         <div class="topbar__actions">
-          <button type="button" class="lang-toggle" id="lang-toggle" aria-label="${esc(lang === "zh" ? "Switch to English" : "切换到中文")}">
-            <span${lang === "zh" ? ' class="is-on"' : ""}>中</span><span aria-hidden="true">/</span><span${lang === "en" ? ' class="is-on"' : ""}>EN</span>
-          </button>
+          <button type="button" class="lang-toggle" id="lang-toggle" lang="${lang === "zh" ? "en" : "zh-CN"}" aria-label="${esc(lang === "zh" ? "Switch to English" : "切换到中文")}">${lang === "zh" ? "EN" : "中文"}</button>
           ${me
             ? `<a class="topbar__me" href="#/me" aria-label="${esc(t("nav.me"))}">${avatar(YL.auth.displayName(), "sm")}<span class="topbar__name">${esc(YL.auth.displayName())}</span></a>`
             : `<a class="btn btn--primary btn--sm" href="#/login">${esc(t("nav.login"))}</a>`}
@@ -38,7 +36,7 @@
 
     $("footer").innerHTML = `
       <div class="footer__inner">
-        <div class="footer__brand"><strong>${esc(YL_CONFIG.siteName)}</strong><span>${esc(t("brand.tagline"))}</span></div>
+        <div class="footer__brand"><span class="wordmark" aria-label="Yalelux">yale<i>lux</i></span><span>${esc(t("brand.tagline"))}</span></div>
         <nav class="footer__links" aria-label="${esc(t("nav.footer"))}">
           <a href="#/events">${esc(t("nav.events"))}</a>
           <a href="#/about">${esc(t("nav.about"))}</a>
@@ -46,7 +44,7 @@
           <a href="#/about/feedback">${esc(t("nav.feedback"))}</a>
           <a href="${YL.ui.safeUrl(YL_CONFIG.github)}" target="_blank" rel="noopener">GitHub</a>
         </nav>
-        <p class="footer__note">${esc(t("brand.by"))}</p>
+        <p class="footer__note">${esc(t("brand.by"))}<br>${esc(t("brand.unofficial"))}</p>
       </div>`;
     markActive();
   }

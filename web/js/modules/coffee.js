@@ -1,435 +1,874 @@
-/* Coffee Chat 内测活动：报名 → 选出空闲时段 → 浏览参与者、约 TA 的一个时段 → 对方确认 → 互相看到联系方式
-   这是"三层拆分"的参考实现（docs/engineering.md）：
-     web/js/domain/coffee.js   业务规则：时间表、预约状态机、时段规则、资料校验 —— 纯函数，有单测
-     web/js/api/coffee.js      接口：原型版后端，12 条 route = 后端契约
-     web/js/modules/coffee.js  界面（本文件）：只渲染与交互，数据全部来自 YL.api；
-                               能点哪些按钮由接口返回的 actions / 时段 state 决定，界面不自己判断权限 */
+/* 约咖啡（Coffee Chat）界面
+   Coffee chat UI — the heart of Yalelux.
+
+   路由 / routes
+     #/coffee                                   本轮横幅 + 我的进度 + 为你推荐
+     #/coffee/browse?identity&goal&interest&field   找人（按标签筛选池子）
+     #/coffee/p/:id                             个人详情（公开答案 + 共同空闲时间）
+     #/coffee/times                             选空闲时间（纽约时间，旁边显示北京时间）
+     #/coffee/inbox                             收件箱：想认识你的人 / 我发出的
+     #/coffee/matches                           匹配：联系方式、一键约时间、见到了吗
+
+   数据只走 YL.api（契约见 docs/api.md）；时间表与截止判断用 YL.domain.coffee（只做显示）。
+   界面不自己判断权限：按钮由接口返回的 relation / canSchedule / canReport 决定。 */
 (function () {
-  const R = YL.domain.coffee;
-  const { t, esc, L } = YL.ui;
-  const STATUS_BADGE = { pending: "badge--warn", accepted: "badge--green", declined: "badge--muted", expired: "badge--muted" };
-  const SLOT_STATES = ["free", "yours", "busy", "taken", "closed"];
-  const FIELD_MAX = { name: R.LIMITS.name, program: R.LIMITS.program, job: R.LIMITS.job, location: R.LIMITS.location, interests: R.LIMITS.interests, meetPlace: R.LIMITS.place, contact: R.LIMITS.contact, note: R.LIMITS.note, text: R.LIMITS.feedbackMax };
+  "use strict";
+  const { t, L, esc, icon, avatar } = YL.ui;
+  const D = YL.domain.coffee;
+  const isReady = () => YL.auth.isReady();
 
-  /* ---------- 小工具 ---------- */
-  const loading = () => `<div class="empty"><p>${t("common.loading")}</p></div>`;
-  const failed = (error) => YL.ui.emptyState("⚠️", YL.ui.errorText(error, "coffee"));
-  // "2026-11-03" → "11月3日周二" / "Tue, Nov 3"（按日期本身算星期，不受浏览器时区影响）
-  const dayLabel = (date) => new Date(date + "T12:00:00Z").toLocaleDateString(YL.i18n.getLang() === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", weekday: "short", timeZone: "UTC" });
-  function tzName(ev, slot) {
-    try {
-      const parts = new Intl.DateTimeFormat("en-US", { timeZone: ev.timezone, timeZoneName: "short" }).formatToParts(new Date(R.slotStart(ev, slot)));
-      return (parts.find((p) => p.type === "timeZoneName") || {}).value || "";
-    } catch (e) { return ""; }
-  }
-  const slotLabel = (ev, slot) => `${dayLabel(slot.slice(0, 10))} ${slot.slice(11)} ${tzName(ev, slot)}`.trim();
-  // 不在活动时区的人（比如在国内的校友）顺便看到本地时间
-  function localHint(ev, slot) {
-    const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (!here || here === ev.timezone) return "";
-    const local = new Date(R.slotStart(ev, slot)).toLocaleString(YL.i18n.getLang() === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
-    return t("coffee.localTime", { time: local });
-  }
-  // 在校生：学段 · 项目 · 毕业年份；校友：工作 · 所在地（纯文本，插入 HTML 时再 esc）
-  const background = (x) => (x.identity === "student"
-    ? [x.stage ? t("coffee.stage." + x.stage) : "", x.program, x.gradYear ? t("coffee.classOf", { y: x.gradYear }) : ""]
-    : [x.job, x.location]).filter(Boolean).join(" · ");
-  // 接口返回的字段错误显示在表单对应位置；其他错误用 toast
-  function showError(box, error) {
-    const fields = (error && error.fields) || {};
-    let shown = 0;
-    YL.ui.$$("[data-err]", box).forEach((el) => {
-      const code = fields[el.dataset.err];
-      el.textContent = code ? t("coffee.fieldErr." + code, { max: FIELD_MAX[el.dataset.err] || "", min: R.LIMITS.feedbackMin }) : "";
-      if (code) shown++;
-    });
-    if (!shown) YL.ui.toast(YL.ui.errorText(error, "coffee"), "error");
-  }
-  async function submitting(btn, work) {
-    btn.disabled = true;
-    try { return await work(); } finally { btn.disabled = false; }
-  }
+  // 本次会话内记住的小状态（不持久化）
+  let backPath = "coffee/browse"; // 详情页"返回"回到哪个列表
+  let filtersOpen = null;          // 找人页筛选区是否展开（null = 按屏幕宽度决定）
+  let pendingFocus = null;         // 改筛选会重新渲染页面，渲染完把焦点还给刚点的那个标签
+  let maxOpen = D.DEFAULT_ROUND.maxOpenInvites; // 本轮最多几个等待回复的邀请（拿到 /coffee/state 后更新）
 
-  /* ---------- 页头与标签：报名前只有"活动介绍 / 报名 / 意见箱" ---------- */
-  function head(me, active) {
-    const ev = me.event, dates = R.eventDates(ev), items = [];
-    if (me.profile) {
-      items.push({ id: "people", icon: "🫂", labelKey: "coffee.tab.people" });
-      items.push({ id: "bookings", icon: "📅", labelKey: "coffee.tab.bookings", badge: me.unread || "" });
-      items.push({ id: "schedule", icon: "🕒", labelKey: "coffee.tab.schedule" });
-      items.push({ id: "join", icon: "📝", labelKey: "coffee.tab.profile" });
-    } else {
-      items.push({ id: "intro", icon: "☕", labelKey: "coffee.tab.intro" });
-      items.push({ id: "join", icon: "📝", labelKey: "coffee.tab.join" });
+  /* ---------- 显示用的格式化 ---------- */
+  const pad = (n) => (n < 10 ? "0" : "") + n;
+  const locale = () => (YL.i18n.getLang() === "zh" ? "zh-CN" : "en-US");
+  const list = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]);
+  const dateOf = (slot) => String(slot).slice(0, 10);
+  const timeOf = (slot) => String(slot).slice(11, 16);
+  const md = (date) => { const p = String(date).split("-"); return Number(p[1]) + "/" + Number(p[2]); };
+  function weekday(date) {
+    try { return new Intl.DateTimeFormat(locale(), { weekday: "short", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z")); } catch (e) { return ""; }
+  }
+  const rangeText = (r) => md(r.startDate) + "–" + md(r.endDate);
+  const dayLabel = (date) => t("coffee.day", { wd: weekday(date), md: md(date) });
+  const whenText = (slot) => t("coffee.when", { wd: weekday(dateOf(slot)), md: md(dateOf(slot)), time: timeOf(slot) });
+  const tzName = (tz) => (tz === "America/New_York" ? t("coffee.tz.ny") : tz);
+  let bjFormat = null;
+  // 时段（活动时区的墙上时间）→ 北京时间的日期与钟点
+  function beijing(tz, slot) {
+    bjFormat = bjFormat || new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Shanghai", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const p = {};
+    bjFormat.formatToParts(new Date(D.slotStart({ timezone: tz }, slot))).forEach((x) => (p[x.type] = x.value));
+    return { date: p.year + "-" + p.month + "-" + p.day, time: pad(Number(p.hour) % 24) + ":" + p.minute };
+  }
+  // 格子下面的小字：同一天只写钟点，第二天写"次日"，其他情况写日期
+  function bjShort(tz, slot) {
+    const b = beijing(tz, slot), d = dateOf(slot);
+    if (b.date === d) return t("coffee.bj", { time: b.time });
+    if (b.date === D.addDays(d, 1)) return t("coffee.bjNext", { time: b.time });
+    return t("coffee.bjDate", { md: md(b.date), time: b.time });
+  }
+  const bjFull = (tz, slot) => { const b = beijing(tz, slot); return t("coffee.bjDate", { md: md(b.date), time: b.time }); };
+  const nowIso = () => new Date().toISOString();
+  // 还没过截止的已选时间（已约定的始终算）
+  const openPicks = (round, slots, locked) => list(slots).filter((s) => list(locked).indexOf(s) >= 0 || !D.isClosed(round, s, nowIso()));
+
+  /* ---------- 问卷标签 ---------- */
+  const question = (id) => YL.auth.questions().find((q) => q.id === id);
+  function optLabel(qid, value) {
+    const q = question(qid), o = q && (q.options || []).find((x) => x.id === value);
+    return o ? L(o.label) : String(value); // 自己加的兴趣标签原样显示
+  }
+  // "兴趣爱好（选 1–5 个，也可以自己加）" → "兴趣爱好"
+  const shortLabel = (q) => L(q.label).replace(/\s*[（(][^（()）]*[)）]\s*$/, "");
+  const myInterests = () => { const me = YL.auth.user(); return list(me && me.answers && me.answers.interests); };
+
+  /* ---------- 人物卡 ---------- */
+  function whoLine(p) {
+    if (p.identity === "student") {
+      const parts = [];
+      if (D.STAGES.indexOf(p.stage) >= 0) parts.push(t("coffee.stage." + p.stage));
+      if (p.gradYear) parts.push(t("coffee.person.class", { year: p.gradYear }));
+      return parts.join(" · ") || t("coffee.identity.student");
     }
-    items.push({ id: "feedback", icon: "💡", labelKey: "coffee.tab.feedback" });
-    if (me.isAdmin) items.push({ id: "admin", icon: "📊", labelKey: "coffee.tab.admin" });
-    const sub = t("coffee.subtitle", { from: dayLabel(dates[0]), to: dayLabel(dates[dates.length - 1]), min: ev.slotMinutes });
-    return `<div class="page-head"><h1>☕ ${esc(L(ev.name))}</h1><p>${esc(sub)}</p></div>${YL.ui.tabs(items, active, "#/coffee")}`;
+    return [p.job, p.city].filter(Boolean).join(" · ") || t("coffee.identity.alumni");
   }
-  function rulesCard(ev) {
-    const vars = { h: ev.cutoffHours, n: ev.maxPending, min: ev.slotMinutes };
-    return `<section class="card card--primary"><div class="card__title">⚠️ ${t("coffee.rulesTitle")}</div>
-      <ul class="card__body">${[1, 2, 3, 4, 5].map((i) => `<li>${esc(t("coffee.rule." + i, vars))}</li>`).join("")}</ul></section>`;
+  function metaHtml(p) {
+    const field = list(p.answers && p.answers.field)[0];
+    return `<p class="person__meta"><span>${esc(whoLine(p))}</span>${field ? `<span>${esc(optLabel("field", field))}</span>` : ""}</p>`;
+  }
+  const sharedTag = (label) => `<span class="tag tag--shared">${icon("heart", { size: 12 })}${esc(label)}<span class="sr-only">${esc(t("coffee.person.sharedSr"))}</span></span>`;
+  function interestTags(values) {
+    const mine = myInterests(), isShared = (x) => (mine.indexOf(x) >= 0 ? 1 : 0);
+    return list(values).slice().sort((x, y) => isShared(y) - isShared(x))
+      .map((x) => (isShared(x) ? sharedTag(optLabel("interests", x)) : `<span class="tag">${esc(optLabel("interests", x))}</span>`));
+  }
+  function tagsHtml(p) {
+    const a = p.answers || {};
+    const all = list(a.goals).map((g) => `<span class="tag tag--goal">${esc(optLabel("goals", g))}</span>`).concat(interestTags(a.interests));
+    return all.length ? `<div class="tags">${all.join("")}</div>` : "";
+  }
+  function overlapHtml(n) {
+    return n > 0
+      ? `<span class="person__overlap">${icon("clock")}${esc(n === 1 ? t("coffee.person.overlapOne") : t("coffee.person.overlap", { n }))}</span>`
+      : `<span class="person__overlap person__overlap--none">${icon("clock")}${esc(t("coffee.person.noOverlap"))}</span>`;
+  }
+  // relation.state → 右下角的按钮或状态（见 docs/design/components.md）
+  function relationHtml(p) {
+    const r = p.relation || { state: "none" }, id = esc(p.id);
+    if (r.state === "invited") return `<span class="pill pill--waiting">${icon("check")}${esc(t("coffee.rel.invited"))}</span>`;
+    if (r.state === "incoming") return `<button type="button" class="btn btn--accent btn--sm" data-act="accept" data-id="${id}">${icon("heart")}${esc(t("coffee.rel.incoming"))}</button>`;
+    if (r.state === "matched") return `<a class="pill pill--matched" href="#/coffee/matches">${icon("sparkle")}${esc(t("coffee.rel.matched"))}</a>`;
+    if (r.state === "no_reply") return `<span class="pill">${esc(t("coffee.rel.noReply"))}</span>`;
+    return `<button type="button" class="btn btn--accent btn--sm" data-act="invite" data-id="${id}">${esc(t("coffee.rel.invite"))}</button>`;
+  }
+  /* o = { rec, reasons, overlap（数字）, foot（左下角 html）, note, link（名字是否链到详情）, actions（覆盖右下角）, dismiss } */
+  function personHtml(p, o) {
+    o = o || {};
+    const intro = typeof (p.answers && p.answers.intro) === "string" ? p.answers.intro.trim() : "";
+    const name = o.link === false
+      ? `<p class="person__name">${esc(p.name)}</p>`
+      : `<a class="person__name" href="#/coffee/p/${esc(encodeURIComponent(p.id))}">${esc(p.name)}</a>`;
+    const reasons = (o.reasons || []).length
+      ? `<ul class="person__reasons">${o.reasons.map((r) => `<li class="reason">${icon("sparkle")}<span>${esc(L(r))}</span></li>`).join("")}</ul>` : "";
+    const dismiss = o.dismiss && (!p.relation || p.relation.state === "none")
+      ? `<button type="button" class="btn btn--ghost btn--sm" data-act="dismiss" data-id="${esc(p.id)}">${esc(t("coffee.rec.dismiss"))}</button>` : "";
+    return `<article class="person${o.rec ? " person--rec" : ""}" data-person="${esc(p.id)}">
+      <div class="person__head">${avatar(p.name)}<div class="person__who">${name}${metaHtml(p)}</div></div>
+      ${reasons}${tagsHtml(p)}
+      ${intro ? `<p class="person__intro">${esc(intro)}</p>` : ""}
+      ${o.note ? `<p class="person__note">${esc(o.note)}</p>` : ""}
+      <div class="person__foot">${o.overlap != null ? overlapHtml(o.overlap) : o.foot || ""}<div class="person__actions">${dismiss}${o.actions != null ? o.actions : relationHtml(p)}</div></div>
+    </article>`;
   }
 
-  /* ---------- 活动介绍（未报名） ---------- */
-  function intro(root, ctx, me) {
-    root.innerHTML = head(me, "intro") + `<div class="two-col">
-      <section class="card"><h2>${t("coffee.introTitle")}</h2>
-        <ol class="prose muted">${[1, 2, 3, 4].map((i) => `<li>${t("coffee.step." + i)}</li>`).join("")}</ol>
-        <a class="btn btn--primary" href="#/coffee/join">📝 ${t("coffee.joinCta")}</a></section>
-      <div class="stack">${rulesCard(me.event)}</div></div>`;
+  /* ---------- 通用块 ---------- */
+  function mount(root, cls) {
+    root.innerHTML = `<section class="page${cls ? " " + cls : ""}"></section>`;
+    return root.firstElementChild;
   }
-
-  /* ---------- 报名 / 我的资料 ---------- */
-  function join(root, ctx, me) {
-    const p = me.profile || {}, sp = (YL.auth.user() || {}).profile || {};
-    const year = new Date().getFullYear(), years = [];
-    for (let y = year; y <= year + R.LIMITS.gradYearsAhead; y++) years.push(y);
-    const field = (name, label, control, hint) => `<div class="field"><label for="cf-${name}">${label}</label>${control}${hint ? `<span class="field__hint">${hint}</span>` : ""}<span class="field__error" data-err="${name}"></span></div>`;
-    const input = (name, value, ph, max) => `<input class="input" id="cf-${name}" name="${name}" value="${esc(value || "")}" maxlength="${max}" placeholder="${esc(ph || "")}">`;
-    const choice = (type, name, value, on, label) => `<label class="check"><input type="${type}" name="${name}" value="${esc(value)}" ${on ? "checked" : ""}> ${esc(label)}</label>`;
-    const group = (name, label, html) => `<div class="field"><label>${label}</label><div class="checks">${html}</div><span class="field__error" data-err="${name}"></span></div>`;
-    const identity = p.identity || me.kind || "student";
-    root.innerHTML = head(me, "join") + `<form id="f-join" class="card" novalidate>
-      ${me.profile ? "" : `<p class="muted">${t("coffee.joinIntro")}</p>`}
-      ${field("name", t("coffee.f.name"), input("name", p.name || sp.name || YL.auth.displayName(), "", R.LIMITS.name))}
-      <div class="field"><label>${t("coffee.f.email")}</label><div class="muted">${esc(me.email)} · <span class="small">${t("coffee.f.emailHint")}</span></div></div>
-      ${group("identity", t("coffee.f.identity"), R.IDENTITIES.map((x) => choice("radio", "identity", x, x === identity, t("coffee.identity." + x))).join(""))}
-      <div data-when="student">
-        <div class="form-row">
-          ${field("stage", t("coffee.f.stage"), `<select class="select" id="cf-stage" name="stage">${R.STAGES.map((s) => `<option value="${s}" ${p.stage === s ? "selected" : ""}>${esc(t("coffee.stage." + s))}</option>`).join("")}</select>`)}
-          ${field("gradYear", t("coffee.f.gradYear"), `<select class="select" id="cf-gradYear" name="gradYear">${years.map((y) => `<option value="${y}" ${Number(p.gradYear || sp.classYear) === y ? "selected" : ""}>${y}</option>`).join("")}</select>`)}
-        </div>
-        ${field("program", t("coffee.f.program"), input("program", p.program, t("coffee.f.programPh"), R.LIMITS.program))}
+  const retryBtn = (act) => `<button type="button" class="btn btn--primary" data-act="${act || "retry"}">${esc(t("common.retry"))}</button>`;
+  const errorBlock = (error, act) => YL.ui.emptyState("info", YL.ui.errorText(error, "coffee"), retryBtn(act));
+  const noticeHtml = (kind, iconName, bodyHtml) => `<div class="notice notice--${kind}">${icon(iconName)}<div class="notice__body">${bodyHtml}</div></div>`;
+  function joinCard() {
+    return `<section class="card stack" data-role="join">
+      <div class="stack stack--s">
+        <h2 class="card__title">${esc(t("coffee.join.title"))}</h2>
+        <p class="muted">${esc(t("coffee.join.body"))}</p>
       </div>
-      <div data-when="alumni"><div class="form-row">
-        ${field("job", t("coffee.f.job"), input("job", p.job, t("coffee.f.jobPh"), R.LIMITS.job))}
-        ${field("location", t("coffee.f.location"), input("location", p.location, t("coffee.f.locationPh"), R.LIMITS.location))}
-      </div></div>
-      ${field("interests", t("coffee.f.interests"), input("interests", p.interests, t("coffee.f.interestsPh"), R.LIMITS.interests))}
-      ${group("goals", t("coffee.f.goals"), R.GOALS.map((g) => choice("checkbox", "goals", g, (p.goals || []).indexOf(g) >= 0, t("coffee.goal." + g))).join(""))}
-      ${group("meetMode", t("coffee.f.meet"), R.MEET_MODES.map((m) => choice("radio", "meetMode", m, m === (p.meetMode || "online"), t("coffee.meet." + m))).join(""))}
-      ${field("meetPlace", t("coffee.f.place"), input("meetPlace", p.meetPlace, "", R.LIMITS.place), t("coffee.f.placeHint"))}
-      ${field("contact", t("coffee.f.contact"), input("contact", p.contact, t("coffee.f.contactPh"), R.LIMITS.contact), t("coffee.f.contactHint"))}
-      <div class="field"><div class="callout callout--info">🔒 ${t("coffee.privacy")}</div></div>
-      <button class="btn btn--primary btn--block" type="submit">${me.profile ? t("coffee.save") : t("coffee.joinSubmit")}</button>
-    </form>`;
-    const form = YL.ui.$("#f-join", root);
-    const sync = () => {
-      const id = (form.querySelector('input[name="identity"]:checked') || {}).value;
-      YL.ui.$$("[data-when]", form).forEach((el) => (el.hidden = el.dataset.when !== id));
-      const mode = (form.querySelector('input[name="meetMode"]:checked') || {}).value;
-      YL.ui.$("#cf-meetPlace", form).placeholder = mode === "online" ? t("coffee.f.placeOnline") : t("coffee.f.placeOffline");
+      <div><a class="btn btn--primary" href="#/coffee/times">${icon("clock")}${esc(t("coffee.join.cta"))}</a></div>
+    </section>`;
+  }
+  const noRound = () => YL.ui.emptyState("coffee", t("coffee.home.noRound"));
+  async function badges() {
+    const r = await YL.api.get("/coffee/state");
+    if (r.ok) YL.registry.setBadge("inbox", (r.data && r.data.incoming) || 0);
+  }
+  const refreshBadge = () => { badges().catch(() => {}); };
+
+  /* ---------- 想认识 / 接受 / 跳过 / 不感兴趣（推荐、找人、详情、收件箱共用） ----------
+     env = { ctx, page, people: Map(id → card), source: "rec" | "browse", draw(p) → html, onAccepted?(p), onRemoved?(id), reload?() } */
+  const cardEl = (env, id) => env.page.querySelector(`[data-person="${CSS.escape(id)}"]`);
+  function redraw(env, p) {
+    const old = cardEl(env, p.id);
+    if (!old) return;
+    old.outerHTML = env.draw(p);
+    const fresh = cardEl(env, p.id);
+    const target = fresh && fresh.querySelector(".person__actions button, .person__actions a, a.person__name, [data-focus]");
+    if (target) target.focus();
+  }
+  function removeCard(env, id) {
+    const el = cardEl(env, id);
+    env.people.delete(id);
+    if (!el) return;
+    const next = [el.nextElementSibling, el.previousElementSibling].find((x) => x && x.matches("[data-person]"));
+    el.remove();
+    const target = next && next.querySelector(".person__actions button, a.person__name");
+    if (target) target.focus();
+    if (env.onRemoved) env.onRemoved(id);
+  }
+  function personAction(btn, env) {
+    const p = env.people.get(btn.dataset.id);
+    if (!p) return;
+    const act = btn.dataset.act;
+    if (act === "invite") openInvite(p, env);
+    else if (act === "accept") accept(btn, p, env);
+    else if (act === "skip") skip(btn, p, env);
+    else if (act === "dismiss") dismiss(btn, p, env);
+  }
+  function showMatched(name) {
+    YL.ui.modal(`<h2 class="modal__title" tabindex="-1" data-role="title">${esc(t("coffee.matched.title", { name }))}</h2>
+      <div class="stack">
+        ${noticeHtml("success", "heart", `<p>${esc(t("coffee.matched.body"))}</p>`)}
+        <div class="cluster cluster--end">
+          <button type="button" class="btn btn--ghost" data-close>${esc(t("coffee.matched.later"))}</button>
+          <a class="btn btn--primary" href="#/coffee/matches">${esc(t("coffee.matched.go"))}${icon("arrowRight")}</a>
+        </div>
+      </div>`, {
+      label: t("coffee.matched.title", { name }),
+      onMount(panel, close) {
+        panel.querySelector('[data-role="title"]').focus();
+        panel.addEventListener("click", (e) => {
+          if (e.target.closest("a[href]")) YL.ui.closeModal();
+          else if (e.target.closest("[data-close]")) close();
+        });
+      }
+    });
+  }
+  function openInvite(p, env) {
+    const max = D.LIMITS.note, ctx = env.ctx;
+    YL.ui.modal(`<h2 class="modal__title" tabindex="-1" data-role="title">${esc(t("coffee.invite.title", { name: p.name }))}</h2>
+      <form class="form" novalidate>
+        <div class="field" data-field="note">
+          <label class="field__label" for="coffee-note">${esc(t("coffee.invite.noteLabel"))} <span class="faint">${esc(t("common.optional"))}</span></label>
+          <textarea class="textarea" id="coffee-note" name="note" rows="3" maxlength="${max}" aria-describedby="coffee-note-count" placeholder="${esc(t("coffee.invite.notePh"))}"></textarea>
+          <p class="field__count" id="coffee-note-count">0/${max}</p>
+        </div>
+        ${noticeHtml("info", "lock", `<p>${esc(t("coffee.invite.ruleContact"))}</p><p>${esc(t("coffee.invite.ruleSkip"))}</p><p>${esc(t("coffee.invite.ruleExpire", { n: maxOpen }))}</p>`)}
+        <div data-role="err" aria-live="assertive"></div>
+        <button type="submit" class="btn btn--accent btn--block">${icon("heart")}${esc(t("coffee.invite.send"))}</button>
+      </form>`, {
+      label: t("coffee.invite.title", { name: p.name }),
+      onMount(panel) {
+        const form = panel.querySelector("form"), note = form.elements.note, count = panel.querySelector("#coffee-note-count"), errBox = panel.querySelector('[data-role="err"]');
+        panel.querySelector('[data-role="title"]').focus(); // 不自动聚焦输入框：手机上不要一打开就弹键盘
+        note.addEventListener("input", () => { count.textContent = note.value.length + "/" + max; });
+        panel.addEventListener("click", (e) => { if (e.target.closest("a[href]")) YL.ui.closeModal(); });
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const btn = form.querySelector('[type="submit"]');
+          YL.ui.clearFieldErrors(form);
+          errBox.innerHTML = "";
+          YL.ui.busy(btn, true);
+          const r = await YL.api.post("/coffee/invites", { toId: p.id, note: note.value.trim(), source: env.source });
+          YL.ui.busy(btn, false);
+          if (r.ok) refreshBadge();
+          if (!ctx.isActive()) { YL.ui.closeModal(); return; }
+          if (r.ok) {
+            YL.ui.closeModal();
+            p.relation = { state: r.data.matched ? "matched" : "invited", inviteId: r.data.id };
+            redraw(env, p);
+            if (r.data.matched) showMatched(p.name);
+            else YL.ui.toast(t("coffee.invite.sent"), "success");
+            return;
+          }
+          const reason = r.error && r.error.reason;
+          if (r.error && r.error.fields) { YL.ui.showFieldErrors(form, r.error.fields, "coffee"); return; }
+          if (reason === "already_invited" || reason === "already_matched") {
+            YL.ui.closeModal();
+            p.relation = { state: reason === "already_invited" ? "invited" : "matched" };
+            redraw(env, p);
+            YL.ui.toast(YL.ui.errorText(r.error, "coffee"));
+            return;
+          }
+          const more = reason === "too_many_open" ? `<p><a href="#/coffee/inbox">${esc(t("coffee.invite.seeSent"))}</a></p>` : "";
+          errBox.innerHTML = noticeHtml("danger", "info", `<p>${esc(YL.ui.errorText(r.error, "coffee"))}</p>${more}`);
+        });
+      }
+    });
+  }
+  async function accept(btn, p, env) {
+    const inviteId = p.inviteId || (p.relation && p.relation.inviteId);
+    YL.ui.busy(btn, true);
+    const r = await YL.api.post(`/coffee/invites/${encodeURIComponent(inviteId)}/accept`);
+    refreshBadge(); // 角标在外壳里，不受页面切换影响
+    if (!env.ctx.isActive()) return;
+    if (!r.ok) {
+      YL.ui.busy(btn, false);
+      YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error");
+      if (env.reload && r.error.code === "conflict") env.reload();
+      return;
+    }
+    p.relation = { state: "matched", inviteId };
+    if (env.onAccepted) env.onAccepted(p); else redraw(env, p);
+    showMatched(p.name);
+  }
+  async function skip(btn, p, env) {
+    YL.ui.busy(btn, true);
+    const r = await YL.api.post(`/coffee/invites/${encodeURIComponent(p.inviteId)}/skip`);
+    refreshBadge();
+    if (!env.ctx.isActive()) return;
+    if (!r.ok) {
+      YL.ui.busy(btn, false);
+      YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error");
+      if (env.reload && r.error.code === "conflict") env.reload();
+      return;
+    }
+    removeCard(env, p.id);
+    YL.ui.toast(t("coffee.inbox.skipped"));
+  }
+  async function dismiss(btn, p, env) {
+    YL.ui.busy(btn, true);
+    const r = await YL.api.post(`/coffee/recommendations/${encodeURIComponent(p.id)}/dismiss`);
+    if (!env.ctx.isActive()) return;
+    if (!r.ok) { YL.ui.busy(btn, false); YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error"); return; }
+    removeCard(env, p.id);
+    YL.ui.toast(t("coffee.rec.dismissed"));
+  }
+  const bindRetry = (page) => page.addEventListener("click", (e) => { if (e.target.closest('[data-act="retry"]')) YL.router.render(); });
+  function bindPeople(page, env, extra) {
+    page.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn || !page.contains(btn) || btn.disabled) return;
+      if (btn.dataset.act === "retry") { YL.router.render(); return; }
+      if (extra && extra(btn, e) === true) return;
+      personAction(btn, env);
+    });
+  }
+
+  /* ================= #/coffee 首页 ================= */
+  async function viewHome(root, ctx) {
+    backPath = "coffee";
+    const page = mount(root);
+    page.innerHTML = YL.ui.spinner();
+    const env = {
+      ctx, page, people: new Map(), source: "rec",
+      draw: (p) => personHtml(p, { rec: true, reasons: p.reasons, overlap: list(p.overlap).length, dismiss: true }),
+      onRemoved: () => { if (!env.people.size) { const box = page.querySelector('[data-role="recs-body"]'); if (box) box.innerHTML = recsEmpty(); } }
     };
-    form.onchange = sync;
-    sync();
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      const v = YL.ui.formValues(form);
-      v.goals = [].concat(v.goals || []);
-      submitting(YL.ui.$("button[type=submit]", form), async () => {
-        const r = await YL.api.post("/coffee/profile", v);
-        if (!r.ok) return showError(form, r.error);
-        YL.ui.toast(r.data.created ? t("coffee.joined") : t("coffee.saved"), "success");
-        YL.router.navigate(r.data.created ? "coffee/schedule" : "coffee/join");
+    bindPeople(page, env, (btn) => { if (btn.dataset.act === "retry-recs") { loadRecs(env); return true; } return false; });
+
+    const s = await YL.api.get("/coffee/state");
+    if (!ctx.isActive()) return;
+    if (!s.ok) { page.innerHTML = errorBlock(s.error); return; }
+    const st = s.data;
+    YL.registry.setBadge("inbox", st.incoming || 0);
+    if (!st.round) { page.innerHTML = noRound(); return; }
+    maxOpen = st.round.maxOpenInvites || maxOpen;
+    page.innerHTML = homeHtml(st);
+    if (st.joined) loadRecs(env);
+  }
+  function homeHtml(st) {
+    const r = st.round, ev = r.kind === "event", name = YL.auth.displayName();
+    const upcoming = D.localDate(nowIso(), r.timezone) < r.startDate;
+    const eyebrow = ev ? t("coffee.home.eyebrowEvent") : upcoming ? t("coffee.home.eyebrowSoon") : t("coffee.home.eyebrowWeek");
+    const free = openPicks(r, st.slots, st.locked).length;
+    const themes = list(r.themeTags).map((x) => {
+      const q = ["interests", "goals"].map(question).find((qq) => qq && (qq.options || []).some((o) => o.id === x));
+      return `<span class="tag tag--theme">${esc(q ? optLabel(q.id, x) : x)}</span>`;
+    }).join("");
+    const actions = (st.joined ? `<a class="btn btn--secondary btn--sm" href="#/coffee/times">${icon("clock")}${esc(t("coffee.home.editTimes"))}</a>` : "")
+      + (ev ? `<a class="btn btn--secondary btn--sm" href="#/events/${esc(encodeURIComponent(r.id))}">${esc(t("coffee.home.eventLink"))}${icon("arrowRight")}</a>` : "");
+    const steps = [["clock", t("coffee.how.s1"), t("coffee.how.s1d")], ["heart", t("coffee.how.s2"), t("coffee.how.s2d")], ["coffee", t("coffee.how.s3"), t("coffee.how.s3d")]];
+    return `<div class="split">
+      <div class="stack stack--l">
+        <section class="banner${ev ? " banner--event" : ""}">
+          <p class="banner__eyebrow">${esc(eyebrow)}</p>
+          <h1 class="banner__title">${esc(L(r.title))}</h1>
+          <p>${esc(st.joined ? t("coffee.home.helloJoined", { name }) : t("coffee.home.hello", { name }))}</p>
+          ${themes ? `<div class="tags">${themes}</div>` : ""}
+          <div class="banner__meta">
+            <span>${icon("calendar")}${esc(rangeText(r))}</span>
+            <span>${icon("people")}${esc(t("coffee.home.participants", { n: st.participants || 0 }))}</span>
+          </div>
+          ${actions ? `<div class="banner__actions">${actions}</div>` : ""}
+        </section>
+        <nav class="statusbar" aria-label="${esc(t("coffee.status.label"))}">
+          <a class="statusbar__item" href="#/coffee/times"><strong>${free}</strong><span>${esc(t("coffee.status.times"))}</span></a>
+          <a class="statusbar__item" href="#/coffee/inbox"><strong>${st.incoming || 0}</strong><span>${esc(t("coffee.status.incoming"))}</span></a>
+          <a class="statusbar__item" href="#/coffee/matches"><strong>${st.matches || 0}</strong><span>${esc(t("coffee.status.matches"))}</span></a>
+        </nav>
+        ${st.joined ? `<section class="stack" aria-label="${esc(t("coffee.rec.title"))}">
+            ${YL.ui.sectionTitle(t("coffee.rec.title"), "", t("coffee.rec.sub"))}
+            <div class="stack" data-role="recs-body">${YL.ui.spinner()}</div>
+          </section>` : joinCard()}
+      </div>
+      <aside class="stack">
+        ${st.incoming ? noticeHtml("accent", "heart", `<p><strong>${esc(st.incoming === 1 ? t("coffee.home.incomingOne") : t("coffee.home.incoming", { n: st.incoming }))}</strong></p><p><a href="#/coffee/inbox">${esc(t("coffee.home.incomingCta"))}</a></p>`) : ""}
+        ${st.matches ? noticeHtml("success", "sparkle", `<p><strong>${esc(st.matches === 1 ? t("coffee.home.matchesOne") : t("coffee.home.matches", { n: st.matches }))}</strong></p><p><a href="#/coffee/matches">${esc(t("coffee.home.matchesCta"))}</a></p>`) : ""}
+        <section class="card card--quiet">
+          <h2 class="card__title">${esc(t("coffee.how.title"))}</h2>
+          <ol class="list">${steps.map((s) => `<li class="list__item">${icon(s[0])}<div class="list__main"><p class="list__title">${esc(s[1])}</p><p class="list__sub">${esc(s[2])}</p></div></li>`).join("")}</ol>
+        </section>
+      </aside>
+    </div>`;
+  }
+  const recsEmpty = () => YL.ui.emptyState("sparkle", t("coffee.rec.empty"), `<a class="btn btn--primary" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a>`);
+  async function loadRecs(env) {
+    const box = env.page.querySelector('[data-role="recs-body"]');
+    if (!box) return;
+    box.innerHTML = YL.ui.spinner();
+    const r = await YL.api.get("/coffee/recommendations");
+    if (!env.ctx.isActive()) return;
+    if (!r.ok) {
+      if (r.error.reason === "not_joined") { box.closest("section").outerHTML = joinCard(); return; }
+      box.innerHTML = errorBlock(r.error, "retry-recs");
+      return;
+    }
+    const d = r.data;
+    if (!d.enabled) {
+      box.innerHTML = noticeHtml("info", "people", `<p><strong>${esc(t("coffee.rec.lockedTitle"))}</strong></p>
+        <p>${esc(t("coffee.rec.locked", { threshold: d.threshold, n: d.participants }))}</p>
+        <div><a class="btn btn--primary btn--sm" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a></div>`);
+      return;
+    }
+    env.people = new Map(list(d.items).map((p) => [p.id, p]));
+    if (!env.people.size) { box.innerHTML = recsEmpty(); return; }
+    box.innerHTML = d.items.map(env.draw).join("")
+      + (d.engine === "deepseek" ? `<p class="cluster xsmall faint">${icon("sparkle", { size: 14 })}<span>${esc(t("coffee.rec.engineAi"))}</span></p>` : "")
+      + `<a class="btn btn--secondary btn--block" href="#/coffee/browse">${icon("people")}${esc(t("coffee.rec.more"))}</a>`;
+  }
+
+  /* ================= #/coffee/browse 找人 ================= */
+  const FILTERS = ["identity", "goal", "interest", "field"];
+  const FILTER_Q = { goal: "goals", interest: "interests", field: "field" };
+  function filterItems(key) {
+    const all = [{ id: "", label: t("coffee.filter.all") }];
+    if (key === "identity") return all.concat([{ id: "student", label: t("coffee.identity.student") }, { id: "alumni", label: t("coffee.identity.alumni") }]);
+    const q = question(FILTER_Q[key]);
+    return all.concat(((q && q.options) || []).map((o) => ({ id: o.id, label: o.label })));
+  }
+  function browsePath(f) {
+    const p = new URLSearchParams();
+    FILTERS.forEach((k) => { if (f[k]) p.set(k, f[k]); });
+    const s = p.toString();
+    return "coffee/browse" + (s ? "?" + s : "");
+  }
+  async function viewBrowse(root, ctx) {
+    const f = {};
+    FILTERS.forEach((k) => (f[k] = String(ctx.query[k] || "")));
+    const active = FILTERS.filter((k) => f[k]).length;
+    backPath = browsePath(f);
+    const open = filtersOpen != null ? filtersOpen : active > 0 || window.matchMedia("(min-width: 900px)").matches;
+    const page = mount(root);
+    const env = { ctx, page, people: new Map(), source: "browse", draw: (p) => personHtml(p, { overlap: p.overlapCount || 0 }) };
+    page.innerHTML = `<header class="page-head"><div class="page-head__text">
+        <p class="eyebrow">${esc(t("coffee.browse.eyebrow"))}</p>
+        <h1 class="page-title">${esc(t("coffee.browse.title"))}</h1>
+        <p class="page-sub">${esc(t("coffee.browse.sub"))}</p>
+      </div></header>
+      <div class="stack" data-role="tools">
+        <div class="cluster cluster--between">
+          <p class="small muted" data-role="count" aria-live="polite"></p>
+          <div class="cluster">
+            ${active ? `<button type="button" class="btn btn--ghost btn--sm" data-act="clear">${esc(t("coffee.browse.clear"))}</button>` : ""}
+            <button type="button" class="btn btn--secondary btn--sm" data-act="toggle" aria-expanded="${open}" aria-controls="coffee-filters">${icon("sliders")}${esc(t("coffee.browse.filters"))}${active ? `<span class="count">${active}</span>` : ""}</button>
+          </div>
+        </div>
+        <div class="filters" id="coffee-filters"${open ? "" : " hidden"}>
+          ${FILTERS.map((k) => `<div class="filter-row" role="group" aria-labelledby="coffee-f-${k}" data-filter="${k}">
+            <span class="filter-row__label" id="coffee-f-${k}">${esc(t("coffee.filter." + k))}</span>
+            ${YL.ui.chips(filterItems(k), f[k], k, "chips--scroll")}
+          </div>`).join("")}
+        </div>
+      </div>
+      <div data-role="results">${YL.ui.spinner()}</div>`;
+
+    // 让每行选中的标签滚到看得见的位置；刚点过的标签拿回焦点
+    if (open) page.querySelectorAll(".filter-row .chip.is-active").forEach((c) => {
+      const sc = c.parentElement;
+      sc.scrollLeft = Math.max(0, c.offsetLeft - sc.offsetLeft - (sc.clientWidth - c.offsetWidth) / 2);
+    });
+    if (pendingFocus) {
+      const pf = pendingFocus;
+      pendingFocus = null;
+      const el = page.querySelector(`[data-filter="${pf.k}"] [data-${pf.k}="${CSS.escape(pf.v)}"]`);
+      if (el) el.focus({ preventScroll: true });
+    }
+
+    bindPeople(page, env, (btn) => {
+      const act = btn.dataset.act;
+      if (act === "toggle") {
+        const box = page.querySelector("#coffee-filters");
+        box.hidden = !box.hidden;
+        filtersOpen = !box.hidden;
+        btn.setAttribute("aria-expanded", String(filtersOpen));
+        return true;
+      }
+      if (act === "clear") { pendingFocus = null; YL.router.navigate("coffee/browse"); return true; }
+      return false;
+    });
+    page.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      const row = chip && chip.closest("[data-filter]");
+      if (!row) return;
+      const k = row.dataset.filter, v = chip.getAttribute("data-" + k) || "";
+      const next = Object.assign({}, f);
+      next[k] = f[k] === v ? "" : v; // 再点一次已选的标签 = 取消
+      pendingFocus = { k, v: next[k] };
+      YL.router.navigate(browsePath(next));
+    });
+
+    const r = await YL.api.get("/coffee/pool", f);
+    if (!ctx.isActive()) return;
+    const box = page.querySelector('[data-role="results"]');
+    if (!r.ok) {
+      const reason = r.error && r.error.reason;
+      if (reason === "not_joined" || reason === "browse_closed") page.querySelector('[data-role="tools"]').hidden = true;
+      if (reason === "not_joined") box.innerHTML = joinCard();
+      else if (reason === "browse_closed") box.innerHTML = YL.ui.emptyState("lock", t("coffee.err.browse_closed"), `<a class="btn btn--primary" href="#/coffee">${esc(t("coffee.backHome"))}</a>`);
+      else box.innerHTML = errorBlock(r.error);
+      return;
+    }
+    const items = list(r.data);
+    env.people = new Map(items.map((p) => [p.id, p]));
+    page.querySelector('[data-role="count"]').textContent = items.length === 1 ? t("coffee.browse.countOne") : t("coffee.browse.count", { n: items.length });
+    box.innerHTML = items.length
+      ? `<div class="grid-cards">${items.map(env.draw).join("")}</div>`
+      : YL.ui.emptyState("search", active ? t("coffee.browse.emptyFiltered") : t("coffee.browse.empty"),
+        active ? `<button type="button" class="btn btn--primary" data-act="clear">${esc(t("coffee.browse.clear"))}</button>` : "");
+  }
+
+  /* ================= #/coffee/p/:id 个人详情 ================= */
+  async function viewPerson(root, ctx) {
+    const page = mount(root, "page--medium");
+    const back = `<div><a class="btn btn--ghost btn--sm" href="#/${esc(backPath)}">${icon("chevronLeft")}${esc(t("common.back"))}</a></div>`;
+    const notFound = () => back + YL.ui.emptyState("user", t("coffee.person.notFound"), `<a class="btn btn--primary" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a>`);
+    if (!ctx.id) { page.innerHTML = notFound(); return; }
+    page.innerHTML = back + YL.ui.spinner();
+    const env = { ctx, page, people: new Map(), source: backPath === "coffee" ? "rec" : "browse", draw: null };
+    bindPeople(page, env);
+    const [r, s] = await Promise.all([YL.api.get("/coffee/people/" + encodeURIComponent(ctx.id)), YL.api.get("/coffee/state")]);
+    if (!ctx.isActive()) return;
+    if (!r.ok) {
+      const reason = r.error && r.error.reason;
+      page.innerHTML = reason === "not_joined" ? back + joinCard() : r.error.code === "not_found" ? notFound() : back + errorBlock(r.error);
+      return;
+    }
+    const tz = (s.ok && s.data.round && s.data.round.timezone) || D.DEFAULT_ROUND.timezone;
+    const p = r.data;
+    env.people.set(p.id, p);
+    env.draw = (x) => detailHtml(x, tz);
+    page.innerHTML = back + detailHtml(p, tz);
+  }
+  function detailHtml(p, tz) {
+    const a = p.answers || {};
+    const blocks = YL.auth.questions().filter((q) => list(a[q.id]).some((v) => String(v).trim())).map((q) => {
+      let body;
+      if (q.type === "text") body = `<p>${esc(String(a[q.id]).trim())}</p>`;
+      else if (q.id === "interests") body = `<div class="tags">${interestTags(a[q.id]).join("")}</div>`;
+      else body = `<div class="tags">${list(a[q.id]).map((v) => `<span class="tag${q.id === "goals" ? " tag--goal" : ""}">${esc(optLabel(q.id, v))}</span>`).join("")}</div>`;
+      return `<div class="stack stack--s"><h2 class="eyebrow">${esc(shortLabel(q))}</h2>${body}</div>`;
+    }).join("");
+    const overlap = list(p.overlap);
+    return `<article class="person" data-person="${esc(p.id)}">
+      <div class="person__head">${avatar(p.name, "lg")}<div class="person__who"><h1 class="person__name" tabindex="-1" data-focus>${esc(p.name)}</h1>${metaHtml(p)}</div></div>
+      ${blocks}
+      <div class="stack stack--s">
+        <h2 class="eyebrow">${esc(t("coffee.person.timesTitle"))}</h2>
+        ${overlap.length
+          ? `<div class="times" role="list">${overlap.map((s) => `<span class="time" role="listitem">${esc(whenText(s))}<small>${esc(bjFull(tz, s))}</small></span>`).join("")}</div>
+             <p class="small faint">${esc(t("coffee.person.timesHint", { tz: tzName(tz) }))}</p>`
+          : `<p class="small muted">${esc(t("coffee.person.timesNone"))}</p>`}
+      </div>
+      <div class="person__foot">${overlapHtml(overlap.length)}<div class="person__actions">${relationHtml(p)}</div></div>
+    </article>`;
+  }
+
+  /* ================= #/coffee/times 选空闲时间 ================= */
+  async function viewTimes(root, ctx) {
+    const page = mount(root, "page--medium");
+    page.innerHTML = YL.ui.spinner();
+    const s = await YL.api.get("/coffee/state");
+    if (!ctx.isActive()) return;
+    if (!s.ok) { page.innerHTML = errorBlock(s.error); bindRetry(page); return; }
+    const st = s.data;
+    if (!st.round) { page.innerHTML = noRound(); return; }
+    const round = st.round, tz = round.timezone, dates = D.roundDates(round), times = D.slotTimes(round);
+    const at = nowIso();
+    const closed = new Set(D.slotIds(round).filter((x) => D.isClosed(round, x, at)));
+    let locked = new Set(list(st.locked));
+    let saved = list(st.slots).slice().sort();
+    const picked = new Set(saved);
+    let joined = !!st.joined;
+    const openIn = (d) => times.map((tm) => d + "T" + tm).filter((x) => !closed.has(x) && !locked.has(x));
+    let day = dates.find((d) => openIn(d).length) || dates[0];
+    const anyOpen = dates.some((d) => openIn(d).length);
+
+    page.innerHTML = `<header class="page-head"><div class="page-head__text">
+        <p class="eyebrow">${esc(L(round.title))} · ${esc(rangeText(round))}</p>
+        <h1 class="page-title">${esc(t("coffee.times.title"))}</h1>
+        <p class="page-sub">${esc(t("coffee.times.sub"))}</p>
+      </div></header>
+      ${!joined && anyOpen ? noticeHtml("accent", "sparkle", `<p>${esc(t("coffee.times.joinHint"))}</p>`) : ""}
+      ${anyOpen ? "" : noticeHtml("warn", "info", `<p>${esc(t("coffee.times.allClosed"))}</p>`)}
+      <div class="slots">
+        <p class="slots__tz"><span>${esc(t("coffee.times.tz", { tz: tzName(tz) }))}</span><span>${esc(t("coffee.times.rules", { min: round.slotMinutes, h: round.cutoffHours }))}</span></p>
+        <div class="slots__days" role="group" aria-label="${esc(t("coffee.times.days"))}">
+          ${dates.map((d) => `<button type="button" class="day" data-act="day" data-date="${esc(d)}"${openIn(d).length || times.some((tm) => locked.has(d + "T" + tm)) ? "" : " disabled"}>
+            <span class="day__wd">${esc(weekday(d))}</span><span class="day__d">${esc(md(d))}</span><span class="day__n"></span></button>`).join("")}
+        </div>
+        <div class="cluster cluster--between">
+          <h2 class="section-title" id="coffee-day-title" data-role="day-title"></h2>
+          <div class="cluster">
+            <button type="button" class="btn btn--secondary btn--sm" data-act="day-all">${esc(t("coffee.times.dayAll"))}</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-act="day-clear">${esc(t("coffee.times.dayClear"))}</button>
+          </div>
+        </div>
+        <div class="slots__grid" role="group" aria-labelledby="coffee-day-title" data-role="grid"></div>
+        <div class="slot-legend">
+          <span><i></i>${esc(t("coffee.times.legendOpen"))}</span>
+          <span><i class="is-selected"></i>${esc(t("coffee.times.legendPicked"))}</span>
+          <span><i class="is-locked"></i>${esc(t("coffee.times.legendLocked"))}</span>
+          <span><i class="is-closed"></i>${esc(t("coffee.times.legendClosed"))}</span>
+        </div>
+      </div>
+      <div class="savebar">
+        <span data-role="count" aria-live="polite"></span>
+        <button type="button" class="btn btn--primary btn--sm" data-act="save">${esc(t("common.save"))}</button>
+      </div>`;
+
+    const grid = page.querySelector('[data-role="grid"]');
+    const dirty = () => { const now = Array.from(picked).sort(); return now.length !== saved.length || now.some((x, i) => x !== saved[i]); };
+    function slotHtml(id) {
+      const tm = timeOf(id), bj = `<small>${esc(bjShort(tz, id))}</small>`;
+      if (locked.has(id)) return `<button type="button" class="slot is-locked" disabled aria-pressed="true">${esc(tm)}${bj}<span class="sr-only">${esc(t("coffee.times.legendLocked"))}</span></button>`;
+      if (closed.has(id)) return `<button type="button" class="slot is-closed" disabled>${esc(tm)}${bj}<span class="sr-only">${esc(t("coffee.times.legendClosed"))}</span></button>`;
+      return `<button type="button" class="slot" data-act="slot" data-slot="${esc(id)}" aria-pressed="${picked.has(id)}">${esc(tm)}${bj}</button>`;
+    }
+    function drawDays() {
+      page.querySelectorAll(".day").forEach((b) => {
+        const d = b.dataset.date, n = times.filter((tm) => picked.has(d + "T" + tm) || locked.has(d + "T" + tm)).length, on = d === day;
+        b.classList.toggle("is-active", on);
+        b.classList.toggle("has-picks", n > 0);
+        b.setAttribute("aria-pressed", String(on));
+        b.querySelector(".day__n").textContent = n ? t("coffee.times.dayPicked", { n }) : "";
       });
-    };
+      const open = openIn(day);
+      page.querySelector('[data-act="day-all"]').disabled = !open.length || open.every((x) => picked.has(x));
+      page.querySelector('[data-act="day-clear"]').disabled = !open.some((x) => picked.has(x));
+    }
+    function drawCount() {
+      const n = openPicks(round, Array.from(new Set(Array.from(picked).concat(Array.from(locked)))), Array.from(locked)).length;
+      const d = dirty();
+      page.querySelector('[data-role="count"]').textContent = (n === 1 ? t("coffee.times.countOne") : t("coffee.times.count", { n })) + (d ? " · " + t("coffee.times.unsaved") : "");
+    }
+    function drawGrid() {
+      page.querySelector('[data-role="day-title"]').textContent = dayLabel(day);
+      grid.innerHTML = times.map((tm) => slotHtml(day + "T" + tm)).join("");
+    }
+    const drawAll = () => { drawGrid(); drawDays(); drawCount(); };
+    drawAll();
+
+    page.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn || !page.contains(btn) || btn.disabled) return;
+      const act = btn.dataset.act;
+      if (act === "slot") {
+        const id = btn.dataset.slot;
+        if (picked.has(id)) picked.delete(id); else picked.add(id);
+        btn.setAttribute("aria-pressed", String(picked.has(id)));
+        drawDays(); drawCount();
+      } else if (act === "day") {
+        day = btn.dataset.date;
+        drawGrid(); drawDays();
+      } else if (act === "day-all" || act === "day-clear") {
+        openIn(day).forEach((x) => { if (act === "day-all") picked.add(x); else picked.delete(x); });
+        drawGrid(); drawDays(); drawCount();
+        btn.focus();
+      } else if (act === "save") {
+        if (!joined && !Array.from(picked).some((x) => !closed.has(x))) { YL.ui.toast(t("coffee.times.pickOne"), "error"); return; }
+        YL.ui.busy(btn, true);
+        const r = await YL.api.post("/coffee/availability", { slots: Array.from(picked) });
+        if (!ctx.isActive()) return;
+        YL.ui.busy(btn, false);
+        if (!r.ok) { YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error"); drawCount(); return; }
+        saved = list(r.data.slots).slice().sort();
+        picked.clear(); saved.forEach((x) => picked.add(x));
+        locked = new Set(list(r.data.locked));
+        YL.ui.toast(t("coffee.times.saved"), "success");
+        if (!joined) { joined = true; YL.router.navigate("coffee"); return; }
+        drawAll();
+      }
+    });
   }
 
-  /* ---------- 我的空闲时段：点选 / 拖选（鼠标），手机上逐个点；点日期或时间可整列 / 整行切换 ---------- */
-  function schedule(root, ctx, me) {
-    const ev = me.event, dates = R.eventDates(ev), times = R.slotTimes(ev);
-    const selected = new Set(me.profile.slots), locked = new Set(me.locked);
-    const labels = {};
-    dates.forEach((d) => (labels[d] = dayLabel(d)));
-    const cell = (id) => `<td><button type="button" class="slot${selected.has(id) ? " is-on" : ""}${locked.has(id) ? " is-locked" : ""}" data-slot="${id}" aria-pressed="${selected.has(id)}" aria-label="${esc(labels[id.slice(0, 10)] + " " + id.slice(11))}" ${locked.has(id) ? "disabled" : ""}></button></td>`;
-    root.innerHTML = head(me, "schedule") + `
-      <p class="muted">${esc(t("coffee.scheduleIntro", { min: ev.slotMinutes, gap: ev.gapMinutes, from: ev.dayStart, to: ev.dayEnd }))}</p>
-      <div class="callout callout--info">🕒 ${esc(t("coffee.tzNote", { tz: ev.timezone }))}</div>
-      <div class="slot-grid-wrap"><table class="slot-grid" id="slot-grid">
-        <thead><tr><th></th>${dates.map((d) => `<th><button type="button" class="slot-grid__head" data-day="${d}">${esc(labels[d])}</button></th>`).join("")}</tr></thead>
-        <tbody>${times.map((tm) => `<tr><th><button type="button" class="slot-grid__head" data-time="${tm}">${tm}</button></th>${dates.map((d) => cell(d + "T" + tm)).join("")}</tr>`).join("")}</tbody>
-      </table></div>
-      <div class="row row--between"><span class="muted small" id="slot-count"></span><button class="btn btn--primary" id="btn-save-slots">${t("coffee.saveSlots")}</button></div>
-      <p class="small muted">${t("coffee.scheduleTip")}</p>`;
-    const grid = YL.ui.$("#slot-grid", root), counter = YL.ui.$("#slot-count", root);
-    const count = () => (counter.textContent = t("coffee.slotsSelected", { n: selected.size }));
-    const set = (b, on) => {
-      if (b.disabled) return;
-      if (on) selected.add(b.dataset.slot); else selected.delete(b.dataset.slot);
-      b.classList.toggle("is-on", on);
-      b.setAttribute("aria-pressed", String(on));
-      count();
+  /* ================= #/coffee/inbox 收件箱 ================= */
+  async function viewInbox(root, ctx) {
+    backPath = "coffee/inbox";
+    const page = mount(root, "page--medium");
+    page.innerHTML = YL.ui.spinner();
+    let roundId = null;
+    const linkable = (p) => !!roundId && p.roundId === roundId; // 详情页只能看本轮的人
+    const env = {
+      ctx, page, people: new Map(), source: "browse",
+      draw: (p) => personHtml(p, {
+        link: linkable(p), note: p.note,
+        foot: `<span class="person__overlap">${icon("mail")}${esc(t("coffee.inbox.sentAt", { date: YL.ui.formatDate(p.createdAt) }))}</span>`,
+        actions: `<button type="button" class="btn btn--ghost btn--sm" data-act="skip" data-id="${esc(p.id)}">${esc(t("coffee.inbox.skip"))}</button>
+          <button type="button" class="btn btn--accent btn--sm" data-act="accept" data-id="${esc(p.id)}">${icon("heart")}${esc(t("coffee.inbox.accept"))}</button>`
+      }),
+      onAccepted: (p) => removeCard(env, p.id),
+      onRemoved: () => {
+        const listEl = page.querySelector('[data-role="incoming"]');
+        if (listEl && !listEl.querySelector("[data-person]")) listEl.outerHTML = incomingEmpty();
+      },
+      reload: () => load()
     };
-    let dragOn = null, skipClick = false;
-    grid.addEventListener("pointerdown", (e) => {
-      skipClick = false;
-      const b = e.target.closest("[data-slot]");
-      if (!b || b.disabled || e.pointerType === "touch") return; // 触屏不拖选，避免和滚动冲突
-      e.preventDefault();
-      dragOn = !selected.has(b.dataset.slot);
-      set(b, dragOn);
-      skipClick = true;
+    const outHtml = (p) => personHtml(p, {
+      link: linkable(p),
+      foot: `<span class="person__overlap">${icon("mail")}${esc(t("coffee.inbox.sentAt", { date: YL.ui.formatDate(p.createdAt) }))}</span>`,
+      actions: `<span class="pill pill--waiting">${icon("clock")}${esc(t("coffee.inbox.waiting"))}</span>`
     });
-    grid.addEventListener("pointerover", (e) => { const b = dragOn === null ? null : e.target.closest("[data-slot]"); if (b) set(b, dragOn); });
-    grid.addEventListener("pointerup", () => (dragOn = null));
-    grid.addEventListener("pointerleave", () => (dragOn = null));
-    grid.addEventListener("click", (e) => {
-      const skip = skipClick && e.detail !== 0; // 键盘触发的 click（detail = 0）永远生效
-      skipClick = false;
-      if (skip) return;
-      const b = e.target.closest("[data-slot]");
-      if (b) return set(b, !selected.has(b.dataset.slot));
-      const h = e.target.closest("[data-day],[data-time]");
-      if (!h) return;
-      const cells = YL.ui.$$(h.dataset.day ? `[data-slot^="${h.dataset.day}T"]` : `[data-slot$="T${h.dataset.time}"]`, grid).filter((x) => !x.disabled);
-      const on = cells.some((x) => !selected.has(x.dataset.slot));
-      cells.forEach((x) => set(x, on));
-    });
-    YL.ui.$("#btn-save-slots", root).onclick = (e) => submitting(e.currentTarget, async () => {
-      const r = await YL.api.post("/coffee/availability", { slots: Array.from(selected) });
-      if (!r.ok) return YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error");
-      YL.ui.toast(t("coffee.slotsSaved", { n: r.data.slots.length }), "success");
-      YL.router.render();
-    });
-    count();
-  }
+    const incomingEmpty = () => `<div data-role="incoming-empty">${YL.ui.emptyState("inbox", t("coffee.inbox.incomingEmpty"), `<a class="btn btn--secondary" href="#/coffee/times">${esc(t("coffee.home.editTimes"))}</a>`)}</div>`;
+    bindPeople(page, env);
 
-  /* ---------- 参与者总览：只按身份、诉求筛选 ---------- */
-  function personCard(x) {
-    return `<a class="card card--hover" href="#/coffee/p/${encodeURIComponent(x.id)}" data-person="${esc(x.id)}">
-      <div class="person">${YL.ui.avatar(x.name, "lg")}<div class="grow">
-        <div class="person__name">${esc(L(x.name))} <span class="badge">${esc(t("coffee.identity." + x.identity))}</span></div>
-        <div class="person__sub">${esc(background(x))}</div>
-      </div></div>
-      ${x.interests ? `<div class="card__body">🎯 ${esc(x.interests)}</div>` : ""}
-      <div class="card__meta">${(x.goals || []).map((g) => YL.ui.tag(t("coffee.goal." + g), "tag--green")).join("")}</div>
-      <div class="card__foot"><span class="small muted">${x.meetMode === "offline" ? "📍 " + esc(x.meetPlace) : "💻 " + t("coffee.meet.online")}</span>
-        <span class="badge ${x.freeSlots ? "badge--green" : "badge--muted"}">${esc(t("coffee.freeSlots", { n: x.freeSlots }))}</span></div>
-    </a>`;
-  }
-  async function people(root, ctx, me) {
-    const all = { id: "all", label: t("coffee.all") };
-    const identities = [all].concat(R.IDENTITIES.map((x) => ({ id: x, label: t("coffee.identity." + x) })));
-    const goals = [all].concat(R.GOALS.map((g) => ({ id: g, label: t("coffee.goal." + g) })));
-    let identity = ctx.query.identity || "all", goal = ctx.query.goal || "all", seq = 0;
-    root.innerHTML = head(me, "people") + loading();
-    const load = async () => {
-      const mine = ++seq;
-      const r = await YL.api.get("/coffee/people", { identity: identity === "all" ? "" : identity, goal: goal === "all" ? "" : goal });
-      if (!ctx.isActive() || mine !== seq) return;
-      if (!r.ok) { root.innerHTML = head(me, "people") + failed(r.error); return; }
-      root.innerHTML = head(me, "people")
-        + YL.ui.chips(identities, identity, "identity", "chips--scroll")
-        + YL.ui.chips(goals, goal, "goal", "chips--scroll")
-        + `<p class="small muted">${esc(t("coffee.peopleCount", { n: r.data.length }))}</p>`
-        + (r.data.length ? `<div class="grid grid-2">${r.data.map(personCard).join("")}</div>` : YL.ui.emptyState("🫂", t("common.noResults")))
-        + `<p class="notice">${t("coffee.seedNote")}</p>`;
-      YL.ui.$$("[data-identity]", root).forEach((b) => (b.onclick = () => { identity = b.dataset.identity; load(); }));
-      YL.ui.$$("[data-goal]", root).forEach((b) => (b.onclick = () => { goal = b.dataset.goal; load(); }));
-    };
+    async function load() {
+      const [r, s] = await Promise.all([YL.api.get("/coffee/inbox"), YL.api.get("/coffee/state")]);
+      if (!ctx.isActive()) return;
+      if (!r.ok) { page.innerHTML = errorBlock(r.error); return; }
+      const round = s.ok ? s.data.round : null;
+      roundId = round ? round.id : null;
+      if (s.ok) YL.registry.setBadge("inbox", s.data.incoming || 0);
+      const max = (round && round.maxOpenInvites) || maxOpen;
+      maxOpen = max;
+      const inc = list(r.data.incoming), out = list(r.data.outgoing);
+      env.people = new Map(inc.map((p) => [p.id, p]));
+      page.innerHTML = `<header class="page-head"><div class="page-head__text">
+          <p class="eyebrow">${esc(t("coffee.inbox.eyebrow"))}</p>
+          <h1 class="page-title">${esc(t("coffee.inbox.title"))}</h1>
+          <p class="page-sub">${esc(t("coffee.inbox.sub"))}</p>
+        </div></header>
+        ${noticeHtml("info", "info", `<p>${esc(t("coffee.inbox.ruleSkip"))}</p><p>${esc(t("coffee.inbox.ruleExpire"))}</p><p>${esc(t("coffee.inbox.ruleMax", { n: max }))}</p>`)}
+        <section class="stack" aria-label="${esc(t("coffee.inbox.incoming"))}">
+          ${YL.ui.sectionTitle(t("coffee.inbox.incoming"), "", t("coffee.inbox.incomingSub"))}
+          ${inc.length ? `<div class="grid-cards" data-role="incoming">${inc.map(env.draw).join("")}</div>` : incomingEmpty()}
+        </section>
+        <section class="stack" aria-label="${esc(t("coffee.inbox.outgoing"))}">
+          ${YL.ui.sectionTitle(t("coffee.inbox.outgoing"), "", t("coffee.inbox.outgoingSub", { n: out.length, max }))}
+          ${out.length ? `<div class="grid-cards">${out.map(outHtml).join("")}</div>`
+            : YL.ui.emptyState("message", t("coffee.inbox.outgoingEmpty"), `<a class="btn btn--secondary" href="#/coffee">${esc(t("coffee.inbox.toRecs"))}</a>`)}
+        </section>`;
+    }
     await load();
   }
 
-  /* ---------- 某个人：资料 + 按天列出 TA 的时段，点空闲时段预约 ---------- */
-  function openBooking(ev, x, slot, onDone) {
-    const hint = localHint(ev, slot);
-    YL.ui.modal(`<h2>☕ ${t("coffee.bookTitle", { name: esc(L(x.name)) })}</h2>
-      <dl class="kv"><dt>🗓</dt><dd><strong>${esc(slotLabel(ev, slot))}</strong>${hint ? `<div class="small muted">${esc(hint)}</div>` : ""}</dd>
-        <dt>📍</dt><dd>${esc(x.meetMode === "offline" ? x.meetPlace : t("coffee.onlineAfterAccept"))}</dd></dl>
-      <div class="divider"></div>
-      <form id="f-book" novalidate>
-        <div class="field"><label for="cf-note">${t("coffee.f.note")}</label><textarea class="textarea" id="cf-note" name="note" maxlength="${R.LIMITS.note}" placeholder="${esc(t("coffee.f.notePh"))}"></textarea><span class="field__error" data-err="note"></span></div>
-        <div class="field"><div class="callout">⚠️ ${t("coffee.disclaimer")}</div>
-          <label class="check check--block"><input type="checkbox" name="agree" value="yes"> ${t("coffee.agree")}</label>
-          <span class="field__error" data-err="agree"></span></div>
-        <button class="btn btn--primary btn--block" type="submit">${t("coffee.bookSubmit")}</button>
-      </form>`, { onMount(panel) {
-      const form = YL.ui.$("#f-book", panel);
-      form.onsubmit = (e) => {
-        e.preventDefault();
-        const v = YL.ui.formValues(form);
-        submitting(YL.ui.$("button[type=submit]", form), async () => {
-          const r = await YL.api.post("/coffee/bookings", { hostId: x.id, slot, note: v.note, agree: v.agree === "yes" });
-          if (!r.ok) return showError(panel, r.error);
-          YL.ui.closeModal();
-          YL.ui.toast(t("coffee.booked", { name: L(x.name) }), "success");
-          onDone();
-        });
-      };
-    } });
-  }
-  async function person(root, ctx, me) {
-    const ev = me.event, back = `<a class="muted small" href="#/coffee/people">← ${t("common.back")}</a>`;
-    root.innerHTML = head(me, "people") + loading();
-    const r = await YL.api.get("/coffee/people/" + encodeURIComponent(ctx.id));
-    if (!ctx.isActive()) return;
-    if (!r.ok) {
-      root.innerHTML = head(me, "people") + (r.error.code === "not_found" ? YL.ui.emptyState("☕", t("coffee.notParticipant"), `<a class="btn btn--primary" href="#/coffee/people">${t("coffee.tab.people")}</a>`) : failed(r.error));
-      return;
-    }
-    const x = r.data.person, days = {};
-    r.data.slots.forEach((s) => (days[s.slot.slice(0, 10)] = days[s.slot.slice(0, 10)] || []).push(s));
-    const chip = (s) => {
-      const st = SLOT_STATES.indexOf(s.state) >= 0 ? s.state : "closed";
-      return `<button type="button" class="slot-chip slot-chip--${st}" data-book="${esc(s.slot)}" ${st === "free" ? "" : "disabled"}>${esc(s.slot.slice(11))}${st === "free" ? "" : " · " + esc(t("coffee.slot." + st))}</button>`;
-    };
-    root.innerHTML = head(me, "people") + `<div class="stack">${back}<div class="two-col"><div class="stack">
-      <section class="card"><div class="person">${YL.ui.avatar(x.name, "xl")}<div class="grow">
-        <h2>${esc(L(x.name))} <span class="badge">${esc(t("coffee.identity." + x.identity))}</span></h2>
-        <div class="muted">${esc(background(x))}</div>
-        ${x.interests ? `<p class="card__body">🎯 ${esc(x.interests)}</p>` : ""}
-        <div>${(x.goals || []).map((g) => YL.ui.tag(t("coffee.goal." + g), "tag--green")).join("")}</div>
-        <div class="small muted">${x.meetMode === "offline" ? "📍 " + esc(x.meetPlace) : "💻 " + t("coffee.onlineAfterAccept")} · ${t("coffee.hostPlaceRule")}</div>
-      </div></div></section>
-      <section class="card"><h2>${t("coffee.pickTitle")}</h2><p class="small muted">${esc(t("coffee.tzNote", { tz: ev.timezone }))}</p>
-        ${Object.keys(days).sort().map((d) => `<div class="slot-day"><div class="slot-day__label">${esc(dayLabel(d))}</div><div class="row">${days[d].map(chip).join("")}</div></div>`).join("") || `<p class="muted">${t("coffee.noSlots")}</p>`}
-      </section>
-    </div><div class="stack">${rulesCard(ev)}</div></div></div>`;
-    YL.ui.$$("[data-book]:not([disabled])", root).forEach((b) => (b.onclick = () => openBooking(ev, x, b.dataset.book, () => YL.router.render())));
-  }
+  /* ================= #/coffee/matches 匹配 ================= */
+  async function viewMatches(root, ctx) {
+    const page = mount(root, "page--medium");
+    page.innerHTML = `<header class="page-head"><div class="page-head__text">
+        <p class="eyebrow">${esc(t("coffee.matches.eyebrow"))}</p>
+        <h1 class="page-title">${esc(t("coffee.matches.title"))}</h1>
+        <p class="page-sub">${esc(t("coffee.matches.sub"))}</p>
+      </div></header>
+      <div data-role="list">${YL.ui.spinner()}</div>`;
+    const box = page.querySelector('[data-role="list"]');
+    const expanded = new Set(); // 正在"改时间"的匹配
+    let items = [];
 
-  /* ---------- 我的预约 + 通知 ---------- */
-  function bookingCard(ev, b) {
-    const st = STATUS_BADGE[b.status] ? b.status : "expired";
-    const acts = (b.actions || []).filter((a) => R.ACTIONS.indexOf(a) >= 0);
-    const who = b.role === "host" ? t("coffee.fromLabel", { name: L(b.other.name) }) : t("coffee.withLabel", { name: L(b.other.name) });
-    const hint = localHint(ev, b.slot);
-    const place = b.meetMode === "offline" ? `<span>📍 ${esc(b.meetPlace)}</span>`
-      : b.meetPlace ? `<a href="${YL.ui.safeUrl(b.meetPlace)}" target="_blank" rel="noopener">💻 ${t("coffee.joinCall")}</a>`
-      : `<span>💻 ${t("coffee.onlineAfterAccept")}</span>`;
-    return `<article class="card" data-booking="${esc(b.id)}">
-      <div class="row row--between"><strong>🗓 ${esc(slotLabel(ev, b.slot))}</strong><span class="badge ${STATUS_BADGE[st]}">${esc(t("coffee.status." + st))}</span></div>
-      ${hint ? `<div class="small muted">${esc(hint)}</div>` : ""}
-      <div class="person">${YL.ui.avatar(b.other.name, "sm")}<div class="grow"><div class="person__name">${esc(who)}</div><div class="person__sub">${esc(background(b.other))}</div></div></div>
-      ${b.note ? `<p class="card__body">💬 ${esc(b.note)}</p>` : ""}
-      <div class="card__meta">${place}</div>
-      ${b.contact ? `<div class="callout callout--green">🔓 ${t("coffee.revealTitle")}<br>📧 ${esc(b.contact.email || "")}${b.contact.contact ? " · " + esc(b.contact.contact) : ""}</div>` : ""}
-      ${st === "pending" && b.role === "requester" ? `<p class="small muted">⏳ ${t("coffee.waitingHint")}</p>` : ""}
-      ${st === "expired" ? `<p class="small muted">${t("coffee.expiredHint")}</p>` : ""}
-      ${acts.length ? `<div class="card__foot"><span class="small muted">${t("coffee.answerHint")}</span><div class="row">${acts.map((a) => `<button class="btn btn--sm ${a === "accept" ? "btn--primary" : "btn--ghost"}" data-act="${a}" data-id="${esc(b.id)}">${esc(t("coffee.action." + a))}</button>`).join("")}</div></div>` : ""}
+    async function load(focusId) {
+      const r = await YL.api.get("/coffee/matches");
+      if (!ctx.isActive()) return;
+      if (!r.ok) { box.innerHTML = errorBlock(r.error); return; }
+      items = list(r.data);
+      box.innerHTML = items.length
+        ? `<div class="stack">${items.map((m) => matchHtml(m, expanded.has(m.matchId))).join("")}</div>`
+        : YL.ui.emptyState("sparkle", t("coffee.matches.empty"), `<div class="cluster">
+            <a class="btn btn--primary" href="#/coffee">${esc(t("coffee.inbox.toRecs"))}</a>
+            <a class="btn btn--secondary" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a></div>`);
+      if (focusId) {
+        const el = box.querySelector(`[data-match="${CSS.escape(focusId)}"] [data-role="title"]`);
+        if (el) el.focus();
+      }
+    }
+
+    page.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn || !page.contains(btn) || btn.disabled) return;
+      const act = btn.dataset.act;
+      if (act === "retry") { box.innerHTML = YL.ui.spinner(); load(); return; }
+      const card = btn.closest("[data-match]"), id = card && card.dataset.match;
+      const m = items.find((x) => x.matchId === id);
+      if (!m) return;
+      if (act === "copy") { YL.ui.copy(m.contactMethod || ""); return; }
+      if (act === "change") {
+        const panel = card.querySelector('[data-role="change"]');
+        panel.hidden = !panel.hidden;
+        if (panel.hidden) expanded.delete(id); else expanded.add(id);
+        btn.setAttribute("aria-expanded", String(!panel.hidden));
+        return;
+      }
+      if (card.dataset.busy) return;
+      let r;
+      if (act === "schedule") {
+        if (btn.dataset.slot === m.slot) return;
+        card.dataset.busy = "1"; YL.ui.busy(btn, true);
+        r = await YL.api.post(`/coffee/matches/${encodeURIComponent(id)}/schedule`, { slot: btn.dataset.slot });
+        if (!ctx.isActive()) return;
+        if (r.ok) { expanded.delete(id); YL.ui.toast(t("coffee.matches.scheduledToast"), "success"); }
+      } else if (act === "unschedule") {
+        const ok = await YL.ui.confirm(t("coffee.matches.cancelConfirm"), { danger: true, ok: t("coffee.matches.cancelOk"), cancel: t("coffee.matches.keep") });
+        if (!ctx.isActive()) return;
+        if (!ok) { btn.focus(); return; }
+        card.dataset.busy = "1"; YL.ui.busy(btn, true);
+        r = await YL.api.post(`/coffee/matches/${encodeURIComponent(id)}/schedule`, { slot: null });
+        if (!ctx.isActive()) return;
+        if (r.ok) { expanded.delete(id); YL.ui.toast(t("coffee.matches.canceledToast")); }
+      } else if (act === "outcome") {
+        card.dataset.busy = "1"; YL.ui.busy(btn, true);
+        r = await YL.api.post(`/coffee/matches/${encodeURIComponent(id)}/outcome`, { met: btn.dataset.met === "1" });
+        if (!ctx.isActive()) return;
+        if (r.ok) YL.ui.toast(t("coffee.outcome.thanks"), "success");
+      } else return;
+      if (!r.ok) {
+        YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error");
+        const reason = r.error && r.error.reason;
+        if (reason !== "slot_unavailable" && reason !== "already_started" && r.error.code !== "conflict") { delete card.dataset.busy; YL.ui.busy(btn, false); return; }
+      }
+      await load(id); // 成功或时间被占用 / 已开始：刷新列表
+    });
+
+    await load();
+  }
+  function matchHtml(m, expanded) {
+    const tz = m.timezone || D.DEFAULT_ROUND.timezone, mid = esc(m.matchId);
+    const timeBtn = (s, sel) => `<button type="button" class="time${sel ? " is-selected" : ""}" data-act="schedule" data-slot="${esc(s)}" aria-pressed="${!!sel}">${esc(whenText(s))}<small>${esc(bjFull(tz, s))}</small></button>`;
+    const avail = list(m.available);
+    let when;
+    if (m.slot) {
+      const who = m.scheduledBy === "me" ? t("coffee.matches.byMe") : m.scheduledBy === "them" ? t("coffee.matches.byThem") : "";
+      when = `<div class="cluster"><span class="pill pill--success">${icon("check")}${esc(t("coffee.matches.scheduled", { when: whenText(m.slot), tz: tzName(tz) }))}</span></div>
+        <p class="small muted">${esc(bjFull(tz, m.slot))}${who ? " · " + esc(who) : ""}</p>`;
+      if (m.canSchedule) {
+        when += `<div class="cluster">
+            <button type="button" class="btn btn--secondary btn--sm" data-act="change" aria-expanded="${!!expanded}" aria-controls="coffee-chg-${mid}">${icon("edit")}${esc(t("coffee.matches.change"))}</button>
+            <button type="button" class="btn btn--danger-ghost btn--sm" data-act="unschedule">${esc(t("coffee.matches.cancel"))}</button>
+          </div>
+          <div class="stack stack--s" id="coffee-chg-${mid}" data-role="change"${expanded ? "" : " hidden"}>
+            ${avail.length ? `<p class="small muted">${esc(t("coffee.matches.pickHint"))}</p><div class="times">${[m.slot].concat(avail).sort().map((s) => timeBtn(s, s === m.slot)).join("")}</div>`
+              : `<p class="small muted">${esc(t("coffee.matches.noOther"))}</p>`}
+          </div>`;
+      }
+    } else if (avail.length) {
+      when = `<p class="small">${esc(t("coffee.matches.pickHint"))}</p><div class="times">${avail.map((s) => timeBtn(s, false)).join("")}</div>`;
+    } else if (m.canSchedule) {
+      when = noticeHtml("info", "message", `<p>${esc(t("coffee.matches.noCommon"))}</p>`);
+    } else {
+      when = `<p class="small faint">${esc(t("coffee.matches.roundOver"))}</p>`;
+    }
+    let outcome = "";
+    if (m.myOutcome) {
+      const met = m.myOutcome === "met";
+      outcome = `<div class="person__foot"><span class="pill${met ? " pill--success" : ""}">${met ? icon("check") : ""}${esc(met ? t("coffee.outcome.met") : t("coffee.outcome.missed"))}</span><span class="small faint">${esc(t("coffee.outcome.recorded"))}</span></div>`;
+    } else if (m.canReport) {
+      outcome = `<div class="person__foot"><span class="small">${esc(m.slot ? t("coffee.outcome.ask") : t("coffee.outcome.askEarly"))}</span>
+        <div class="person__actions">
+          <button type="button" class="btn btn--ghost btn--sm" data-act="outcome" data-met="0">${esc(t("coffee.outcome.no"))}</button>
+          <button type="button" class="btn btn--secondary btn--sm" data-act="outcome" data-met="1">${icon("check")}${esc(t("coffee.outcome.yes"))}</button>
+        </div></div>`;
+    }
+    return `<article class="person" data-match="${mid}">
+      <div class="person__head">${avatar(m.name)}<div class="person__who"><h2 class="person__name" tabindex="-1" data-role="title">${esc(m.name)}</h2>${metaHtml(m)}</div></div>
+      <p class="small muted">${esc(t("coffee.matches.both", { round: L(m.roundTitle) }))}</p>
+      <div class="contact">
+        <div><p class="contact__label">${esc(t("coffee.matches.contact"))}</p><p class="contact__value">${esc(m.contactMethod || "—")}</p></div>
+        ${m.contactMethod ? `<button type="button" class="btn btn--secondary btn--sm" data-act="copy">${icon("copy")}${esc(t("common.copy"))}</button>` : ""}
+      </div>
+      <div class="stack stack--s">
+        <h3 class="eyebrow">${esc(t("coffee.matches.timeTitle"))}</h3>
+        ${when}
+      </div>
+      ${outcome}
     </article>`;
   }
-  function noticeRow(ev, n) {
-    const vars = { name: L(n.actor), time: slotLabel(ev, n.slot) };
-    const text = n.kind === "booking_new" ? t("coffee.notice.new", vars) : n.kind === "booking_accepted" ? t("coffee.notice.accepted", vars) : t("coffee.notice.declined", vars);
-    return `<div class="small${n.read ? " muted" : ""}">${n.read ? "" : "🔵 "}${esc(text)}<div class="muted">${esc(YL.ui.formatDate(n.createdAt, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</div></div>`;
-  }
-  function openAnswer(ev, b, action) {
-    const vars = { name: esc(L(b.other.name)), time: esc(slotLabel(ev, b.slot)) };
-    YL.ui.modal(`<h2>${esc(t("coffee.action." + action))}</h2>
-      <p class="muted">${action === "accept" ? t("coffee.confirmAccept", vars) : t("coffee.confirmDecline", vars)}</p>
-      <button class="btn btn--primary btn--block" id="btn-answer">${esc(t("coffee.action." + action))}</button>`, { onMount(panel) {
-      const btn = YL.ui.$("#btn-answer", panel);
-      btn.onclick = () => submitting(btn, async () => {
-        const r = await YL.api.post(`/coffee/bookings/${encodeURIComponent(b.id)}/${action}`);
-        if (!r.ok) return YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error");
-        YL.ui.closeModal();
-        YL.ui.toast(action === "accept" ? t("coffee.acceptedToast") : t("coffee.declinedToast"), "success");
-        YL.router.render();
-      });
-    } });
-  }
-  async function bookings(root, ctx, me) {
-    const ev = me.event;
-    root.innerHTML = head(me, "bookings") + loading();
-    const r = await YL.api.get("/coffee/bookings");
-    if (!ctx.isActive()) return;
-    if (!r.ok) { root.innerHTML = head(me, "bookings") + failed(r.error); return; }
-    const items = r.data.items, notices = r.data.notices;
-    const todo = items.filter((b) => (b.actions || []).length), rest = items.filter((b) => !(b.actions || []).length);
-    const unread = notices.filter((n) => !n.read).length;
-    root.innerHTML = head(me, "bookings") + `<div class="two-col"><div class="stack">
-        ${todo.length ? `<section>${YL.ui.sectionTitle(t("coffee.todoTitle", { n: todo.length }), "", t("coffee.todoSub"))}<div class="stack">${todo.map((b) => bookingCard(ev, b)).join("")}</div></section>` : ""}
-        <section>${YL.ui.sectionTitle(t("coffee.allTitle"))}${rest.length ? `<div class="stack">${rest.map((b) => bookingCard(ev, b)).join("")}</div>`
-          : YL.ui.emptyState("📅", t("coffee.noBookings"), `<a class="btn btn--primary" href="#/coffee/people">${t("coffee.tab.people")}</a>`)}</section>
-      </div><div class="stack">
-        <section class="card" id="notices"><div class="row row--between"><div class="card__title">🔔 ${t("coffee.noticesTitle")}</div>${unread ? `<button class="btn btn--ghost btn--sm" id="btn-read">${t("coffee.markRead")}</button>` : ""}</div>
-          ${notices.length ? `<div class="stack">${notices.map((n) => noticeRow(ev, n)).join("")}</div>` : `<p class="muted small">${t("coffee.noNotices")}</p>`}
-          <p class="small muted">📧 ${esc(t("coffee.emailNote", { email: me.email }))}</p></section>
-        <section class="card card--flat"><div class="card__title">🧪 ${t("coffee.demoTitle")}</div><p class="small muted">${t("coffee.demoBody")}</p>
-          <button class="btn btn--ghost btn--sm" id="btn-demo">${t("coffee.demoIncoming")}</button></section>
-      </div></div>`;
-    YL.ui.$$("[data-act]", root).forEach((b) => (b.onclick = () => openAnswer(ev, items.find((x) => x.id === b.dataset.id), b.dataset.act)));
-    const readBtn = YL.ui.$("#btn-read", root);
-    if (readBtn) readBtn.onclick = () => submitting(readBtn, async () => { await YL.api.post("/coffee/notices/read"); YL.router.render(); });
-    const demoBtn = YL.ui.$("#btn-demo", root);
-    demoBtn.onclick = () => submitting(demoBtn, async () => {
-      const d = await YL.api.post("/coffee/_demo/incoming");
-      if (!d.ok) return YL.ui.toast(YL.ui.errorText(d.error, "coffee"), "error");
-      YL.ui.toast(t("coffee.demoDone"), "success");
-      YL.router.render();
-    });
-  }
 
-  /* ---------- 意见箱（登录即可，不必报名） ---------- */
-  function feedback(root, ctx, me) {
-    root.innerHTML = head(me, "feedback") + `<form id="f-fb" class="card" novalidate>
-      <p class="muted">${t("coffee.feedbackIntro")}</p>
-      <div class="field"><label>${t("coffee.f.kind")}</label><div class="checks">${R.FEEDBACK_KINDS.map((k, i) => `<label class="check"><input type="radio" name="kind" value="${k}" ${i === 0 ? "checked" : ""}> ${esc(t("coffee.fb." + k))}</label>`).join("")}</div><span class="field__error" data-err="kind"></span></div>
-      <div class="field"><label for="cf-text">${t("coffee.f.text")}</label><textarea class="textarea" id="cf-text" name="text" maxlength="${R.LIMITS.feedbackMax}" placeholder="${esc(t("coffee.f.textPh"))}"></textarea><span class="field__error" data-err="text"></span></div>
-      <button class="btn btn--primary btn--block" type="submit">${t("coffee.feedbackSubmit")}</button>
-    </form>`;
-    const form = YL.ui.$("#f-fb", root);
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      const v = YL.ui.formValues(form);
-      submitting(YL.ui.$("button[type=submit]", form), async () => {
-        const r = await YL.api.post("/coffee/feedback", v);
-        if (!r.ok) return showError(form, r.error);
-        form.reset();
-        YL.ui.$$("[data-err]", form).forEach((el) => (el.textContent = ""));
-        YL.ui.toast(t("coffee.feedbackThanks"), "success");
-      });
-    };
-  }
-
-  /* ---------- 管理员：统计与意见箱（只看汇总，不浏览私人联系方式） ---------- */
-  async function admin(root, ctx, me) {
-    root.innerHTML = head(me, "admin") + loading();
-    const r = await YL.api.get("/coffee/admin");
-    if (!ctx.isActive()) return;
-    if (!r.ok) { root.innerHTML = head(me, "admin") + failed(r.error); return; }
-    const s = r.data.stats, num = YL.ui.num, stat = YL.ui.stat;
-    root.innerHTML = head(me, "admin") + `<p class="muted small">${t("coffee.adminIntro")}</p>
-      <div class="stats section" id="admin-stats">
-        ${stat(num(s.participants), t("coffee.st.participants"))}${stat(num(s.students) + " / " + num(s.alumni), t("coffee.st.split"))}
-        ${stat(num(s.slotsOffered), t("coffee.st.slots"))}${stat(num(s.bookings.total), t("coffee.st.bookings"))}
-        ${stat(num(s.bookings.accepted), t("coffee.st.accepted"))}${stat(s.acceptRate == null ? "—" : s.acceptRate + "%", t("coffee.st.rate"))}
-      </div>
-      <div class="two-col">
-        <section class="card"><div class="card__title">${t("coffee.st.byStatus")}</div>
-          <dl class="kv">${R.STATUSES.map((k) => `<dt>${esc(t("coffee.status." + k))}</dt><dd>${num(s.bookings[k])}</dd>`).join("")}</dl>
-          <div class="divider"></div><div class="card__title">${t("coffee.st.goals")}</div>
-          <dl class="kv">${R.GOALS.map((g) => `<dt>${esc(t("coffee.goal." + g))}</dt><dd>${num(s.goals[g])}</dd>`).join("")}</dl>
-          <p class="small muted">${esc(t("coffee.st.withSlots", { n: s.withSlots }))}</p></section>
-        <section class="card"><div class="card__title">💡 ${t("coffee.tab.feedback")} · ${num(s.feedback)}</div>
-          <div class="stack">${r.data.feedback.map((f) => `<div class="small"><div class="row">${YL.ui.tag(t("coffee.fb." + f.kind), f.kind === "bug" ? "tag--accent" : "")}<span class="muted">${esc(L(f.from))} · ${esc(YL.ui.formatDate(f.createdAt))}</span></div>${esc(f.text)}</div>`).join("") || `<p class="muted small">—</p>`}</div></section>
-      </div>
-      <p class="notice">${t("coffee.adminPrivacy")}</p>`;
-  }
-
-  const VIEWS = { intro, join, schedule, people, p: person, bookings, feedback, admin };
+  /* ---------- 注册 ---------- */
   registerModule({
     id: "coffee",
-    nav: { icon: "☕", labelKey: "nav.coffee", order: 15, mobile: true },
     requiresAuth: true,
-    descriptionKey: "about.module.coffee",
-    async render(root, ctx) {
-      root.innerHTML = loading();
-      const r = await YL.api.get("/coffee/me");
-      if (!ctx.isActive()) return;
-      if (!r.ok) { root.innerHTML = failed(r.error); return; }
-      const me = r.data;
-      let sub = ctx.sub || (me.profile ? "people" : "intro");
-      // 报名之后才能浏览与预约（接口同样会拒绝未报名的请求）
-      if (!me.profile && ["people", "p", "bookings", "schedule"].indexOf(sub) >= 0) sub = "intro";
-      if (sub === "admin" && !me.isAdmin) sub = me.profile ? "people" : "intro";
-      if (sub === "intro" && me.profile) sub = "people";
-      if (!VIEWS[sub]) { YL.router.navigate("coffee"); return; }
-      return VIEWS[sub](root, ctx, me);
+    requiresReady: true,
+    nav: [
+      { path: "coffee", icon: "coffee", labelKey: "nav.coffee", order: 10, mobile: true, when: isReady },
+      { path: "coffee/browse", icon: "people", labelKey: "nav.browse", order: 20, mobile: true, when: isReady },
+      { path: "coffee/inbox", icon: "inbox", labelKey: "nav.inbox", order: 30, mobile: true, when: isReady, badge: "inbox" },
+      { path: "coffee/matches", icon: "sparkle", labelKey: "nav.matches", order: 40, mobile: true, when: isReady }
+    ],
+    badges,
+    render(root, ctx) {
+      switch (ctx.sub) {
+        case "": return viewHome(root, ctx);
+        case "browse": return viewBrowse(root, ctx);
+        case "p": return viewPerson(root, ctx);
+        case "times": return viewTimes(root, ctx);
+        case "inbox": return viewInbox(root, ctx);
+        case "matches": return viewMatches(root, ctx);
+        default:
+          root.innerHTML = YL.ui.emptyState("info", t("router.notFound"), `<a class="btn btn--primary" href="#/coffee">${esc(t("coffee.backHome"))}</a>`);
+      }
     }
   });
 })();
