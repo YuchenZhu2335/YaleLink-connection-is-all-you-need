@@ -11,8 +11,11 @@
   function renderShell() {
     const me = YL.auth.user();
     const lang = YL.i18n.getLang();
-    const items = YL.registry.navItems();
+    const all = YL.registry.navItems();
     const mobile = YL.registry.navItems({ mobile: true });
+    // 电脑顶部导航：准备好之后只放约咖啡的几个入口（"我的 / 活动 / 管理"在头像菜单里）；没登录时放公开页面（活动）
+    const ready = !!(me && me.ready);
+    const items = ready ? mobile.filter((n) => n.path !== "profile") : all.filter((n) => !n.mobile);
 
     $("topbar").innerHTML = `
       <div class="topbar__inner">
@@ -23,12 +26,25 @@
         <nav class="topnav" aria-label="${esc(t("nav.primary"))}">${items.map((n) => navLink(n, "topnav__item")).join("")}</nav>
         <div class="topbar__actions">
           <button type="button" class="lang-toggle" id="lang-toggle" lang="${lang === "zh" ? "en" : "zh-CN"}" aria-label="${esc(lang === "zh" ? "Switch to English" : "切换到中文")}">${lang === "zh" ? "EN" : "中文"}</button>
-          ${me
-            ? `<a class="topbar__me" href="#/profile" aria-label="${esc(t("nav.me"))}">${avatar(YL.auth.displayName(), "sm")}<span class="topbar__name">${esc(YL.auth.displayName())}</span></a>`
-            : `<a class="btn btn--primary btn--sm" href="#/login">${esc(t("nav.login"))}</a>`}
+          ${me ? `<details class="menu" id="me-menu">
+              <summary class="topbar__me" aria-label="${esc(t("nav.me"))}">${avatar(YL.auth.displayName(), "sm")}<span class="topbar__name">${esc(YL.auth.displayName())}</span>${icon("chevronDown", { size: 16 })}</summary>
+              <div class="menu__panel">
+                <a class="menu__item" href="#/profile">${icon("user")}${esc(t("nav.me"))}</a>
+                <a class="menu__item" href="#/events">${icon("flag")}${esc(t("nav.events"))}</a>
+                ${YL.auth.isAdmin() ? `<a class="menu__item" href="#/admin">${icon("chart")}${esc(t("nav.admin"))}</a>` : ""}
+                <a class="menu__item" href="#/about/feedback">${icon("message")}${esc(t("nav.feedback"))}</a>
+                <button type="button" class="menu__item" id="menu-logout">${icon("logout")}${esc(t("nav.logout"))}</button>
+              </div>
+            </details>`
+            : `<a class="btn btn--primary btn--sm topbar__login" href="#/login">${esc(t("nav.login"))}</a>`}
         </div>
       </div>`;
     $("lang-toggle").onclick = () => YL.i18n.toggle();
+    if ($("menu-logout")) $("menu-logout").onclick = async () => {
+      const r = await YL.auth.logout();
+      if (!r.ok && r.status !== 401) { YL.ui.toast(YL.ui.errorText(r.error), "error"); return; }
+      YL.router.navigate("home");
+    };
 
     $("tabbar").innerHTML = mobile.map((n) => navLink(n, "tabbar__item")).join("");
     $("tabbar").hidden = !mobile.length;
@@ -44,7 +60,7 @@
           <a href="#/about/feedback">${esc(t("nav.feedback"))}</a>
           <a href="${YL.ui.safeUrl(YL_CONFIG.github)}" target="_blank" rel="noopener">GitHub</a>
         </nav>
-        <p class="footer__note">${esc(t("brand.by"))}<br>${esc(t("brand.unofficial"))}</p>
+        <p class="footer__note">${esc(t("brand.unofficial"))} · ${esc(t("brand.openSource"))}</p>
       </div>`;
     markActive();
   }
@@ -85,7 +101,12 @@
   }
   document.title = `${YL_CONFIG.siteName} · ${t("brand.tagline")}`;
   renderShell();
-  window.addEventListener("yl:route", () => setTimeout(markActive));
+  window.addEventListener("yl:route", (e) => {
+    document.body.dataset.route = e.detail.module; // 登录页不显示右上角的"登录"按钮等
+    const menu = $("me-menu"); if (menu) menu.open = false;
+    setTimeout(markActive);
+  });
+  document.addEventListener("click", (e) => { const menu = $("me-menu"); if (menu && menu.open && !menu.contains(e.target)) menu.open = false; });
   YL.router.start();
   markActive();
   refreshBadges();

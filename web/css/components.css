@@ -1116,3 +1116,16 @@ body.has-modal { overflow: hidden; }
 .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-1) var(--sp-4); font-size: var(--fs-sm); line-height: 1.6; }
 .kv dt { color: var(--c-ink-3); }
 .kv dd { margin: 0; min-width: 0; }
+
+
+/* ---------- 头像菜单（电脑顶栏；手机有底部标签栏时由"我的"代替）---------- */
+.menu { position: relative; }
+.menu > summary { list-style: none; cursor: pointer; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary .icon { color: var(--c-ink-3); }
+.menu__panel { position: absolute; right: 0; top: calc(100% + var(--sp-2)); z-index: 40; display: grid; min-width: 208px; padding: var(--sp-2); border: 1px solid var(--c-line); border-radius: var(--radius); background: var(--c-surface); box-shadow: var(--shadow-l); }
+.menu__item { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: var(--tap); padding: 0 var(--sp-3); border: 0; border-radius: var(--radius-s); background: none; color: var(--c-ink); font: inherit; font-size: var(--fs-sm); text-align: left; text-decoration: none; cursor: pointer; }
+.menu__item .icon { width: 20px; height: 20px; color: var(--c-ink-3); }
+@media (hover: hover) { .menu__item:hover { background: var(--c-surface-2); } }
+@media (max-width: 899px) { body.has-tabbar .menu { display: none; } }
+body[data-route="login"] .topbar__login { display: none; }
