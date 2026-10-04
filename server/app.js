@@ -15,13 +15,14 @@ function build(overrides) {
   if (qErrors.length) throw new Error("matchQuestions.json invalid: " + qErrors.join("; "));
 
   const ctx = { cfg, db, coffee, json: DB.json, questions: qcfg.questions, quiet: overrides && overrides.QUIET === "1" };
-  ctx.isAdmin = (u) => !!u && cfg.adminEmails.includes(u.login_email);
+  // 管理员：名单里的耶鲁邮箱，并且这次是用耶鲁邮箱登录的（只验证过联系邮箱的会话不给管理权限）
+  ctx.isAdmin = (u, session) => !!u && cfg.adminEmails.includes(u.login_email) && !!session && session.via === "yale";
   ctx.isReady = (u) => !!u && u.consent_version === cfg.consentVersion && !!u.profile_done_at && !!u.contact_email;
   // 返回给本人看的资料（含本人的私密字段）
   ctx.meDTO = (u, via) => ({
     id: u.id, loginEmail: u.login_email, contactEmail: u.contact_email, contactVerified: !!u.contact_verified_at,
     via, needsConsent: u.consent_version !== cfg.consentVersion, needsContact: !u.contact_email, needsProfile: !u.profile_done_at,
-    ready: ctx.isReady(u), isAdmin: ctx.isAdmin(u),
+    ready: ctx.isReady(u), isAdmin: ctx.isAdmin(u, { via }), adminNeedsYale: cfg.adminEmails.includes(u.login_email) && via !== "yale",
     name: u.name, identity: u.identity, stage: u.stage, gradYear: u.grad_year, job: u.job, city: u.city,
     contactMethod: u.contact_method, answers: DB.json(u.answers, {}), prefs: coffee.cleanPrefs(DB.json(u.prefs, {})), smartRec: u.smart_rec === 1
   });
@@ -33,9 +34,10 @@ function build(overrides) {
   require("./auth").install(app, ctx);
   const coffeeApi = require("./coffee").install(app, ctx);
   require("./admin").install(app, ctx, coffeeApi);
-  // 本地开发：查看"发出"的邮件（里面有验证码）。生产环境不存在这条路由
+  // 本地开发：查看"发出"的邮件（里面有验证码）
+  // 只在非生产、console 发信时存在，并且只接受本机直接访问（不经过代理）
   if (!cfg.production && cfg.mailDriver === "console") {
-    app.route("GET", "/dev/outbox", () => ctx.mailer.outbox.slice(0, 20), { auth: "none", audit: false });
+    app.route("GET", "/dev/outbox", () => ctx.mailer.outbox.slice(0, 20), { auth: "none", audit: false, localOnly: true });
   }
   const jobs = require("./jobs").create(ctx, coffeeApi);
   return { cfg, ctx, app, jobs, db };

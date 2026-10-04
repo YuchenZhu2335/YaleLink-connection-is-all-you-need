@@ -88,11 +88,25 @@ test("对方已经邀请过你，你再点想认识就直接匹配", () => {
   assert.deepEqual(check({ invites: [inv("b", "a", { status: "accepted" })] }), { ok: false, code: "conflict", reason: "already_matched" });
 });
 
-test("同时最多 5 个未回复的邀请", () => {
+test("同时最多 5 个未回复的邀请；对方跳过不释放名额（否则发起人能猜出被跳过），对方接受或轮次结束才释放", () => {
   const five = ["c", "d", "e", "f", "g"].map((x) => inv("a", x));
   assert.deepEqual(check({ invites: five }), { ok: false, code: "rate_limited", reason: "too_many_open" });
+  five[0].status = "skipped";
+  assert.deepEqual(check({ invites: five }), { ok: false, code: "rate_limited", reason: "too_many_open" }, "跳过不释放名额");
   five[0].status = "accepted";
   assert.deepEqual(check({ invites: five }), { ok: true });
+});
+
+test("周末上一周和下一周同时有效：跨轮次的邀请一起算（反向邀请直接匹配、不重复邀请、名额合计）", () => {
+  const sat = "2026-10-10T16:00:00Z", next = R.signupWeek(sat);
+  const old = (from, to, extra) => Object.assign(inv(from, to, extra), { round: ROUND });
+  const c = (over) => R.checkInvite(Object.assign({ round: next, fromId: "a", toId: "b", fromJoined: true, toJoined: true, now: sat }, over));
+  assert.deepEqual(c({ invites: [old("b", "a")] }), { ok: true, autoAccept: "b>a" }, "上一周对方的邀请还没回：直接匹配");
+  assert.deepEqual(c({ invites: [old("a", "b")] }), { ok: false, code: "conflict", reason: "already_invited" });
+  assert.deepEqual(c({ invites: [old("a", "b", { status: "accepted" })] }), { ok: false, code: "conflict", reason: "already_matched" });
+  const mixed = ["c", "d", "e"].map((x) => old("a", x)).concat(["f", "g"].map((x) => Object.assign(inv("a", x), { round: next })));
+  assert.equal(c({ invites: mixed }).reason, "too_many_open", "两周合计最多 5 个");
+  assert.deepEqual(c({ invites: [old("b", "a")], now: "2026-10-12T05:00:00Z" }), { ok: true }, "上一周结束后，旧邀请不再算数");
 });
 
 test("只有被邀请人能回复；跳过不通知、本轮结束未回复即过期", () => {
@@ -125,6 +139,7 @@ test("约定时间：匹配后任一方选重叠时间；开始后不能再改�
   assert.deepEqual(R.schedule(s, S3, "a", ROUND, [S3], started), { ok: false, code: "conflict", reason: "already_started" });
   assert.deepEqual(R.recordOutcome(s, true, "a", ROUND, NOW), { ok: false, code: "conflict", reason: "too_early" });
   assert.deepEqual(R.recordOutcome(s, true, "a", ROUND, started).next.outcomes, { a: "met" });
+  assert.equal(R.schedule(s, S2, "a", ROUND, [], NOW).unchanged, true, "重复提交同一个时间：不变（不重发邮件、不重置提醒）");
 });
 
 test("打分：相同兴趣、相同领域、诉求互补都加分，并给出理由", () => {

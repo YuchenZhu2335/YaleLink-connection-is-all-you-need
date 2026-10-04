@@ -3,14 +3,16 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// 极简 .env 读取：KEY=VALUE，# 开头为注释；已有的环境变量优先
+// 极简 .env 读取：KEY=VALUE，# 开头为注释；文件里同一个 KEY 写了两次以后面的为准；已有的环境变量优先
 function loadEnvFile(file) {
   if (!fs.existsSync(file)) return;
+  const vals = {};
   for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
-    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
     if (!m || line.trim().startsWith("#")) continue;
-    if (process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    vals[m[1]] = m[2].replace(/^["']|["']$/g, "");
   }
+  for (const [k, v] of Object.entries(vals)) if (process.env[k] === undefined) process.env[k] = v;
 }
 
 function load(overrides) {
@@ -41,6 +43,9 @@ function load(overrides) {
   };
   if (production && (!cfg.secret || cfg.secret.length < 32)) throw new Error("APP_SECRET must be set (32+ chars) in production");
   if (production && cfg.mailDriver === "console") throw new Error("MAIL_DRIVER=console is not allowed in production");
+  if (production && !cfg.publicUrl.startsWith("https://")) throw new Error("PUBLIC_URL must be https:// in production");
+  if (cfg.mailDriver === "resend" && !cfg.resendKey) throw new Error("RESEND_API_KEY is required when MAIL_DRIVER=resend");
+  if (!["console", "resend"].includes(cfg.mailDriver)) throw new Error("MAIL_DRIVER must be console or resend");
   return cfg;
 }
 

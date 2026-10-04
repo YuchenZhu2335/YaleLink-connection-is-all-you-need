@@ -18,7 +18,8 @@ function createMailer(ctx) {
       const r = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: "Bearer " + ctx.cfg.resendKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: ctx.cfg.mailFrom, to: [msg.to], subject: msg.subject, text: msg.text, headers: msg.unsubscribe ? { "List-Unsubscribe": "<" + msg.unsubscribe + ">" } : undefined })
+        body: JSON.stringify({ from: ctx.cfg.mailFrom, to: [msg.to], subject: msg.subject, text: msg.text, headers: msg.unsubscribe ? { "List-Unsubscribe": "<" + msg.unsubscribe + ">", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : undefined }),
+        signal: AbortSignal.timeout(10000) // 发信服务卡住时最多等 10 秒
       });
       if (!r.ok) throw new Error("resend " + r.status + " " + (await r.text()).slice(0, 200));
     }
@@ -26,7 +27,7 @@ function createMailer(ctx) {
 
   const sign = (userId, kind) => crypto.createHmac("sha256", ctx.cfg.secret).update(userId + ":" + kind).digest("base64url").slice(0, 32);
   const unsubscribeUrl = (userId, kind) => `${ctx.cfg.publicUrl}/api/email/unsubscribe?u=${encodeURIComponent(userId)}&k=${kind}&s=${sign(userId, kind)}`;
-  const verifyUnsubscribe = (userId, kind, s) => OPTIONAL.includes(kind) && typeof s === "string" && s.length === 32 && crypto.timingSafeEqual(Buffer.from(s), Buffer.from(sign(userId, kind)));
+  const verifyUnsubscribe = (userId, kind, s) => OPTIONAL.includes(kind) && typeof s === "string" && /^[A-Za-z0-9_-]{32}$/.test(s) && crypto.timingSafeEqual(Buffer.from(s), Buffer.from(sign(userId, kind)));
   const link = (hash) => ctx.cfg.publicUrl + "/#/" + hash;
   const recipient = (u) => (u.contact_email && u.contact_verified_at ? u.contact_email : u.login_email);
   // 约定时间：纽约时间 + 北京时间（一半同学在国内）
@@ -48,13 +49,14 @@ function createMailer(ctx) {
     event: (d) => ({ subject: `🎉 ${d.title.zh} / ${d.title.en}`, text: `${d.title.zh} 开始了！\n${link("coffee")}\n\n${d.title.en} has started!\n${link("coffee")}` })
   };
 
-  // 发一封：检查偏好 → 渲染 → 发送 → 记录。发送失败不抛错，只记录（不影响主流程）
-  async function send(kind, user, data, toOverride) {
+  // 发一封：检查偏好 → 渲染 → 发送 → 记录。发送失败不抛错，只记录并返回 false（调用方决定要不要重试）
+  // ref：同一件事的标识（如 "event:<轮次 id>"），配合 sendOnce 防止重复发送
+  async function send(kind, user, data, toOverride, ref) {
     const prefs = ctx.json(user && user.prefs, {});
     const to = toOverride || recipient(user);
     const tpl = (T[kind] || T[kind.replace(/_.*/, "")])(data || {});
     if (OPTIONAL.includes(kind) && prefs[kind] === false) {
-      ctx.db.run("INSERT INTO emails (user_id, to_addr, kind, subject, status, created_at) VALUES (?, ?, ?, ?, 'skipped', ?)", user && user.id, to, kind, tpl.subject, new Date().toISOString());
+      ctx.db.run("INSERT INTO emails (user_id, to_addr, kind, subject, status, ref, created_at) VALUES (?, ?, ?, ?, 'skipped', ?, ?)", user && user.id, to, kind, kind, ref || null, new Date().toISOString());
       return false;
     }
     const unsubscribe = OPTIONAL.includes(kind) && user ? unsubscribeUrl(user.id, kind) : null;
@@ -62,12 +64,21 @@ function createMailer(ctx) {
     let status = "sent", error = null;
     try { await drivers[ctx.cfg.mailDriver]({ kind, to, subject: tpl.subject, text, unsubscribe }); }
     catch (e) { status = "failed"; error = String(e.message || e).slice(0, 300); console.error("mail failed:", error); }
-    ctx.db.run("INSERT INTO emails (user_id, to_addr, kind, subject, status, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", user && user.id, to, kind, tpl.subject, status, error, new Date().toISOString());
+    // 记录里不存标题（标题里有对方名字或验证码），只存类型
+    ctx.db.run("INSERT INTO emails (user_id, to_addr, kind, subject, status, error, ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", user && user.id, to, kind, kind, status, error, ref || null, new Date().toISOString());
     return status === "sent";
+  }
+  // 同一件事只发一次：已经成功发过（或用户关闭了这类邮件）就跳过；失败的下次定时任务会重试，最多 3 次
+  async function sendOnce(kind, user, data, ref) {
+    const done = ctx.db.get("SELECT COUNT(*) n FROM emails WHERE user_id = ? AND kind = ? AND ref = ? AND status IN ('sent', 'skipped')", user.id, kind, ref).n;
+    if (done) return true;
+    if (ctx.db.get("SELECT COUNT(*) n FROM emails WHERE user_id = ? AND kind = ? AND ref = ? AND status = 'failed'", user.id, kind, ref).n >= 3) return true;
+    const ok = await send(kind, user, data, null, ref);
+    return ok || (OPTIONAL.includes(kind) && ctx.json(user.prefs, {})[kind] === false); // 用户关掉了这类邮件也算"处理完了"
   }
 
   if (!drivers[ctx.cfg.mailDriver]) throw new Error("unknown MAIL_DRIVER " + ctx.cfg.mailDriver);
-  return { send, outbox, verifyUnsubscribe, recipient, when, OPTIONAL };
+  return { send, sendOnce, outbox, verifyUnsubscribe, recipient, when, OPTIONAL };
 }
 
 module.exports = { createMailer };

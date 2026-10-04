@@ -231,18 +231,21 @@
     return inv.status === "pending" && r && ms(now) >= roundEndMs(r) ? "expired" : inv.status;
   }
   const between = (inv, x, y) => (inv.fromId === x && inv.toId === y) || (inv.fromId === y && inv.toId === x);
-  // c = { round, fromId, toId, fromJoined, toJoined, invites（本轮的邀请）, everMatched（以前匹配过的 pairKey 集合）, now }
+  // c = { round（当前轮）, fromId, toId, fromJoined, toJoined, invites, now }
+  // invites = 所有还没结束的轮里的邀请；每条可带自己的 round（周末时上一周和下一周同时有效），没带就当作当前轮
   function checkInvite(c) {
     if (isRoundOver(c.round, c.now)) return deny("conflict", "round_closed");
     if (!c.fromJoined) return deny("forbidden", "not_joined");
     if (!c.toId || !c.toJoined) return deny("not_found");
     if (c.toId === c.fromId) return deny("forbidden", "self");
-    const here = (c.invites || []).filter((i) => between(i, c.fromId, c.toId));
+    const live = (c.invites || []).filter((i) => !isRoundOver(i.round || c.round, c.now));
+    const here = live.filter((i) => between(i, c.fromId, c.toId));
     if (here.some((i) => i.status === "accepted")) return deny("conflict", "already_matched");
-    const reverse = here.find((i) => i.fromId === c.toId && inviteStatus(i, c.round, c.now) === "pending");
+    const reverse = here.find((i) => i.fromId === c.toId && inviteStatus(i, i.round || c.round, c.now) === "pending");
     if (reverse) return { ok: true, autoAccept: reverse.id }; // 对方已经邀请过你：直接匹配
     if (here.some((i) => i.fromId === c.fromId)) return deny("conflict", "already_invited");
-    const open = (c.invites || []).filter((i) => i.fromId === c.fromId && inviteStatus(i, c.round, c.now) === "pending").length;
+    // 名额：被跳过的邀请在发起人这边仍然算"等待回复"，直到它所在的轮结束（否则名额突然空出来就暴露了"对方跳过"）
+    const open = live.filter((i) => i.fromId === c.fromId && (i.status === "pending" || i.status === "skipped")).length;
     if (open >= c.round.maxOpenInvites) return deny("rate_limited", "too_many_open");
     return { ok: true };
   }
@@ -277,8 +280,9 @@
     if (!roleOf(inv, userId)) return deny("not_found");
     if (inv.status !== "accepted") return deny("conflict", "not_matched");
     if (inv.slot && ms(now) >= slotStart(r, inv.slot)) return deny("conflict", "already_started");
-    if (slot === null) return { ok: true, next: Object.assign({}, inv, { slot: null, scheduledBy: null, scheduledAt: null }) };
-    if ((available || []).indexOf(slot) < 0 && slot !== inv.slot) return deny("conflict", "slot_unavailable");
+    if (slot === null) return { ok: true, unchanged: !inv.slot, next: Object.assign({}, inv, { slot: null, scheduledBy: null, scheduledAt: null }) };
+    if (slot === inv.slot) return { ok: true, unchanged: true, next: inv }; // 重复提交同一个时间：什么都不变，也不重复发邮件
+    if ((available || []).indexOf(slot) < 0) return deny("conflict", "slot_unavailable");
     return { ok: true, next: Object.assign({}, inv, { slot, scheduledBy: userId, scheduledAt: iso(now) }) };
   }
   // "见到了吗"：约定时间开始之后（没约定时间则匹配后任何时候）
@@ -328,7 +332,7 @@
   function recommend(c) {
     const r = c.round, me = c.me, everMatched = c.everMatched || {}, dismissed = c.dismissed || [], busy = c.busy || {};
     const incoming = {};
-    (c.invites || []).forEach((i) => { if (inviteStatus(i, r, c.now) === "pending") incoming[i.toId] = (incoming[i.toId] || 0) + 1; });
+    (c.invites || []).forEach((i) => { if (inviteStatus(i, i.round || r, c.now) === "pending") incoming[i.toId] = (incoming[i.toId] || 0) + 1; });
     const theme = r.themeTags || [];
     const scored = [];
     (c.people || []).forEach((p) => {
