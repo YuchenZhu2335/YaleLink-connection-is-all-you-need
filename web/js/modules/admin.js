@@ -32,7 +32,7 @@
   const ROUND_STATUSES = ["draft", "published"];
   const MAIL_KINDS = ["login_code", "contact_code", "match", "scheduled", "invite_digest", "reminder", "weekly", "event"];
   const MAIL_STATUSES = ["sent", "failed", "skipped"];
-  const FB_KINDS = ["bug", "idea", "other"];
+  const FB_KINDS = ["bug", "idea", "report", "other"]; // report = 举报（PRD 4.8：24 小时内处理或转交）
   const DASH = "—";
 
   // 保存活动轮后回到列表时显示一次的提示 { id, title, status }
@@ -83,7 +83,7 @@
   const pill = (text, cls, iconName) => `<span class="pill${cls ? " " + cls : ""}">${iconName ? icon(iconName) : ""}${esc(text)}</span>`;
   const roundStatusPill = (s) => pill(statusLabel(s), s === "published" ? "pill--success" : "");
   const MAIL_PILL = { sent: "pill--success", failed: "pill--warn", skipped: "" };
-  const FB_PILL = { bug: "pill--warn", idea: "pill--incoming", other: "" };
+  const FB_PILL = { bug: "pill--warn", idea: "pill--incoming", report: "pill--danger", other: "" };
   // 统计卡（§5.19）：名称在上（CSS 调换顺序）、Newsreader 大数字、数字下方 14px 的派生比例
   const stat = (value, label, note) => `<div class="stat"><strong>${esc(value)}</strong><span>${esc(label)}</span>${note ? `<p>${esc(note)}</p>` : ""}</div>`;
   const moreLink = (href, text) => `<a class="btn btn--ghost btn--sm" href="${href}">${esc(text)}${icon("arrowRight")}</a>`;

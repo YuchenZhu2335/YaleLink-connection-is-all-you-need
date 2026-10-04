@@ -1027,7 +1027,7 @@
         card.dataset.busy = "1"; YL.ui.busy(btn, true);
         r = await YL.api.post(`/coffee/matches/${encodeURIComponent(id)}/outcome`, { met: btn.dataset.met === "1" });
         if (!ctx.isActive()) return;
-        if (r.ok) YL.ui.toast(t("coffee.outcome.thanks"), "success");
+        if (r.ok) YL.ui.toast(myAnswer(m) ? t("coffee.outcome.updated") : t("coffee.outcome.thanks"), "success");
       } else return;
       if (!r.ok) {
         YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error");
@@ -1058,6 +1058,9 @@
     const wk = /^week-(\d{4}-\d{2}-\d{2})$/.exec(String(m.roundId || ""));
     return wk ? t("coffee.round.weeklyOf", { range: md(wk[1]) + "–" + md(D.addDays(wk[1], 6)) }) : L(m.roundTitle);
   }
+  // 我对"见到了吗"的回答。没约时间的匹配网页上不说"没见到"（§4.4.6 第 8 条）：点过"我们聊过了"又改成"其实还没聊"的
+  // （记为 missed）按还没回答显示，可以再点"我们聊过了"
+  const myAnswer = (m) => (m.myOutcome === "missed" && !m.slot ? null : m.myOutcome || null);
   function matchHtml(m, expanded) {
     const tz = m.timezone || D.DEFAULT_ROUND.timezone, mid = esc(m.matchId);
     const timeBtn = (s, sel) => `<button type="button" class="time${sel ? " is-selected" : ""}" data-act="schedule" data-slot="${esc(s)}" aria-pressed="${!!sel}">${esc(whenText(s))}<small>${esc(bjFull(tz, s))}</small></button>`;
@@ -1090,10 +1093,15 @@
       when = `<p class="small faint">${esc(t("coffee.matches.roundOver"))}</p>`;
     }
     let outcome = "";
-    if (m.myOutcome) {
-      // 答过之后（§5.17）：见到了 → notice--success；没见到 → 中性的 notice--info
+    if (myAnswer(m)) {
+      // 答过之后（§5.17）：见到了 → notice--success；没见到 → 中性的 notice--info。
+      // 后端允许改答案（recordOutcome 覆盖）：还能回答时（canReport）给一个小按钮，直接改成另一个答案
+      const change = !m.canReport ? ""
+        : !m.slot ? ["0", t("coffee.outcome.notYet")]
+        : metAlready ? ["0", t("coffee.outcome.changeToNo")] : ["1", t("coffee.outcome.changeToYes")];
       outcome = noticeHtml(metAlready ? "success" : "info", metAlready ? "check" : "info",
-        `<p><strong>${esc(metAlready ? t("coffee.outcome.met") : t("coffee.outcome.missed"))}</strong></p><p>${esc(t("coffee.outcome.recorded"))}</p>`);
+        `<p><strong>${esc(metAlready ? t("coffee.outcome.met") : t("coffee.outcome.missed"))}</strong></p><p>${esc(t("coffee.outcome.recorded"))}</p>
+        ${change ? `<p><button type="button" class="link-btn" data-act="outcome" data-met="${change[0]}">${esc(change[1])}</button></p>` : ""}`);
     } else if (m.canReport && m.slot) {
       // 约定的时间已经开始：问见到了没有（见到了 = primary，没见到 = secondary）
       outcome = `<div class="person__foot"><span class="small">${esc(t("coffee.outcome.ask"))}</span>

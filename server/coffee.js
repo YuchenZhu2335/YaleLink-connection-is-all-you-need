@@ -54,6 +54,7 @@ function install(app, ctx) {
     return db.all("SELECT u.*, p.slots AS p_slots, p.updated_at AS p_updated FROM participations p JOIN users u ON u.id = p.user_id WHERE p.round_id = ? AND u.profile_done_at IS NOT NULL AND u.consent_version = ?", round.id, ctx.cfg.consentVersion)
       .map((u) => ({ id: u.id, identity: u.identity, stage: u.stage, gradYear: u.grad_year, answers: J(u.answers, {}), slots: J(u.p_slots, []), updatedAt: u.p_updated, row: u }));
   }
+  // 参与人数：和 participants() 同一个条件。约咖啡首页、推荐门槛、活动页、网站首页活动卡、后台概览都用这一个数
   const participantCount = (round) => db.get("SELECT COUNT(*) n FROM participations p JOIN users u ON u.id = p.user_id WHERE p.round_id = ? AND u.profile_done_at IS NOT NULL AND u.consent_version = ?", round.id, ctx.cfg.consentVersion).n;
   // 以前匹配过的人（任意一轮）
   function everMatched(userId) {
@@ -308,10 +309,10 @@ function install(app, ctx) {
     arr.push(t); feedbackHits.set(req.user.id, arr);
     const r = db.run("INSERT INTO feedback (user_id, kind, text, created_at) VALUES (?, ?, ?, ?)", req.user.id, req.body.kind, String(req.body.text).trim(), now());
     return { id: String(r.lastInsertRowid) };
-  });
+  }, { auth: "consented" }); // 不需要完成资料，但要先同意当前版本的隐私说明
 
   /* ---------- 活动页（不需要登录，方便转发推广） ---------- */
-  const publicRound = (r, t) => Object.assign(roundDTO(r), { open: C.isRoundOpen(r, t), upcoming: !C.isRoundOpen(r, t) && !C.isRoundOver(r, t), participants: db.get("SELECT COUNT(*) n FROM participations WHERE round_id = ?", r.id).n });
+  const publicRound = (r, t) => Object.assign(roundDTO(r), { open: C.isRoundOpen(r, t), upcoming: !C.isRoundOpen(r, t) && !C.isRoundOver(r, t), participants: participantCount(r) });
   app.route("GET", "/rounds/events", () => {
     const t = now();
     return db.all("SELECT * FROM rounds WHERE kind = 'event' AND status = 'published' ORDER BY start_date DESC LIMIT 50").map(toRound).map((r) => publicRound(r, t));
@@ -322,7 +323,7 @@ function install(app, ctx) {
     return publicRound(r, now());
   }, { auth: "none" });
 
-  return { currentRound, activeRounds, activeInvites, toRound, roundInvites, participants, busyMap, roundById };
+  return { currentRound, activeRounds, activeInvites, toRound, roundInvites, participants, participantCount, busyMap, roundById };
 }
 
 module.exports = { install };

@@ -40,6 +40,31 @@ test("不登录的请求被拒绝时不写审计日志（防止匿名刷爆日�
   } finally { await srv.close(); }
 });
 
+test("没有用户编号的失败请求一律不写审计：「不是 JSON」的匿名写请求、跨站来源、坏 JSON、请求体太大、非耶鲁邮箱、验证码错误、退订签名无效；登录用户的失败照记", async () => {
+  const srv = await start();
+  try {
+    const post = (p, headers, body) => raw(srv, "/api" + p, headers, "POST", body);
+    const json = { "Content-Type": "application/json" };
+    for (let i = 0; i < 3; i++) {
+      assert.equal((await post("/auth/verify", { "Content-Type": "text/plain" }, JSON.stringify({ email: "a@yale.edu", code: "123456" }))).status, 400);
+      assert.equal((await post("/feedback", { "Content-Type": "text/plain" }, "hello")).status, 400);
+      assert.equal((await post("/auth/verify", Object.assign({ Origin: "https://evil.example" }, json), "{}")).status, 403);
+      assert.equal((await post("/auth/verify", json, "[1]")).status, 400);
+      assert.equal((await post("/auth/verify", json, JSON.stringify({ email: "x".repeat(200 * 1024) }))).status, 413);
+      assert.equal((await post("/auth/verify", json, JSON.stringify({ email: "x@gmail.com", code: "123456" }))).status, 400);
+      assert.equal((await post("/auth/verify", json, JSON.stringify({ email: "a@yale.edu", code: "123456" }))).status, 400);
+      assert.equal((await post("/email/unsubscribe?u=u-x&k=weekly&s=" + "A".repeat(32), { "Content-Type": "application/x-www-form-urlencoded" }, "")).status, 400);
+    }
+    assert.equal(srv.db.get("SELECT COUNT(*) n FROM audit_log").n, 0, "匿名请求刷不大日志");
+
+    const c = await signUp(srv, "au1@yale.edu");
+    const id = (await c.get("/me")).data.id, before = srv.db.get("SELECT COUNT(*) n FROM audit_log").n;
+    assert.equal((await c.post("/feedback", { kind: "nope", text: "?" })).status, 400);
+    assert.equal(srv.db.get("SELECT COUNT(*) n FROM audit_log").n, before + 1);
+    assert.deepEqual({ ...srv.db.get("SELECT actor, op, ok, code FROM audit_log ORDER BY id DESC LIMIT 1") }, { actor: id, op: "POST /feedback", ok: 0, code: "invalid" });
+  } finally { await srv.close(); }
+});
+
 test("发验证码的返回对任何邮箱都一样（不能用来探测谁注册过、联系邮箱是什么）；邮箱格式严格", async () => {
   const srv = await start();
   try {

@@ -3,14 +3,19 @@
 
    #/about            Yalelux 是什么、谁在做、第一期做什么 / 故意不做什么、怎么匹配、怎么联系我们
    #/about/privacy    完整的隐私说明（版本号 = GET /meta 的 consentVersion）
-   #/about/feedback   意见箱：只需登录（接口只要求登录）→ POST /feedback { kind, text } → 感谢
+   #/about/feedback   意见箱：登录 + 同意当前版本的隐私说明（不用填资料）→ POST /feedback { kind, text } → 感谢
+                      还没同意的先去 #/profile/setup?only=consent，同意后回到这里；类型里的"举报"见 PRD 4.8
 
    文案都在词典里（about.*）；隐私说明改了内容要同时升后端的 CONSENT_VERSION，让大家重新确认。 */
 (function () {
   "use strict";
   const { t, esc, icon } = YL.ui;
   const D = YL.domain.coffee;
-  const KINDS = [["bug", "alertCircle"], ["idea", "sun"], ["other", "message"]];
+  const KINDS = [["bug", "alertCircle"], ["idea", "sun"], ["report", "flag"], ["other", "message"]];
+  // 举报（PRD 4.8）：提示里请对方写清被举报人的名字、哪一轮、发生了什么，以及怎么联系举报人（管理员看不到他的邮箱）
+  const hintText = (kind) => (kind === "report" ? t("about.feedback.reportHint") : t("about.feedback.hint"));
+  const placeholderText = (kind) => (kind === "report" ? t("about.feedback.reportPlaceholder") : t("about.feedback.placeholder"));
+  const CONSENT_STEP = "profile/setup?only=consent&next=" + encodeURIComponent("about/feedback");
 
   // 表单逐项报错由 YL.ui.showFieldErrors(form, fields, "about") 显示，用到的文案：
   //   t("about.field.kind.invalid")、t("about.field.text.too_short")、t("about.field.text.too_long")
@@ -23,13 +28,14 @@
   // 正在发送 / 刚发出去但页面已经重绘（比如中途切了语言）：新页面接着显示结果，不让人重复发
   let sending = null;   // { uid, promise }
   let sentFor = "";     // 发送成功、但当时的页面已经不在了：下次打开意见箱先显示"收到了"
+  let sentKind = "";    // 最近发出的那一条的类型（举报的感谢语不一样）
   function send(input) {
     const owner = uid();
     const promise = YL.api.post("/feedback", input);
     sending = { uid: owner, promise };
     promise.then((r) => {
       if (sending && sending.promise === promise) sending = null;
-      if (r.ok) { if (draft.uid === owner) draft = blankDraft(owner); sentFor = owner; }
+      if (r.ok) { if (draft.uid === owner) draft = blankDraft(owner); sentFor = owner; sentKind = input.kind; }
     });
     return promise;
   }
@@ -162,6 +168,12 @@
 
   /* ---------- #/about/feedback ---------- */
   const textLen = (s) => String(s || "").trim().length;
+  async function reconsent(ctx) {
+    await YL.auth.refresh();
+    if (!ctx.isActive()) return;
+    YL.router.render();
+    YL.ui.toast(t("about.err.needs_consent"), "error");
+  }
   function clearOne(field) {
     field.classList.remove("is-invalid");
     YL.ui.$$(".field__error", field).forEach((x) => x.remove());
@@ -172,6 +184,7 @@
     const max = D.LIMITS.feedbackMax;
     const chips = KINDS.map(([k, ic]) => `
           <label class="choice"><input type="radio" class="sr-only" name="kind" value="${k}"${draft.kind === k ? " checked" : ""}><span class="chip">${icon(ic)}${esc(t("about.feedback.kind." + k))}</span></label>`).join("");
+    // 提示和占位文字跟着类型变（选了"举报"就说明要写什么）；aria-live 让读屏在切换类型时念出新的提示
     return `
       <form class="form card" novalidate data-fb-form>
         <div class="field" data-field="kind">
@@ -180,8 +193,8 @@
         </div>
         <div class="field" data-field="text">
           <label class="field__label" for="fb-text">${esc(t("about.feedback.text"))}<span class="req" aria-hidden="true">*</span></label>
-          <textarea class="textarea" id="fb-text" name="text" rows="6" maxlength="${max}" required aria-describedby="fb-hint fb-count" placeholder="${esc(t("about.feedback.placeholder"))}">${esc(draft.text)}</textarea>
-          <p class="field__hint" id="fb-hint">${esc(t("about.feedback.hint"))}</p>
+          <textarea class="textarea" id="fb-text" name="text" rows="6" maxlength="${max}" required aria-describedby="fb-hint fb-count" placeholder="${esc(placeholderText(draft.kind))}">${esc(draft.text)}</textarea>
+          <p class="field__hint" id="fb-hint" aria-live="polite">${esc(hintText(draft.kind))}</p>
           <p class="field__count" id="fb-count">${esc(t("about.feedback.count", { n: textLen(draft.text), max }))}</p>
         </div>
         <div data-msg hidden></div>
@@ -191,7 +204,7 @@
   function doneHtml() {
     return `
       <div class="card stack">
-        ${notice("success", "check", `<h2 class="section-title" tabindex="-1" data-focus>${esc(t("about.feedback.thanksTitle"))}</h2><p>${esc(t("about.feedback.thanksText"))}</p>`, "status")}
+        ${notice("success", "check", `<h2 class="section-title" tabindex="-1" data-focus>${esc(t("about.feedback.thanksTitle"))}</h2><p>${esc(sentKind === "report" ? t("about.feedback.thanksReport") : t("about.feedback.thanksText"))}</p>`, "status")}
         <div class="cluster">
           <button type="button" class="btn btn--secondary" data-act="again">${icon("edit")}${esc(t("about.feedback.again"))}</button>
           ${YL.auth.isReady()
@@ -214,6 +227,8 @@
         </section>`;
       return;
     }
+    // 提意见会保存个人信息：先同意当前版本的隐私说明（只走这一步，不用填联系邮箱和资料），同意后回到这里；写了一半的内容留着
+    if (YL.auth.user().needsConsent) { YL.router.navigate(CONSENT_STEP, { replace: true }); return; }
     // 上一次发送在页面重绘前已经成功了：直接显示"收到了"
     const showDone = sentFor && sentFor === uid();
     if (showDone) sentFor = "";
@@ -226,6 +241,8 @@
       YL.ui.busy(btn, false);
       if (!r.ok) {
         if (r.error && r.error.fields) { YL.ui.showFieldErrors(form, r.error.fields, "about"); return; }
+        // 页面打开期间隐私说明升了版本（forbidden / needs_consent）：刷新登录状态再重绘，会先去同意页、同意后回来（草稿还在）
+        if (r.error && r.error.reason === "needs_consent") { reconsent(ctx); return; }
         const msg = form.querySelector("[data-msg]");
         msg.innerHTML = notice("danger", "alertCircle", `<p>${esc(YL.ui.errorText(r.error, "about"))}</p>`, "alert");
         msg.hidden = false;
@@ -259,6 +276,10 @@
     page.addEventListener("change", (e) => {
       if (e.target.name !== "kind") return;
       myDraft().kind = e.target.value;
+      const form = e.target.closest("[data-fb-form]");
+      const hint = form.querySelector("#fb-hint"), text = form.querySelector("#fb-text");
+      if (hint.textContent !== hintText(e.target.value)) hint.textContent = hintText(e.target.value);
+      text.placeholder = placeholderText(e.target.value);
       const f = e.target.closest(".field.is-invalid");
       if (f) clearOne(f);
     });

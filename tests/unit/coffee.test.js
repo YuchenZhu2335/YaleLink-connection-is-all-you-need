@@ -197,3 +197,10 @@ test("通知偏好：匹配成功的邮件不能关；意见箱校验", () => {
   assert.equal(R.validateFeedback({ kind: "bug", text: "手机上拖选不灵" }).ok, true);
   assert.deepEqual(R.validateFeedback({ kind: "rant", text: "?" }).fields, { kind: "invalid", text: "too_short" });
 });
+
+test("意见箱类型：问题 / 建议 / 举报 / 其他；内容 5–1000 字", () => {
+  for (const kind of ["bug", "idea", "report", "other"]) assert.equal(R.validateFeedback({ kind, text: "第 3 周有人反复发骚扰消息" }).ok, true, kind);
+  assert.deepEqual(R.FEEDBACK_KINDS, ["bug", "idea", "report", "other"]);
+  assert.deepEqual(R.validateFeedback({ kind: "report", text: "x".repeat(1001) }).fields, { text: "too_long" });
+  assert.deepEqual(R.validateFeedback({ kind: "Report", text: "大小写不同不算" }).fields, { kind: "invalid" });
+});

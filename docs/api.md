@@ -9,16 +9,18 @@
 - `fields`：表单逐项错误，如 `{ email: "not_yale" }`、`{ name: "required" }`、`{ q_interests: "too_many" }`（问卷题目的错误键是 `q_<题目 id>`）。
 - 写请求必须 `Content-Type: application/json`，且来自本站（否则 `invalid / json_required`、`forbidden / bad_origin`）。
 - 会话：登录成功后后端设置 httpOnly Cookie `yl_sid`（30 天）。前端不保存任何凭证。
-- 鉴权级别：`none` 不需要登录；`user` 需要登录；`ready` 需要完成首次填写（同意当前版本的隐私说明 + 联系邮箱 + 资料），否则 `forbidden / profile_incomplete`；`admin` 管理员（环境变量 `ADMIN_EMAILS`，且本次用耶鲁邮箱登录）。
+- 鉴权级别：`none` 不需要登录；`user` 需要登录；`consented` 需要登录并同意了当前版本的隐私说明（会写入个人信息的接口：资料、联系邮箱、邮件开关、意见箱），否则 `forbidden / needs_consent`（隐私说明升版后，重新同意之前同样被拒）；`ready` 需要完成首次填写（同意当前版本的隐私说明 + 联系邮箱 + 资料），否则 `forbidden / profile_incomplete`；`admin` 管理员（环境变量 `ADMIN_EMAILS`，且本次用耶鲁邮箱登录）。没登录时一律 `unauthorized`。
+- 要求"本次是用耶鲁邮箱登录的"（`Me.via === "yale"`）的操作：换联系邮箱（已经填过之后）、改资料里的 `contactMethod`（已经填过、并且值真的变了）、注销账号；否则 `forbidden / reverify_yale`，界面提示用耶鲁邮箱重新登录。
 - 任何畸形请求（坏的 % 转义、超长 id、非对象 JSON、超过 100KB 的请求体）只会得到 400 / 404 / 413，不会影响服务。
-- 所有写操作和管理员的查看都写审计日志。
+- 所有写操作和管理员的查看都写审计日志。例外：没有用户编号的失败请求一律不记（没登录、不是 JSON、跨站来源、坏 JSON / 请求体太大、登录验证码错误、退订签名无效……），防止匿名请求刷大日志；登录用户的失败照记。
+- 每个带有效会话的请求都记一次访问（每人每个 UTC 日最多写一次库，见 `docs/data-model.md` 的 `user_visits`），用于后台的 7 日回访；不改变任何返回。
 
 ## 公开信息
 
 | 方法 | 路径 | 鉴权 | 入参 | 返回 data |
 |---|---|---|---|---|
 | GET | `/meta` | none | — | `{ consentVersion, dev, smartRecAvailable, questions }`；`questions` 即 `web/data/matchQuestions.json` 的题目数组；`dev` 为真时验证码打印在服务器终端 |
-| GET | `/rounds/events` | none | — | 已发布的活动轮数组（见 RoundDTO + `open, upcoming, participants`），新的在前 |
+| GET | `/rounds/events` | none | — | 已发布的活动轮数组（见 RoundDTO + `open, upcoming, participants`），新的在前；`participants` 和约咖啡首页、后台概览同一个口径：保存了空闲时间、资料完整、同意了当前版本隐私说明的人数 |
 | GET | `/rounds/:id` | none | — | 单个已发布轮次（同上） |
 
 ## 登录与账号
@@ -31,11 +33,11 @@
 | POST | `/auth/logout` | user | `{ all?: true }`（所有设备都退出） | `{ ok: true }` |
 | GET | `/me` | user | — | `Me` |
 | POST | `/me/consent` | user | `{ version }`（= `/meta` 的 `consentVersion`） | `Me` |
-| POST | `/me/contact-email` | user | `{ email }` | `Me + { sentTo }`（发出验证码）；同一个已验证邮箱则直接返回 `Me`；换邮箱后其他设备的登录全部失效；错误 `fields.contactEmail = "invalid"`、`forbidden / reverify_yale`（已经填过联系邮箱之后再换，需要本次是用耶鲁邮箱登录的）、`rate_limited / resend_too_soon`、`internal / mail_failed` |
-| POST | `/me/contact-email/verify` | user | `{ code }` | `Me`（验证后其他设备的登录失效）；错误同验证码、`conflict / email_changed` |
-| POST | `/me/profile` | user | `{ name, identity: "student"\|"alumni", stage?, gradYear?, job?, city?, contactMethod, answers: { goals: [], interests: [], field: "", intro: "" } }` | `Me`；错误 `fields.*`：`required`、`too_long`、`invalid`、`q_<id>: required \| invalid \| too_many \| too_long` |
-| POST | `/me/prefs` | user | `{ prefs: { invite_digest, reminder, weekly, event: bool }, smartRec: bool }` | `Me` |
-| POST | `/me/delete` | user | `{ confirm: "DELETE" }` | `{ deleted: true }`（同时退出登录） |
+| POST | `/me/contact-email` | consented | `{ email }` | `Me + { sentTo }`（发出验证码）；同一个已验证邮箱则直接返回 `Me`；换邮箱后其他设备的登录全部失效；错误 `forbidden / needs_consent`、`fields.contactEmail = "invalid"`、`forbidden / reverify_yale`（已经填过联系邮箱之后再换，需要本次是用耶鲁邮箱登录的）、`rate_limited / resend_too_soon \| too_many_requests`（每人每小时 5 次）、`internal / mail_failed` |
+| POST | `/me/contact-email/verify` | consented | `{ code }` | `Me`（验证后其他设备的登录失效）；错误 `forbidden / needs_consent`、同验证码、`conflict / email_changed` |
+| POST | `/me/profile` | consented | `{ name, identity: "student"\|"alumni", stage?, gradYear?, job?, city?, contactMethod, answers: { goals: [], interests: [], field: "", intro: "" } }` | `Me`；错误 `forbidden / needs_consent`；`fields.*`：`required`、`too_long`、`invalid`、`q_<id>: required \| invalid \| too_many \| too_long`（先校验字段）；`forbidden / reverify_yale`：已经填过联系方式、这次的 `contactMethod`（去掉首尾空格后）和原来不同、并且本次不是用耶鲁邮箱登录的（第一次填写不限；联系方式不变时改别的资料不限）。被拒时整份资料都没有保存 |
+| POST | `/me/prefs` | consented | `{ prefs: { invite_digest, reminder, weekly, event: bool }, smartRec: bool }` | `Me`；错误 `forbidden / needs_consent` |
+| POST | `/me/delete` | user | `{ confirm: "DELETE" }` | `{ deleted: true }`（同时退出登录）；不要求先同意隐私说明；错误 `fields.confirm = "required"`、`forbidden / reverify_yale`（本次不是用耶鲁邮箱登录的） |
 | GET | `/email/unsubscribe?u&k&s` | none | 邮件里的签名链接 | HTML 确认页（只显示按钮，不改设置——邮件安全扫描器会自动打开链接） |
 | POST | `/email/unsubscribe?u&k&s` | none | 表单提交或邮箱客户端的一键退订（RFC 8058） | HTML："已退订" |
 
@@ -43,7 +45,7 @@
 - `via`：这次登录的验证码发到了哪里（`yale` / `contact`）
 - `isAdmin`：管理员名单里**并且**本次用耶鲁邮箱登录；`adminNeedsYale = true` 表示在名单里但这次是用联系邮箱登录的（界面提示"用耶鲁邮箱重新登录才能进后台"）
 
-## 约咖啡（全部需要 `ready`）
+## 约咖啡（除了 `/feedback`，全部需要 `ready`）
 
 | 方法 | 路径 | 入参 | 返回 data / 错误 |
 |---|---|---|---|
@@ -59,7 +61,7 @@
 | GET | `/coffee/matches` | — | `[Card + { matchId, roundId, roundTitle, timezone, contactMethod, slot, scheduledBy: "me"\|"them"\|null, available: [slotId], canSchedule, myOutcome: "met"\|"missed"\|null, canReport }]` |
 | POST | `/coffee/matches/:id/schedule` | `{ slot }`（`null` = 取消约定） | `{ id, slot }`（重复提交同一个时间不会重复发邮件）；错误 `conflict / slot_unavailable \| already_started \| not_matched` |
 | POST | `/coffee/matches/:id/outcome` | `{ met: true\|false }` | `{ id, outcome }`；错误 `conflict / too_early` |
-| POST | `/feedback` | `{ kind: "bug"\|"idea"\|"other", text（5–1000 字） }`（只需登录） | `{ id }` |
+| POST | `/feedback` | `{ kind: "bug"\|"idea"\|"report"\|"other", text（5–1000 字） }`（鉴权 `consented`：不需要完成资料，但要先同意当前版本的隐私说明；`report` = 举报） | `{ id }`；错误 `forbidden / needs_consent`、`fields.kind = "invalid"`、`fields.text = "too_short" \| "too_long"`、`rate_limited / too_many_requests`（每人每小时 10 条） |
 
 - `Card` = `{ id, name, identity, stage, gradYear, job, city, answers }`（`answers` 只含问卷里 `public: true` 的题目；**没有**邮箱和联系方式）
 - 第三方看到的 `overlap` / `overlapCount` 只扣掉**查看者自己**已约定的时段；匹配双方的 `available` 扣掉两人在所有进行中的轮里已约定的时段
@@ -74,12 +76,15 @@
 
 | 方法 | 路径 | 入参 | 返回 data |
 |---|---|---|---|
-| GET | `/admin/overview` | — | `{ users: { total, profileDone, contactVerified, smartRecOff }, round: { id, kind, title, participants, invites, pending, matches, skipped, scheduled, fromRecs, engines } \| null, allTime: { matches, met, missed }, emails7d: [{ kind, status, n }], feedback }` |
+| GET | `/admin/overview` | — | `{ users: { total, profileDone, contactVerified, smartRecOff }, round: { id, kind, title, participants, invites, pending, matches, skipped, scheduled, fromRecs, engines } \| null, allTime: { matches, met, missed }, emails7d: [{ kind, status, n }], feedback, retention: { cohorts: [{ week, registered, returned, complete }] } }`（见下） |
 | GET | `/admin/rounds` | — | 轮次数组（RoundDTO + `status: "draft"\|"published"`） |
 | POST | `/admin/rounds` | `{ id?（改已有活动轮）, title: {zh,en}, startDate, endDate, themeTags: [], recCount, openBrowse, status: "draft"\|"published", post: { title, body, wechat } }` | 保存后的轮次；错误 `fields.title / startDate / endDate`、`fields.themeTags`（`too_many`：超过 5 个；`too_long`：某个超过 20 个字符，按码点计）、`conflict / overlaps_event`（与另一个已发布活动轮时间重叠） |
 | GET | `/admin/feedback` | — | `[{ id, kind, text, created_at, name }]` |
 | GET | `/admin/emails` | — | `[{ id, kind, status: "sent"\|"failed"\|"skipped", error, created_at }]` |
 | GET | `/admin/audit` | — | `[{ id, at, actor, op, target, ok, code }]` |
+
+- `round.participants`：和约咖啡首页（`/coffee/state`）、活动页（`/rounds/*`）同一个口径——这一轮保存了空闲时间、资料完整、同意了当前版本隐私说明的人数。
+- `retention.cohorts`（PRD 1.3 的 7 日回访）：最近 4 周，新的在前。`week` = 注册那天（UTC 日期）所在那一周的周一（`YYYY-MM-DD`）；`registered` = 这一周注册、现在还在的账号数（已注销的不计）；`returned` = 其中注册后第 2–7 天（注册日之后的 1–6 个 UTC 日）又打开过网站（带登录状态请求过任一接口）的人数；`complete` = 这一周最晚注册的人的第 7 天也已经过完，数字不会再变（否则界面应标"统计中"）。回访率 = `returned / registered`。
 
 ## 本地开发
 

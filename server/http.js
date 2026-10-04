@@ -40,7 +40,9 @@ function createApp(ctx) {
     const hops = String(req.headers["x-forwarded-for"] || "").split(",").map((s) => s.trim()).filter(Boolean);
     return hops.length ? hops[hops.length - 1] : direct;
   }
-  // meta: { auth: "user"（默认）| "none" | "ready" | "admin", audit, html(data) 返回网页, form: 允许表单提交（只用于签名链接）, localOnly: 只允许本机访问 }
+  // meta: { auth, audit, html(data) 返回网页, form: 允许表单提交（只用于签名链接）, localOnly: 只允许本机访问 }
+  // auth: "user"（默认，登录即可）| "none" | "consented"（还要同意当前版本的隐私说明：会写入个人信息的接口）
+  //       | "ready"（还要填好联系邮箱和资料：约咖啡）| "admin"
   function route(method, pattern, handler, meta) {
     const keys = [];
     const re = new RegExp("^" + pattern.split("/").map((seg) => (seg[0] === ":" ? (keys.push(seg.slice(1)), "([^/]+)") : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("/") + "/?$");
@@ -71,7 +73,16 @@ function createApp(ctx) {
     const now = new Date();
     ctx.db.run("INSERT INTO sessions (id, user_id, via, created_at, expires_at) VALUES (?, ?, ?, ?, ?)", sha256(token), userId, via, now.toISOString(), new Date(now.getTime() + SESSION_DAYS * 86400000).toISOString());
     res.setHeader("Set-Cookie", cookie(token, SESSION_DAYS * 86400));
+    touch({ id: userId });
     return sha256(token);
+  }
+  // 记访问（PRD 1.3 的 7 日回访）：每人每个 UTC 日最多写一次。
+  // 拿已经读出来的 users.last_seen_at 比日期，同一天的后续请求不再写库；不写在 sessions 上（会话会被整行删除）
+  function touch(user) {
+    const t = new Date().toISOString(), day = t.slice(0, 10);
+    if (user.last_seen_at && user.last_seen_at.slice(0, 10) === day) return;
+    ctx.db.run("UPDATE users SET last_seen_at = ? WHERE id = ?", t, user.id);
+    ctx.db.run("INSERT OR IGNORE INTO user_visits (user_id, day) VALUES (?, ?)", user.id, day);
   }
   function endSession(req, res) {
     const token = sessionToken(req);
@@ -152,8 +163,10 @@ function createApp(ctx) {
         const origin = req.headers.origin;
         if (origin && origin !== ctx.cfg.publicUrl && origin !== "http://" + req.headers.host && origin !== "https://" + req.headers.host) throw fail("forbidden", { reason: "bad_origin" });
       }
+      if (user) touch(user);
       if (r.auth !== "none" && !user) throw fail("unauthorized");
       if (r.auth === "admin" && !ctx.isAdmin(user, who.session)) throw fail("forbidden");
+      if (r.auth === "consented" && !ctx.isConsented(user)) throw fail("forbidden", { reason: "needs_consent" });
       if (r.auth === "ready" && !ctx.isReady(user)) throw fail("forbidden", { reason: "profile_incomplete" });
       const body = req.method === "GET" ? {} : await readBody(req, r.form);
       const query = Object.fromEntries(url.searchParams.entries());
@@ -164,8 +177,9 @@ function createApp(ctx) {
       if (!(e instanceof ApiError)) { console.error(e); e = fail("internal"); }
       result = { status: STATUS[e.code], body: { ok: false, error: Object.assign({}, e.extra, { code: e.code }) } };
     }
-    // 只审计"找到了接口"的请求；没登录就被拒的不记（避免匿名请求刷爆日志）
-    if (r && r.audit && !(result.body.error && ["unauthorized", "not_found"].includes(result.body.error.code) && !actor)) {
+    // 只审计"找到了接口"的请求。没有用户编号的失败一律不记（不是 JSON、跨站来源、请求体太大或不是对象、没登录、
+    // 登录验证码错误、退订签名无效……），否则匿名请求能无限刷大日志；验证码的错误次数另有 login_codes.attempts 和按 IP 限频
+    if (r && r.audit && (result.body.ok || actor)) {
       audit(actor, req.method + " " + r.pattern, params.id || (result.body.data && result.body.data.id) || null, result.body.ok, result.body.ok ? null : result.body.error.code);
     }
     if (r && r.html) { // 邮件里点开的链接：返回一个简单网页（r.html 负责转义自己拼的内容）

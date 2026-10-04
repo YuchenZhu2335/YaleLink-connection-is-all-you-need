@@ -402,9 +402,11 @@
     EMAIL_KINDS.forEach((k) => (out[k] = REQUIRED_EMAILS.indexOf(k) >= 0 ? true : !(p && p[k] === false)));
     return out;
   }
+  // 意见箱类型：问题 / 建议 / 举报（写清对方名字、哪一轮、发生了什么）/ 其他
+  const FEEDBACK_KINDS = ["bug", "idea", "report", "other"];
   function validateFeedback(input) {
     const i = input || {}, f = {}, t = text(i.text);
-    if (["bug", "idea", "other"].indexOf(i.kind) < 0) f.kind = "invalid";
+    if (FEEDBACK_KINDS.indexOf(i.kind) < 0) f.kind = "invalid";
     if (t.length < LIMITS.feedbackMin) f.text = "too_short"; else if (t.length > LIMITS.feedbackMax) f.text = "too_long";
     return { ok: !Object.keys(f).length, fields: f };
   }
@@ -416,6 +418,6 @@
     isClosed, validateSlots, overlap,
     inviteStatus, checkInvite, createInvite, validateInviteInput, roleOf, respond, canSeeContact, schedule, recordOutcome, pairKey,
     scorePair, recommend, recsEnabled, buildRerankMessages, parseRerank, anonymize,
-    cleanPrefs, validateFeedback
+    cleanPrefs, validateFeedback, FEEDBACK_KINDS
   };
 });

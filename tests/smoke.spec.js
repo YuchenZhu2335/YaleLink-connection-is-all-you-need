@@ -143,6 +143,30 @@ test("双向确认：A 想认识 demo01 → demo01 在收件箱点想认识 → 
   expect(errors).toEqual([]);
 });
 
+// 放在"管理员"之前：那条会发布一个今天开始的活动轮，之后演示同学就不在当前轮里了
+test("见到了吗：回答之后还能改", async ({ browser }) => {
+  test.setTimeout(120000);
+  const a = await browser.newPage();
+  await signIn(a, "demo05@demo.yale.edu", "demo5@example.com");
+  await a.goto("/#/coffee/p/u-demo06");
+  await a.locator('[data-act="invite"]').first().click();
+  await a.locator('#modal button[type="submit"]').click();
+  await expect(a.locator("#modal")).toHaveCount(0);
+  const b = await browser.newPage();
+  const errors = watchErrors(b);
+  await signIn(b, "demo06@demo.yale.edu", "demo6@example.com");
+  await b.goto("/#/coffee/inbox");
+  await b.locator('[data-act="accept"]').first().click();
+  await b.goto("/#/coffee/matches");
+  const card = b.locator("[data-match]").first();
+  await card.locator('[data-act="outcome"][data-met="1"]').click(); // 没约时间："我们聊过了"
+  await expect(card.locator(".notice--success")).toContainText("见到了");
+  await card.locator('.notice--success [data-act="outcome"]').click(); // "其实还没聊"
+  await expect(card.locator(".notice--success")).toHaveCount(0);
+  await expect(card.locator('.btn[data-act="outcome"][data-met="1"]')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("管理员：完成首次填写后进后台，发布活动轮，活动页不登录也能看到", async ({ page, browser }) => {
   test.setTimeout(120000);
   const errors = watchErrors(page);
@@ -165,6 +189,43 @@ test("管理员：完成首次填写后进后台，发布活动轮，活动页�
   const anon = await browser.newPage();
   await anon.goto("/#/events");
   await expect(anon.locator("main")).toContainText("Coffee Chat 月");
+  expect(errors).toEqual([]);
+});
+
+test("意见箱：新同学只需先同意隐私说明（不用填资料）就回到意见箱，可以提交举报", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto("/#/about/feedback");
+  await page.locator('a[href="#/login?next=about/feedback"]').click();
+  await page.fill("#login-email", "e2e.fb@yale.edu");
+  await page.locator('[data-form="email"] button[type="submit"]').click();
+  await page.fill("#login-code", await codeFor(page.request, "e2e.fb@yale.edu"));
+  await expect(page).toHaveURL(/#\/profile\/setup\?only=consent&next=about%2Ffeedback/, "没同意当前版本的隐私说明：先去同意页");
+  await expect(page.locator(".steps")).toHaveCount(0);
+  await page.locator('input[name="agree"]').check();
+  await page.locator('[data-consent] button[type="submit"]').click();
+  await expect(page).toHaveURL(/#\/about\/feedback$/, "同意后回到意见箱，不要求联系邮箱和资料");
+  await page.locator('input[name="kind"][value="report"]').check({ force: true });
+  await expect(page.locator("#fb-hint")).toContainText("对方的名字");
+  await page.fill("#fb-text", "某一周匹配的同学多次发骚扰信息。可以用 wx-e2e 联系我。");
+  await page.locator('[data-fb-form] button[type="submit"]').click();
+  await expect(page.locator("[data-about] .notice--success")).toContainText("值班的同学");
+  await page.goto("/#/coffee");
+  await expect(page).toHaveURL(/#\/profile\/setup\?next=coffee/, "约咖啡照样要先补完联系邮箱和资料");
+  expect(errors).toEqual([]);
+});
+
+test("用联系邮箱登录：改联系方式、注销要先用耶鲁邮箱重新登录", async ({ page }) => {
+  const errors = watchErrors(page);
+  await signIn(page, "demo07@demo.yale.edu", "demo7@example.com"); // 验证码发到联系邮箱 = 这次是联系邮箱登录
+  await page.goto("/#/profile/edit");
+  await expect(page.locator("#pf-contactMethod-yale")).toBeVisible();
+  await page.fill("#pf-contactMethod", "微信 e2e-changed");
+  await page.locator('[data-profile-form] button[type="submit"]').click();
+  await expect(page.locator('[data-profile-form] [data-act="relogin"]')).toBeVisible();
+  await page.goto("/#/profile");
+  await page.locator('[data-act="delete"]').click();
+  await expect(page.locator('#modal [data-act="relogin"]')).toBeVisible();
+  await expect(page.locator("#del-confirm")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

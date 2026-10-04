@@ -1,7 +1,9 @@
 /* 注册登录与个人资料（需求见 docs/prd/yalelux-mvp.md）
    - 身份：耶鲁邮箱（@yale.edu / *.yale.edu / @aya.yale.edu）+ 6 位验证码，服务端校验白名单
    - 第一次必须通过耶鲁邮箱验证；之后验证码默认发到已验证的联系邮箱；每 365 天要用耶鲁邮箱重新验证一次
-   - 换联系邮箱（已经填过之后）要求本次登录是通过耶鲁邮箱验证的；换了之后其他设备的登录全部失效
+   - 换联系邮箱（已经填过之后）、改资料里的联系方式（已经填过之后）、注销账号，都要求本次登录是通过耶鲁邮箱验证的
+     （forbidden / reverify_yale）；换了联系邮箱之后其他设备的登录全部失效
+   - 填资料、联系邮箱、邮件开关之前必须同意当前版本的隐私说明（路由 auth: "consented"，见 http.js）
    - 管理员权限只给"本次通过耶鲁邮箱登录"的会话（见 app.js isAdmin）
    - 验证码：10 分钟有效、输错 5 次作废、60 秒内不能重发；同一邮箱每小时 5 封、同一 IP（IPv6 按 /64）每小时 20 次、全站每小时上限
    - 不泄露账号是否存在：发验证码的返回对任何邮箱都一样 */
@@ -100,6 +102,8 @@ function install(app, ctx) {
   }
   // 让这个人别的设备上的登录全部失效（保留当前这个）
   const revokeOthers = (userId, keepId) => db.run("DELETE FROM sessions WHERE user_id = ? AND id != ?", userId, keepId || "");
+  // 只有这次是用耶鲁邮箱收码登录的会话才能做的事（联系邮箱被盗时，对方换不掉联系邮箱 / 联系方式，也删不了号）
+  const requireYale = (req) => { if (req.session.via !== "yale") throw fail("forbidden", { reason: "reverify_yale" }); };
 
   app.route("POST", "/auth/request-code", async (req) => {
     const email = norm(req.body.email);
@@ -151,7 +155,7 @@ function install(app, ctx) {
     const u = req.user;
     const changing = email !== u.contact_email;
     // 已经填过联系邮箱之后再换，必须是用耶鲁邮箱登录的（用联系邮箱登录的人不能把它换掉）
-    if (u.contact_email && changing && req.session.via !== "yale") throw fail("forbidden", { reason: "reverify_yale" });
+    if (u.contact_email && changing) requireYale(req);
     if (!changing && u.contact_verified_at) return me(req);
     limit("contact:" + u.id, 5, HOUR);
     const issued = issueCode("contact", u.id, email, req.ip); // 先检查间隔与额度，再改资料
@@ -164,7 +168,7 @@ function install(app, ctx) {
     });
     await mailCode("contact_code", u, issued, email);
     return Object.assign(me(req), { sentTo: mask(email) });
-  });
+  }, { auth: "consented" });
 
   app.route("POST", "/me/contact-email/verify", (req) => {
     const u = req.user;
@@ -175,7 +179,7 @@ function install(app, ctx) {
       revokeOthers(u.id, req.session.id);
     });
     return me(req);
-  });
+  }, { auth: "consented" });
 
   app.route("GET", "/me", (req) => ctx.meDTO(req.user, req.session.via));
 
@@ -184,11 +188,13 @@ function install(app, ctx) {
     const v = C.validateProfile(req.body, ctx.questions, year);
     if (!v.ok) throw fail("invalid", { fields: v.fields });
     const p = C.cleanProfile(req.body, ctx.questions);
+    // 联系方式（如微信号）匹配后会给对方看：已经填过之后再改，必须是用耶鲁邮箱登录的（第一次填写不限）
+    if (req.user.contact_method && p.contactMethod !== req.user.contact_method) requireYale(req);
     db.run("UPDATE users SET name = ?, identity = ?, stage = ?, grad_year = ?, job = ?, city = ?, contact_method = ?, answers = ?, profile_done_at = COALESCE(profile_done_at, ?), updated_at = ? WHERE id = ?",
       p.name, p.identity, p.stage, p.gradYear, p.job, p.city, p.contactMethod, JSON.stringify(p.answers), now(), now(), req.user.id);
     db.run("UPDATE recommendations SET created_at = '' WHERE user_id = ?", req.user.id); // 资料变了，推荐重新算
     return me(req);
-  });
+  }, { auth: "consented" });
 
   app.route("POST", "/me/prefs", (req) => {
     const prefs = C.cleanPrefs(req.body.prefs || {});
@@ -197,11 +203,13 @@ function install(app, ctx) {
     // 开关智能推荐后，自己的推荐立即按新设置重算（保留"不感兴趣"）
     if (smart !== req.user.smart_rec) db.run("UPDATE recommendations SET created_at = '' WHERE user_id = ?", req.user.id);
     return me(req);
-  });
+  }, { auth: "consented" });
 
-  // 注销：删除本人的资料、参与记录、邀请、推荐、会话、验证码、发信记录；审计日志保留（只有 id）
+  // 注销：删除本人的资料、参与记录、邀请、推荐、会话、验证码、发信记录、访问记录；审计日志保留（只有 id）。
+  // 不要求先同意隐私说明；但要求这次是用耶鲁邮箱登录的
   app.route("POST", "/me/delete", (req) => {
     if (req.body.confirm !== "DELETE") throw fail("invalid", { fields: { confirm: "required" } });
+    requireYale(req);
     const id = req.user.id, email = req.user.login_email;
     db.tx(() => {
       db.run("DELETE FROM participations WHERE user_id = ?", id);
@@ -211,6 +219,7 @@ function install(app, ctx) {
       db.run("DELETE FROM login_codes WHERE user_key IN (?, ?)", id, email);
       db.run("DELETE FROM emails WHERE user_id = ?", id);
       db.run("DELETE FROM feedback WHERE user_id = ?", id);
+      db.run("DELETE FROM user_visits WHERE user_id = ?", id);
       db.run("DELETE FROM users WHERE id = ?", id);
     });
     req.endSession(req.req, req.res);

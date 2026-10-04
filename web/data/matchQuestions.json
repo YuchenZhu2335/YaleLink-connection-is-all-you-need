@@ -86,7 +86,7 @@
       "public": true,
       "max": 200,
       "label": { "zh": "一句话介绍自己（可选）", "en": "One line about you (optional)" },
-      "placeholder": { "zh": "比如：SOM 二年级，想转科技行业，周末爱爬山", "en": "e.g. 2nd-year SOM, moving into tech, hikes on weekends" }
+      "placeholder": { "zh": "比如：SOM 二年级，想转科技行业，周末爱爬山。别写联系方式和全名", "en": "e.g. 2nd-year SOM, moving into tech, hikes on weekends. No contact details or full names, please" }
     }
   ]
 }

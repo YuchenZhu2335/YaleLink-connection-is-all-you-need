@@ -17,7 +17,9 @@ function build(overrides) {
   const ctx = { cfg, db, coffee, json: DB.json, questions: qcfg.questions, quiet: overrides && overrides.QUIET === "1" };
   // 管理员：名单里的耶鲁邮箱，并且这次是用耶鲁邮箱登录的（只验证过联系邮箱的会话不给管理权限）
   ctx.isAdmin = (u, session) => !!u && cfg.adminEmails.includes(u.login_email) && !!session && session.via === "yale";
-  ctx.isReady = (u) => !!u && u.consent_version === cfg.consentVersion && !!u.profile_done_at && !!u.contact_email;
+  // 同意了当前版本的隐私说明：写入个人信息（资料、联系邮箱、邮件开关、意见箱）之前必须满足（路由 auth: "consented"）
+  ctx.isConsented = (u) => !!u && u.consent_version === cfg.consentVersion;
+  ctx.isReady = (u) => ctx.isConsented(u) && !!u.profile_done_at && !!u.contact_email;
   // 返回给本人看的资料（含本人的私密字段）
   ctx.meDTO = (u, via) => ({
     id: u.id, loginEmail: u.login_email, contactEmail: u.contact_email, contactVerified: !!u.contact_verified_at,
@@ -40,7 +42,7 @@ function build(overrides) {
     app.route("GET", "/dev/outbox", () => ctx.mailer.outbox.slice(0, 20), { auth: "none", audit: false, localOnly: true });
   }
   const jobs = require("./jobs").create(ctx, coffeeApi);
-  return { cfg, ctx, app, jobs, db };
+  return { cfg, ctx, app, jobs, db, coffee: coffeeApi };
 }
 
 module.exports = { build };

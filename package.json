@@ -17,7 +17,7 @@
     "test": "npm run check && npm run test:e2e"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1"

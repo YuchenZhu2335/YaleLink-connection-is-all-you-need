@@ -3,6 +3,7 @@
    接口见 docs/api.md「登录与账号」；资料校验规则与后端共用 YL.domain.coffee.validateProfile。
 
    #/profile/setup[?next=…]  首次填写；完成后回到 next（默认 coffee）。已完成则去 #/profile
+   #/profile/setup?only=consent&next=…  只同意隐私说明（意见箱用），同意后回到 next
    #/profile                  我的
    #/profile/edit             修改资料 */
 (function () {
@@ -100,8 +101,9 @@
 
   /* ---------- 退出登录 ----------
      退出请求没成功（断网、服务器出错）时，后端的会话 Cookie 还有效：不能假装已经退出，恢复本地状态并提示。
-     401 说明会话本来就没了，按已退出处理。all = true：退出所有设备。返回 true = 已退出 */
-  async function signOut(btn, ctx, all) {
+     401 说明会话本来就没了，按已退出处理。all = true：退出所有设备。返回 true = 已退出
+     keepDraft = true：马上用耶鲁邮箱重新登录（同一个人），资料表单里没保存的内容留着（草稿记着用户 id，换了别人登录也看不到） */
+  async function signOut(btn, ctx, all, keepDraft) {
     const prev = YL.auth.user();
     YL.ui.busy(btn, true);
     const r = await YL.auth.logout(all);
@@ -115,17 +117,37 @@
     contactStepOpen = null;
     laterChosen = null;
     lastSent = null;
-    draft = null;
-    kept = null;
+    if (!keepDraft) { draft = null; kept = null; }
     return true;
   }
-  // 换联系邮箱、进管理后台都要求这次是用耶鲁邮箱登录的：退出后去登录页，并指定验证码发到耶鲁邮箱
+  // 换联系邮箱、改联系方式、注销、进管理后台都要求这次是用耶鲁邮箱登录的：退出后去登录页，并指定验证码发到耶鲁邮箱。
+  // 登录回来接着做（next），资料表单里没保存的修改还在
   async function reloginWithYale(btn, ctx, next) {
-    if (!(await signOut(btn, ctx))) return;
+    if (!(await signOut(btn, ctx, false, true))) return;
     YL.router.navigate("login?next=" + encodeURIComponent(next) + "&via=yale");
   }
   // 后端规则（server/auth.js /me/contact-email）：已经有联系邮箱、这次又不是用耶鲁邮箱登录的，不能换
   const changeNeedsYale = (u) => !!u && !!u.contactEmail && u.via !== "yale";
+  // 后端规则（server/auth.js /me/profile）：已经填过联系方式、这次又不是用耶鲁邮箱登录的，联系方式不能改（其他资料可以）
+  const contactMethodNeedsYale = (u) => !!u && !!u.contactMethod && u.via !== "yale";
+  // 后端拒绝（forbidden / reverify_yale）时的提示：说明原因 + "用耶鲁邮箱重新登录"按钮，放进 scope 里的 [data-msg]。
+  // 换联系邮箱、改联系方式、注销共用；按钮带 attr（如 data-cw="relogin"），由调用方的事件委托调 reloginWithYale
+  function showReverify(scope, text, attr) {
+    const box = scope.querySelector("[data-msg]");
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = notice("warn", "", `<p>${esc(text)}</p><p><button type="button" class="btn btn--secondary btn--sm" ${attr}>${esc(t("profile.contact.relogin"))}</button></p>`, "alert");
+  }
+  /* 页面打开期间隐私说明升了版本：写入被拒绝（forbidden / needs_consent）。刷新登录状态后重绘当前页——
+     首次填写回到"同意"这一步；"我的"、修改资料先去同意页，同意后回来（没保存的资料草稿留着）。
+     提示放在重绘之后，不被"没保存的内容先留着"盖掉 */
+  const isNeedsConsent = (e) => !!e && e.code === "forbidden" && e.reason === "needs_consent";
+  async function reconsent(ctx) {
+    await YL.auth.refresh();
+    if (!ctx.isActive()) return;
+    YL.router.render();
+    YL.ui.toast(t("profile.err.needs_consent"), "error");
+  }
 
   /* ---------- 联系邮箱：填邮箱 → 发验证码 → 输验证码（首次填写与"我的"共用）----------
      opts = { mode: "enter" | "code", email, autoSend, reloginNext, onDone(me), onLater(), onCancel() } */
@@ -208,12 +230,6 @@
       if (!s) clearInterval(timer);
     }
 
-    function showReverify() {
-      const box = w.querySelector("[data-msg]");
-      if (box) box.hidden = false;
-      if (box) box.innerHTML = notice("warn", "", `<p>${esc(t("profile.err.reverify_yale"))}</p><p><button type="button" class="btn btn--secondary btn--sm" data-cw="relogin">${esc(t("profile.contact.relogin"))}</button></p>`, "alert");
-    }
-
     async function send(email, btn) {
       const form = btn.closest("form");
       YL.ui.clearFieldErrors(form);
@@ -233,8 +249,9 @@
           code(true);
           return;
         }
+        if (isNeedsConsent(e)) { reconsent(ctx); return; }
         if (e.fields) YL.ui.showFieldErrors(form, e.fields, "profile");
-        else if (e.reason === "reverify_yale") showReverify();
+        else if (e.reason === "reverify_yale") showReverify(w, t("profile.err.reverify_yale"), 'data-cw="relogin"');
         else setMsg(w, YL.ui.errorText(e, "profile"));
         if (form.matches("[data-cw-email]")) cooldown(); // 换了个邮箱但还在 60 秒内：按钮倒计时，不让一直点（每次都算进每小时 5 次）
         return;
@@ -278,6 +295,7 @@
         if (e.fields.code === "wrong") input.select(); else input.value = "";
         return;
       }
+      if (isNeedsConsent(e)) { reconsent(ctx); return; }
       setMsg(w, YL.ui.errorText(e, "profile"));
     }
 
@@ -353,7 +371,8 @@
       </div>`;
   }
 
-  function profileFormHtml(u, submitLabel, cancelHref) {
+  // lockedContact = true：这次是用联系邮箱登录的，联系方式旁边说明"改它需要用耶鲁邮箱登录"（contactMethodNeedsYale，按保存过的资料算，不按草稿）
+  function profileFormHtml(u, submitLabel, cancelHref, lockedContact) {
     const qs = YL.auth.questions();
     const a = u.answers || {};
     const id = u.identity || "";
@@ -401,8 +420,9 @@
         ${YL.ui.sectionTitle(t("profile.form.contactTitle"))}
         <div class="field" data-field="contactMethod">
           <label class="field__label" for="pf-contactMethod">${esc(t("profile.form.contactMethod"))}${req}</label>
-          <input class="input" id="pf-contactMethod" name="contactMethod" maxlength="${lim.contactMethod}" autocomplete="off" value="${esc(u.contactMethod || "")}" placeholder="${esc(t("profile.form.contactMethodPlaceholder"))}" aria-describedby="pf-contactMethod-hint">
+          <input class="input" id="pf-contactMethod" name="contactMethod" maxlength="${lim.contactMethod}" autocomplete="off" value="${esc(u.contactMethod || "")}" placeholder="${esc(t("profile.form.contactMethodPlaceholder"))}" aria-describedby="pf-contactMethod-hint${lockedContact ? " pf-contactMethod-yale" : ""}">
           <p class="field__hint" id="pf-contactMethod-hint">${esc(t("profile.form.contactMethodHint"))}</p>
+          ${lockedContact ? `<p class="field__hint" id="pf-contactMethod-yale">${esc(t("profile.form.contactMethodNeedsYale"))}</p>` : ""}
         </div>
 
         <div data-msg hidden></div>
@@ -511,6 +531,9 @@
     });
     form.addEventListener("click", (e) => {
       if (e.target.closest("[data-discard]")) { clearDraft(); return; } // 取消 = 不要这些修改了（不再留草稿）
+      // 改联系方式被拒（reverify_yale）：用耶鲁邮箱重新登录后回到这一页，没保存的修改还在
+      const relogin = e.target.closest('[data-act="relogin"]');
+      if (relogin) { rememberForm(form); reloginWithYale(relogin, ctx, location.hash.replace(/^#\/?/, "")); return; }
       const add = e.target.closest("[data-add-tag]");
       if (add) { addTag(form, add.closest("[data-tags]")); rememberForm(form); return; }
       const chip = e.target.closest("[data-custom-for]");
@@ -540,7 +563,9 @@
       YL.ui.busy(btn, false);
       if (!r.ok) {
         const er = r.error || {};
+        if (isNeedsConsent(er)) { rememberForm(form); reconsent(ctx); return; }
         if (er.fields) YL.ui.showFieldErrors(form, er.fields, "profile");
+        else if (er.reason === "reverify_yale") showReverify(form, t("profile.reverify.contactMethod"), 'data-act="relogin"');
         else setMsg(form, YL.ui.errorText(er, "profile"));
         return;
       }
@@ -571,17 +596,21 @@
   }
 
   /* ---------- #/profile/setup 首次填写 ---------- */
+  /* ?only=consent：只走"同意隐私说明"这一步，同意后回到 next。给不需要完成首次填写、但会保存个人信息的页面用（意见箱）：
+     不为了提一条意见就要求填联系邮箱和资料；进约咖啡时路由照样会带人来补完 */
   function renderSetup(root, ctx) {
     const next = YL.router.safeNext(ctx.query.next, "coffee");
+    const consentOnly = ctx.query.only === "consent";
     if (YL.auth.isReady()) { YL.router.navigate(ctx.query.next ? next : "profile", { replace: true }); return; }
+    if (consentOnly && !YL.auth.user().needsConsent) { YL.router.navigate(next, { replace: true }); return; }
     root.innerHTML = `
       <section class="page page--narrow" data-setup>
         <header class="page-head"><div class="page-head__text">
-          <p class="eyebrow">${esc(t("profile.setup.eyebrow"))}</p>
-          <h1 class="page-title">${esc(t("profile.setup.title"))}</h1>
-          <p class="page-sub">${esc(t("profile.setup.sub"))}</p>
+          <p class="eyebrow">${esc(consentOnly ? t("nav.privacy") : t("profile.setup.eyebrow"))}</p>
+          <h1 class="page-title">${esc(consentOnly ? t("profile.setup.consentOnlyTitle") : t("profile.setup.title"))}</h1>
+          <p class="page-sub">${esc(consentOnly ? t("profile.setup.consentOnlySub") : t("profile.setup.sub"))}</p>
         </div></header>
-        <ol class="steps" aria-label="${esc(t("profile.setup.progress"))}" data-steps></ol>
+        ${consentOnly ? "" : `<ol class="steps" aria-label="${esc(t("profile.setup.progress"))}" data-steps></ol>`}
         <div data-step></div>
       </section>`;
     const el = root.querySelector("[data-setup]");
@@ -600,6 +629,7 @@
       clearInterval(timer);
       const u = YL.auth.user();
       if (!u || !ctx.isActive()) return;
+      if (consentOnly && !u.needsConsent) { YL.router.navigate(next, { replace: true }); return; }
       if (u.ready && !pendingFor(u)) {
         contactStepOpen = null;
         YL.ui.toast(t("profile.setup.done"), "success");
@@ -608,7 +638,7 @@
       }
       const cur = stepOf(u);
       const done = { consent: !u.needsConsent, contact: !u.needsContact && cur !== "contact", profile: !u.needsProfile };
-      stepsEl.innerHTML = ["consent", "contact", "profile"].map((s) => {
+      if (stepsEl) stepsEl.innerHTML = ["consent", "contact", "profile"].map((s) => {
         const state = s === cur ? " is-current" : done[s] ? " is-done" : "";
         return `<li class="steps__item${state}"${s === cur ? ' aria-current="step"' : ""}>${esc(t("profile.steps." + s))}${state === " is-done" ? `<span class="sr-only">${esc(t("profile.steps.done"))}</span>` : ""}</li>`;
       }).join("");
@@ -695,7 +725,7 @@
             <p class="small muted">${esc(t("profile.setup.profileSub"))}</p>
           </div>
           ${u.contactVerified ? "" : notice("warn", "", `<p>${esc(t("profile.setup.contactUnverified"))}</p>`)}
-          ${profileFormHtml(withDraft(u), t("profile.setup.finish"), "")}
+          ${profileFormHtml(withDraft(u), t("profile.setup.finish"), "", contactMethodNeedsYale(u))}
         </section>`;
       bindProfileForm(body.querySelector("[data-profile-form]"), ctx, () => draw(true));
     }
@@ -889,6 +919,7 @@
         const me = YL.auth.user() || {};
         YL.ui.$$("[data-pref]", el).forEach((x) => (x.checked = (me.prefs || {})[x.dataset.pref] !== false));
         if (smartEl) smartEl.checked = me.smartRec !== false;
+        if (isNeedsConsent(r.error)) { reconsent(ctx); return; }
         YL.ui.toast(YL.ui.errorText(r.error, "profile"), "error");
         return;
       }
@@ -922,19 +953,23 @@
     if (focusSel) { const f = el.querySelector(focusSel); if (f) f.focus(); }
   }
 
+  // 注销要求这次是用耶鲁邮箱登录的（后端规则：server/auth.js /me/delete）。用联系邮箱登录的人点"注销"时直接说明原因、给出重新登录按钮
+  // （和"换联系邮箱"一样）；后端拒绝时也显示同一条提示
+  const deleteNeedsYale = (u) => !!u && u.via !== "yale";
   function openDelete(ctx) {
+    const needsYale = deleteNeedsYale(YL.auth.user());
     YL.ui.modal(`
       <h2 class="modal__title">${esc(t("profile.delete.confirmTitle"))}</h2>
       <form class="form" data-del novalidate>
         <p class="muted">${esc(t("profile.delete.body"))}</p>
-        <div class="field" data-field="confirm">
+        ${needsYale ? "" : `<div class="field" data-field="confirm">
           <label class="field__label" for="del-confirm">${fill(t("profile.delete.typeLabel"), { word: "<strong>DELETE</strong>" })}</label>
           <input class="input" id="del-confirm" name="confirm" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="DELETE">
-        </div>
+        </div>`}
         <div data-msg hidden></div>
         <div class="confirm__actions">
           <button type="button" class="btn btn--secondary" data-close>${esc(t("common.cancel"))}</button>
-          <button type="submit" class="btn btn--danger" disabled>${icon("trash")}${esc(t("profile.delete.submit"))}</button>
+          ${needsYale ? "" : `<button type="submit" class="btn btn--danger" disabled>${icon("trash")}${esc(t("profile.delete.submit"))}</button>`}
         </div>
       </form>`, {
       label: t("profile.delete.confirmTitle"),
@@ -942,7 +977,13 @@
         const form = panel.querySelector("[data-del]");
         const input = form.querySelector("#del-confirm");
         const submit = form.querySelector('button[type="submit"]');
+        const reverify = () => { showReverify(form, t("profile.reverify.delete"), 'data-act="relogin"'); form.querySelector('[data-act="relogin"]').focus(); };
         panel.querySelector("[data-close]").addEventListener("click", close);
+        form.addEventListener("click", (e) => {
+          const b = e.target.closest('[data-act="relogin"]');
+          if (b) reloginWithYale(b, ctx, "profile");
+        });
+        if (needsYale) { reverify(); return; }
         input.addEventListener("input", () => { submit.disabled = input.value.trim() !== "DELETE"; });
         input.focus();
         form.addEventListener("submit", async (e) => {
@@ -955,6 +996,8 @@
             // 账号已经删掉了：不管用户这时在哪个页面，都清掉登录状态回首页
             pending = null;
             contactStepOpen = null;
+            draft = null;
+            kept = null;
             YL.ui.closeModal();
             YL.auth.set(null);
             YL.ui.toast(t("profile.delete.done"));
@@ -963,8 +1006,10 @@
           }
           if (!ctx.isActive() || !document.body.contains(form)) return;
           YL.ui.busy(submit, false);
-          if (r.error && r.error.fields) YL.ui.showFieldErrors(form, r.error.fields, "profile");
-          else setMsg(form, YL.ui.errorText(r.error, "profile"));
+          const er = r.error || {};
+          if (er.fields) YL.ui.showFieldErrors(form, er.fields, "profile");
+          else if (er.reason === "reverify_yale") reverify();
+          else setMsg(form, YL.ui.errorText(er, "profile"));
         });
       }
     });
@@ -976,7 +1021,7 @@
       <header class="page-head"><div class="page-head__text"><h1 class="page-title">${esc(t("profile.edit.title"))}</h1><p class="page-sub">${esc(t("profile.edit.sub"))}</p></div></header>`;
     const u = await loadMe(root, ctx, head);
     if (!u) return;
-    root.innerHTML = `<section class="page page--medium" data-edit>${head}<div class="card">${profileFormHtml(withDraft(u), t("common.save"), "#/profile")}</div></section>`;
+    root.innerHTML = `<section class="page page--medium" data-edit>${head}<div class="card">${profileFormHtml(withDraft(u), t("common.save"), "#/profile", contactMethodNeedsYale(u))}</div></section>`;
     bindProfileForm(root.querySelector("[data-profile-form]"), ctx, () => {
       YL.ui.toast(t("common.saved"), "success");
       YL.router.navigate("profile");
