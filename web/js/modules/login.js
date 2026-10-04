@@ -45,12 +45,12 @@
     root.innerHTML = `
       <section class="page page--narrow" data-login>
         <header class="stack stack--s">
-          <img src="assets/logo.svg" alt="" width="48" height="48">
+          <img src="assets/brand/mark.svg" alt="" width="48" height="48">
           <h1 class="page-title">${esc(YL_CONFIG.siteName)}</h1>
           <p class="page-sub">${esc(t("brand.tagline"))}</p>
         </header>
         <div class="card" data-card></div>
-        ${meta.dev ? `<div class="notice notice--warn">${icon("info")}<div class="notice__body"><strong>${esc(t("login.devTitle"))}</strong><span>${esc(t("login.devBody"))} <a href="/api/dev/outbox" target="_blank" rel="noopener">/api/dev/outbox</a></span></div></div>` : ""}
+        ${meta.dev ? `<div class="notice notice--warn">${icon("alert")}<div class="notice__body"><p><strong>${esc(t("login.devTitle"))}</strong></p><p>${esc(t("login.devBody"))} <a class="break-all" href="/api/dev/outbox" target="_blank" rel="noopener">/api/dev/outbox</a></p></div></div>` : ""}
         <p class="xsmall faint">${fill(t("login.agree"), { link: `<a href="#/about/privacy">${esc(t("login.privacyLink"))}</a>` })}</p>
       </section>`;
     const el = root.querySelector("[data-login]");
@@ -64,7 +64,7 @@
       if (!box) return;
       const ok = kind === "success";
       box.hidden = !text;
-      box.innerHTML = text ? `<div class="notice notice--${ok ? "success" : "danger"}" role="${ok ? "status" : "alert"}">${icon(ok ? "check" : "info")}<div class="notice__body">${esc(text)}</div></div>` : "";
+      box.innerHTML = text ? `<div class="notice notice--${ok ? "success" : "danger"}" role="${ok ? "status" : "alert"}">${icon(ok ? "check" : "alertCircle")}<div class="notice__body"><p>${esc(text)}</p></div></div>` : "";
     }
 
     /* ---------- 第一步：邮箱 ---------- */
@@ -76,7 +76,7 @@
             <h2 class="card__title" tabindex="-1" data-focus>${esc(t("login.emailTitle"))}</h2>
             <p class="small muted">${esc(t("login.emailSub"))}</p>
           </div>
-          ${viaYale ? `<div class="notice notice--info">${icon("cap")}<div class="notice__body">${esc(t("login.yaleOnly"))}</div></div>` : ""}
+          ${viaYale ? `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("login.yaleOnly"))}</p></div></div>` : ""}
           <div class="field" data-field="email">
             <label class="field__label" for="login-email">${esc(t("login.emailLabel"))}</label>
             <input class="input" id="login-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required
@@ -126,7 +126,7 @@
             <h2 class="card__title" tabindex="-1" data-focus>${esc(t("login.codeTitle"))}</h2>
             <p class="muted" aria-live="polite">${sent}</p>
           </div>
-          ${flow.yale ? "" : `<div class="notice notice--info">${icon("mail")}<div class="notice__body"><span>${esc(t("login.whereCode"))}</span><span><button type="button" class="btn btn--secondary" data-act="use-yale">${esc(t("login.useYale"))}</button></span></div></div>`}
+          ${flow.yale ? "" : `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("login.whereCode"))}</p><p><button type="button" class="btn btn--secondary btn--sm" data-act="use-yale">${esc(t("login.useYale"))}</button></p></div></div>`}
           <div class="field" data-field="code">
             <label class="field__label" for="login-code">${esc(t("login.codeLabel"))}</label>
             <input class="input input--code" id="login-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required aria-describedby="login-code-hint"${dead ? " disabled" : ""}>

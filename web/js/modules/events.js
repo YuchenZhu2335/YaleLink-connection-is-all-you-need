@@ -42,7 +42,7 @@
   }
   function statusPill(r) {
     const s = statusOf(r);
-    const cls = s === "open" ? " pill--success" : s === "upcoming" ? " pill--incoming" : "";
+    const cls = s === "open" ? " pill--success" : s === "upcoming" ? " pill--waiting" : "";
     const ic = s === "open" ? icon("sun") : s === "upcoming" ? icon("clock") : "";
     return `<span class="pill${cls}">${ic}${esc(t("events.status." + s))}</span>`;
   }
@@ -70,17 +70,36 @@
   }
   const rank = (q) => { const i = ["interests", "goals"].indexOf(q.id); return i < 0 ? 9 : i; };
   const themeTags = (r) => ((r.themeTags || []).length ? `<div class="tags">${YL.ui.tags(r.themeTags.map(themeLabel), "tag--theme")}</div>` : "");
-  // 参加按钮：完成首次填写 → 去约咖啡；登录了没填完 → 去填；没登录 → 登录。
-  // weekly = true：已结束的活动页 / 没有活动时，按钮说的是"参加每周的 Coffee Chat"，不暗示还能参加这场
-  function joinLink(cls, weekly) {
-    const c = "btn btn--primary" + (cls || "");
-    const href = YL.auth.isReady() ? "#/coffee" : YL.auth.isLoggedIn() ? "#/profile/setup?next=coffee" : "#/login?next=coffee";
-    if (weekly) return `<a class="${c}" href="${href}">${icon("coffee")}${esc(t("events.cta.weekly"))}</a>`;
-    if (YL.auth.isReady()) return `<a class="${c}" href="${href}">${icon("coffee")}${esc(t("events.cta.go"))}</a>`;
-    if (YL.auth.isLoggedIn()) return `<a class="${c}" href="${href}">${icon("user")}${esc(t("events.cta.finish"))}</a>`;
-    return `<a class="${c}" href="${href}">${icon("mail")}${esc(t("events.cta.login"))}</a>`;
+  // 去哪里参加：完成首次填写 → 约咖啡；登录了没填完 → 先填；没登录 → 登录
+  const joinHref = () => (YL.auth.isReady() ? "#/coffee" : YL.auth.isLoggedIn() ? "#/profile/setup?next=coffee" : "#/login?next=coffee");
+  // 参加每周的 Coffee Chat（已结束的活动页、没有活动时）：不暗示还能参加这场，所以用主按钮而不是灯色
+  const weeklyLink = (cls) => `<a class="btn btn--primary${cls || ""}" href="${joinHref()}">${icon("coffee")}${esc(t("events.cta.weekly"))}</a>`;
+  // 活动长短决定叫"周"还是"月"（设计规范 §10.2「参加 Coffee Chat 周 / 月」）；说不清的就说"这一期"
+  function joinLabel(r) {
+    const days = Math.round((Date.parse(r.endDate + "T00:00:00Z") - Date.parse(r.startDate + "T00:00:00Z")) / 86400000) + 1;
+    if (days > 0 && days <= 10) return t("events.cta.joinWeek");
+    return days >= 21 ? t("events.cta.joinMonth") : t("events.cta.join");
   }
-  const errorBox = (error) => YL.ui.emptyState("info", YL.ui.errorText(error, "events"), `<button type="button" class="btn btn--primary" data-act="retry">${icon("refresh")}${esc(t("common.retry"))}</button>`);
+  // §5.18 吸底参加条：灯色按钮只用在"参加 Coffee Chat 周 / 月"。没登录写"登录后参加"，登录了没填完写"填完资料就能参加"；
+  // 还没开始的活动，填好资料的人先去约本周的咖啡
+  function joinBar(r) {
+    let label = t("events.cta.login"), ic = "mail";
+    if (YL.auth.isReady()) { label = statusOf(r) === "open" ? joinLabel(r) : t("events.cta.go"); ic = "coffee"; }
+    else if (YL.auth.isLoggedIn()) { label = t("events.cta.finish"); ic = "user"; }
+    return `<div class="savebar" data-joinbar><a class="btn btn--accent btn--block btn--lg" href="${joinHref()}">${icon(ic)}${esc(label)}</a></div>`;
+  }
+  // 空状态（§5.11）：标题 + 正文 + 最多一个操作
+  const empty = (ic, title, body, action) => `<div class="empty"><div class="empty__icon">${icon(ic, { size: 28 })}</div><p class="empty__title">${esc(title)}</p>${body ? `<p>${esc(body)}</p>` : ""}${action || ""}</div>`;
+  const errorBox = (error) => empty("alertCircle", YL.ui.errorText(error, "events"), "", `<button type="button" class="btn btn--primary" data-act="retry">${icon("refresh")}${esc(t("common.retry"))}</button>`);
+  // 标题里的关键词划一笔 .lit（§5.18，每屏最多一处）：有分隔符（·、｜、：、—）就划最后一段，否则划 "Coffee Chat"；都没有就不划
+  function litTitle(title) {
+    const s = String(title || "");
+    const sep = /^(.*\S)(\s*[·|｜:：—–]\s*)(\S.{0,15})$/.exec(s);
+    if (sep && sep[3].trim().length >= 2) return esc(sep[1] + sep[2]) + `<span class="lit">${esc(sep[3])}</span>`;
+    const m = /coffee\s*chat/i.exec(s);
+    if (m) return esc(s.slice(0, m.index)) + `<span class="lit">${esc(m[0])}</span>` + esc(s.slice(m.index + m[0].length));
+    return esc(s);
+  }
 
   /* ---------- #/events ---------- */
   function card(r) {
@@ -99,13 +118,13 @@
   }
   function listHtml(items) {
     if (!items.length) {
-      return YL.ui.emptyState("flag", t("events.empty"), joinLink("", true));
+      return empty("flag", t("events.emptyTitle"), t("events.empty"), weeklyLink());
     }
     const current = items.filter((r) => r.open).concat(items.filter((r) => !r.open && r.upcoming).sort((a, b) => (a.startDate < b.startDate ? -1 : 1)));
     const past = items.filter((r) => !r.open && !r.upcoming);
     const now = current.length
       ? `<div class="grid-cards">${current.map(card).join("")}</div>`
-      : `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("events.noCurrent"))}</p><div>${joinLink(" btn--sm", true)}</div></div></div>`;
+      : `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("events.noCurrent"))}</p><p>${weeklyLink(" btn--sm")}</p></div></div>`;
     return `
       <section class="stack" aria-labelledby="ev-now">
         <h2 class="section-title" id="ev-now">${esc(t("events.section.current"))}</h2>
@@ -156,8 +175,8 @@
   /* ---------- #/events/:id ---------- */
   function statusNote(r) {
     const s = statusOf(r);
-    if (s === "open") return `<div class="notice notice--success">${icon("sun")}<div class="notice__body"><p>${esc(t("events.openNote"))}</p></div></div>`;
-    if (s === "upcoming") return `<div class="notice notice--accent">${icon("clock")}<div class="notice__body"><p>${esc(t("events.upcomingNote", { start: day(r.startDate) }))}</p></div></div>`;
+    if (s === "open") return `<div class="notice notice--success">${icon("check")}<div class="notice__body"><p>${esc(t("events.openNote"))}</p></div></div>`;
+    if (s === "upcoming") return `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("events.upcomingNote", { start: day(r.startDate) }))}</p></div></div>`;
     return `<div class="notice">${icon("info")}<div class="notice__body"><p>${esc(t("events.endedNote"))}</p></div></div>`;
   }
   function articleHtml(r) {
@@ -174,7 +193,7 @@
         <div><a class="btn btn--ghost btn--sm" href="#/events">${icon("chevronLeft")}${esc(t("events.back"))}</a></div>
         <header class="article__hero">
           <div class="cluster">${statusPill(r)}</div>
-          <h1 class="article__title" id="ev-title" tabindex="-1">${esc(title)}</h1>
+          <h1 class="article__title" id="ev-title" tabindex="-1">${litTitle(title)}</h1>
           <div class="article__meta">
             <span>${icon("calendar")}${esc(rangeText(r))}</span>
             ${count ? `<span>${icon(statusOf(r) === "upcoming" ? "clock" : "people")}${esc(count)}</span>` : ""}
@@ -184,8 +203,7 @@
         ${themeTags(r)}
         ${statusNote(r)}
         <div class="cluster">
-          ${ended ? "" : joinLink()}
-          <button type="button" class="btn btn--secondary" data-act="copy-link">${icon("copy")}${esc(t("events.copyLink"))}</button>
+          <button type="button" class="btn btn--secondary btn--sm" data-act="copy-link">${icon("copy")}${esc(t("events.copyLink"))}</button>
         </div>
         ${showPostTitle ? `<h2>${esc(postTitle)}</h2>` : ""}
         ${body ? `<div class="prose">${esc(body)}</div>` : ended ? "" : `<p class="muted">${esc(t("events.noBody"))}</p>`}
@@ -193,7 +211,7 @@
         <section class="copybox" aria-labelledby="ev-wechat">
           <div class="copybox__head">
             <h2 class="section-title" id="ev-wechat">${esc(t("events.wechat.title"))}</h2>
-            <button type="button" class="btn btn--secondary btn--sm" data-act="copy-wechat">${icon("copy")}${esc(t("events.wechat.copy"))}</button>
+            <button type="button" class="btn btn--primary btn--sm" data-act="copy-wechat">${icon("copy")}<span>${esc(t("events.wechat.copy"))}</span></button>
           </div>
           <p class="section-sub">${esc(t("events.wechat.sub"))}</p>
           <div class="copybox__text" tabindex="0" role="region" aria-labelledby="ev-wechat">${esc(wechat)}</div>
@@ -203,8 +221,9 @@
             <h2 class="section-title" id="ev-ready">${esc(ended ? t("events.closing.weeklyTitle") : t("events.closing.title"))}</h2>
             <p class="muted">${esc(ended ? t("events.closing.weeklyText") : t("events.closing.text"))}</p>
           </div>
-          <div class="cluster">${joinLink("", ended)}<a class="btn btn--ghost" href="#/about">${esc(t("events.closing.about"))}</a></div>
+          <div class="cluster">${ended ? weeklyLink() : ""}<a class="btn btn--ghost" href="#/about">${esc(t("events.closing.about"))}</a></div>
         </section>
+        ${ended ? "" : joinBar(r)}
       </article>`;
   }
   async function viewOne(root, ctx) {
@@ -218,7 +237,14 @@
       const act = btn.dataset.act;
       if (act === "retry") load(true);
       else if (act === "copy-link") YL.ui.copy(location.href);
-      else if (act === "copy-wechat" && round) YL.ui.copy(String((round.post && round.post.wechat) || "").trim());
+      else if (act === "copy-wechat" && round) {
+        YL.ui.copy(String((round.post && round.post.wechat) || "").trim()).then((ok) => {
+          const label = btn.querySelector("span");
+          if (!ok || !label || !ctx.isActive() || !document.body.contains(btn)) return;
+          label.textContent = t("events.wechat.copied");
+          setTimeout(() => { if (document.body.contains(btn)) label.textContent = t("events.wechat.copy"); }, 2000);
+        });
+      }
     });
     async function load(refocus) {
       box.setAttribute("aria-busy", "true");
@@ -230,7 +256,7 @@
       const notEvent = r.ok && (!r.data || Array.isArray(r.data) || r.data.kind !== "event");
       if (!r.ok || notEvent) {
         box.innerHTML = notEvent || (r.error && r.error.code === "not_found")
-          ? YL.ui.emptyState("flag", t("events.err.not_found"), `<a class="btn btn--primary" href="#/events">${esc(t("events.back"))}</a>`)
+          ? empty("flag", t("events.notFoundTitle"), t("events.err.not_found"), `<a class="btn btn--primary" href="#/events">${esc(t("events.back"))}</a>`)
           : errorBox(r.error);
         if (refocus) { const f = box.querySelector("a, button"); if (f) f.focus(); }
         return;

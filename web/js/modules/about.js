@@ -66,6 +66,15 @@
     return `<p class="muted">${esc(t("about.reach.site"))}</p>
           <div><a class="btn btn--secondary" href="${site}" target="_blank" rel="noopener">${icon("external")}${esc(t("about.reach.siteLink"))}</a></div>`;
   }
+  // 竖排中英 tagline 组合（设计规范 §9 第 3 种，居中）：图形标 → 字标 → 中文 tagline → 英文 tagline。
+  // 两行 tagline 不随界面语言变，所以用 about.lockup.zh / about.lockup.en 两个固定的键
+  const lockupHtml = () => `
+          <div class="card card--quiet stack stack--s center" data-lockup>
+            <div><img src="assets/brand/mark.svg" alt="" width="44" height="44"></div>
+            <p><span class="wordmark">yale<i>lux</i></span></p>
+            <p class="muted" lang="zh-CN">${esc(t("about.lockup.zh"))}</p>
+            <p class="small faint" lang="en">${esc(t("about.lockup.en"))}</p>
+          </div>`;
   // 标题 + 说明 的列表：items = [[标题, 说明]]
   const rows = (items) => `<ul class="list">${items.map(([title, sub]) => `
         <li class="list__item"><div class="list__main"><p class="list__title">${esc(title)}</p><p class="list__sub">${esc(sub)}</p></div></li>`).join("")}</ul>`;
@@ -81,10 +90,11 @@
         <section class="card stack" aria-labelledby="ab-name">
           <h2 class="section-title" id="ab-name">${esc(t("about.name.title"))}</h2>
           <p>${esc(t("about.name.text"))}</p>
-          ${notice("accent", "arch", `<p><strong>${esc(t("brand.tagline"))}</strong></p>`)}
+          ${lockupHtml()}
         </section>
         ${section("ab-team", t("about.team.title"), `
           <p>${esc(t("about.team.text"))}</p>
+          <p class="small muted" data-unofficial>${esc(t("brand.unofficialFull"))}</p>
           <p class="muted">${esc(t("about.team.oss"))}</p>
           ${gh ? `<div><a class="btn btn--secondary btn--sm" href="${gh}" target="_blank" rel="noopener">${icon("external")}${esc(t("about.team.github"))}</a></div>` : ""}`)}
         ${section("ab-now", t("about.now.title"), `<p>${esc(t("about.now.text"))}</p>`)}
@@ -196,7 +206,7 @@
         <section class="page page--narrow" data-about>
           ${top}
           <div class="card stack">
-            ${notice("info", "lock", `<p><strong>${esc(t("about.feedback.loginTitle"))}</strong></p><p>${esc(t("about.feedback.loginText"))}</p>`)}
+            ${notice("info", "info", `<p><strong>${esc(t("about.feedback.loginTitle"))}</strong></p><p>${esc(t("about.feedback.loginText"))}</p>`)}
             <a class="btn btn--primary btn--block btn--lg" href="#/login?next=about/feedback">${icon("mail")}${esc(t("about.feedback.login"))}</a>
             ${reachHtml()}
           </div>

@@ -84,16 +84,22 @@
   const roundStatusPill = (s) => pill(statusLabel(s), s === "published" ? "pill--success" : "");
   const MAIL_PILL = { sent: "pill--success", failed: "pill--warn", skipped: "" };
   const FB_PILL = { bug: "pill--warn", idea: "pill--incoming", other: "" };
-  // 统计卡：数字 + 名称 + 可选的派生比例
-  const stat = (value, label, note) => `<div class="stat"><strong>${esc(value)}</strong><span>${esc(label)}</span>${note ? `<p class="xsmall faint">${esc(note)}</p>` : ""}</div>`;
+  // 统计卡（§5.19）：名称在上（CSS 调换顺序）、Newsreader 大数字、数字下方 14px 的派生比例
+  const stat = (value, label, note) => `<div class="stat"><strong>${esc(value)}</strong><span>${esc(label)}</span>${note ? `<p>${esc(note)}</p>` : ""}</div>`;
   const moreLink = (href, text) => `<a class="btn btn--ghost btn--sm" href="${href}">${esc(text)}${icon("arrowRight")}</a>`;
-  const noticeHtml = (cls, iconName, inner, extra) => `<div class="notice ${cls}"${extra || ""}>${icon(iconName)}<div class="notice__body">${inner}</div></div>`;
-  const errorBox = (error) => YL.ui.emptyState("info", YL.ui.errorText(error, "admin"), `<button type="button" class="btn btn--primary" data-act="retry">${icon("refresh")}<span>${esc(t("common.retry"))}</span></button>`);
+  // 提示条（§5.7）：图标跟着变体走；不带变体的中性提示条用传入的图标
+  const NOTICE_ICON = { "notice--info": "info", "notice--accent": "arch", "notice--success": "check", "notice--warn": "alert", "notice--danger": "alertCircle" };
+  const noticeHtml = (cls, iconName, inner, extra) => `<div class="notice${cls ? " " + cls : ""}"${extra || ""}>${icon(NOTICE_ICON[cls] || iconName)}<div class="notice__body">${inner}</div></div>`;
+  // 空状态（§5.11）：标题 + 可选正文 + 最多一个操作
+  const empty = (ic, title, body, action) => `<div class="empty"><div class="empty__icon">${icon(ic, { size: 28 })}</div><p class="empty__title">${esc(title)}</p>${body ? `<p>${esc(body)}</p>` : ""}${action || ""}</div>`;
+  const errorBox = (error) => empty("alertCircle", YL.ui.errorText(error, "admin"), "", `<button type="button" class="btn btn--primary" data-act="retry">${icon("refresh")}<span>${esc(t("common.retry"))}</span></button>`);
   // 表格里不放 .sr-only（绝对定位的元素会跑出 .table-wrap 的滚动区，在手机上把整页撑宽），用 aria-label。
   // 单元格里也不用 .stack：它的子元素 min-width: 0，表格算列宽时这一列会缩成几乎为 0，内容压到旁边的列上；用 .cluster（flex）
-  function table(caption, heads, rows) {
+  // numCols：数字列的下标（表头和单元格都加 .num：右对齐、等宽数字）
+  function table(caption, heads, rows, numCols) {
+    const numCls = (i) => ((numCols || []).indexOf(i) >= 0 ? ' class="num"' : "");
     return `<div class="table-wrap"><table class="table" aria-label="${esc(caption)}">
-      <thead><tr>${heads.map((h) => `<th scope="col">${h}</th>`).join("")}</tr></thead>
+      <thead><tr>${heads.map((h, i) => `<th scope="col"${numCls(i)}>${h}</th>`).join("")}</tr></thead>
       <tbody>${rows.join("")}</tbody></table></div>`;
   }
 
@@ -111,7 +117,7 @@
         ${o.refresh ? `<button type="button" class="btn btn--secondary btn--sm" data-act="refresh">${icon("refresh")}<span>${esc(t("admin.refresh"))}</span></button>` : ""}
       </header>
       ${YL.ui.tabs(TABS, active, "#/admin")}
-      ${noticeHtml("notice--info", "shield", `<p>${esc(t("admin.privacy"))}</p>`)}`;
+      ${noticeHtml("notice--info", "", `<p>${esc(t("admin.privacy"))}</p>`)}`;
   }
   // 页面内容直接接在页头后面、作为 .page 的子元素：.table-wrap 必须是网格的直接子元素，
   // 手机上表格才会在框里横向滚动，而不是把整页撑宽（中间多一层网格就会被表格的最小宽度撑开）。
@@ -134,7 +140,7 @@
     const failed = mails.filter((m) => m.status === "failed").reduce((s, m) => s + (Number(m.n) || 0), 0);
     const unreported = Math.max(0, (a.matches || 0) - (a.met || 0) - (a.missed || 0));
 
-    const warn = failed ? noticeHtml("notice--warn", "mail", `<p>${esc(t("admin.ov.mailFailed", { n: num(failed) }))} <a href="#/admin/emails">${esc(t("admin.ov.seeEmails"))}</a></p>`) : "";
+    const warn = failed ? noticeHtml("notice--warn", "", `<p>${esc(t("admin.ov.mailFailed", { n: num(failed) }))} <a href="#/admin/emails">${esc(t("admin.ov.seeEmails"))}</a></p>`) : "";
 
     const users = `<section class="stack">
       ${YL.ui.sectionTitle(t("admin.ov.users"))}
@@ -156,12 +162,12 @@
       </div>
     </section>`;
 
-    const mailRows = mails.map((m) => `<tr><td>${esc(mailKindLabel(m.kind))}</td><td>${pill(mailStatusLabel(m.status), MAIL_PILL[m.status] || "")}</td><td>${esc(num(m.n))}</td></tr>`);
+    const mailRows = mails.map((m) => `<tr><td>${esc(mailKindLabel(m.kind))}</td><td>${pill(mailStatusLabel(m.status), MAIL_PILL[m.status] || "")}</td><td class="num">${esc(num(m.n))}</td></tr>`);
     const emails = `<section class="stack">
       ${YL.ui.sectionTitle(t("admin.ov.emails"), moreLink("#/admin/emails", t("admin.ov.allEmails")))}
       ${mails.length
-        ? table(t("admin.ov.emails"), [esc(t("admin.col.kind")), esc(t("admin.col.status")), esc(t("admin.col.count"))], mailRows)
-        : `<div class="card card--quiet"><p class="small muted">${esc(t("admin.ov.noEmails"))}</p></div>`}
+        ? table(t("admin.ov.emails"), [esc(t("admin.col.kind")), esc(t("admin.col.status")), esc(t("admin.col.count"))], mailRows, [2])
+        : `<div class="card card--quiet">${empty("mail", t("admin.ov.noEmails"))}</div>`}
     </section>`;
 
     const feedback = `<section class="stack">
@@ -180,7 +186,7 @@
   }
 
   function roundCard(r) {
-    if (!r) return `<div class="card">${YL.ui.emptyState("calendar", t("admin.ov.noRound"), `<a class="btn btn--secondary btn--sm" href="#/admin/rounds/new">${icon("plus")}<span>${esc(t("admin.rounds.new"))}</span></a>`)}</div>`;
+    if (!r) return `<div class="card">${empty("calendar", t("admin.ov.noRound"), t("admin.ov.noRoundBody"), `<a class="btn btn--secondary btn--sm" href="#/admin/rounds/new">${icon("plus")}<span>${esc(t("admin.rounds.new"))}</span></a>`)}</div>`;
     const engines = Object.keys(r.engines || {}).filter((k) => Number(r.engines[k]) > 0)
       .map((k) => k + " " + num(r.engines[k])).join(" · ");
     return `<div class="card"><div class="stack">
@@ -202,7 +208,7 @@
         ${stat(num(r.skipped), t("admin.ov.skipped"), rate(r.skipped, r.invites, (pct) => t("admin.ov.ofInvites", { pct })))}
         ${stat(num(r.fromRecs), t("admin.ov.fromRecs"), rate(r.fromRecs, r.invites, (pct) => t("admin.ov.ofInvites", { pct })))}
       </div>
-      <p class="cluster small muted">${icon("sparkle")}<span>${esc(engines ? t("admin.ov.engines", { list: engines }) : t("admin.ov.noEngines"))}</span></p>
+      <p class="cluster small muted">${icon("sliders")}<span>${esc(engines ? t("admin.ov.engines", { list: engines }) : t("admin.ov.noEngines"))}</span></p>
     </div></div>`;
   }
 
@@ -247,7 +253,7 @@
     },
     match: (r, f) => f === "all" || r.kind === f,
     rows: (list) => table(t("admin.rounds.title"), [esc(t("admin.col.title")), esc(t("admin.col.kind")), esc(t("admin.col.dates")), esc(t("admin.col.status")), esc(t("admin.col.actions"))], list.map(roundRow)),
-    empty: () => YL.ui.emptyState("calendar", t("admin.rounds.empty"))
+    empty: () => empty("calendar", t("admin.rounds.empty"), t("admin.rounds.emptyBody"))
   };
 
   /* ---------- 意见箱 ---------- */
@@ -266,7 +272,7 @@
         </div>
         <p class="prose">${esc(x.text)}</p>
       </div></article>`).join("")}</div>`,
-    empty: () => YL.ui.emptyState("message", t("admin.fb.empty"))
+    empty: () => empty("message", t("admin.fb.empty"))
   };
 
   /* ---------- 发信记录 ---------- */
@@ -286,7 +292,7 @@
         <td>${pill(mailStatusLabel(x.status), MAIL_PILL[x.status] || "")}</td>
         <td>${x.error ? esc(maskEmails(x.error)) : `<span class="faint">${DASH}</span>`}</td>
       </tr>`)),
-    empty: () => YL.ui.emptyState("mail", t("admin.mail.empty"))
+    empty: () => empty("mail", t("admin.mail.empty"))
   };
 
   /* ---------- 审计日志 ---------- */
@@ -313,7 +319,7 @@
           <td class="nowrap">${x.code ? `<code>${esc(x.code)}</code>` : `<span class="faint">${DASH}</span>`}</td>
         </tr>`));
     },
-    empty: () => YL.ui.emptyState("shield", t("admin.audit.empty"))
+    empty: () => empty("shield", t("admin.audit.empty"))
   };
 
   const VIEWS = {
@@ -333,7 +339,7 @@
 
     function listPart() {
       const shown = state.items.filter((x) => view.match(x, state.filter));
-      return { n: shown.length, html: asList(shown.length ? view.rows(shown) : YL.ui.emptyState("filter", t("admin.filter.none"))) };
+      return { n: shown.length, html: asList(shown.length ? view.rows(shown) : empty("filter", t("admin.filter.none"))) };
     }
     function bodyHtml(data) {
       if (view.overview) return overviewHtml(data || {});
@@ -419,7 +425,7 @@
       </div>
       <div class="split">
         <form class="form" novalidate data-form>
-          <div class="notice notice--info" role="status" data-restored hidden>${icon("edit")}<div class="notice__body"><p>${esc(t("admin.form.restored"))}</p><p><button type="button" class="btn btn--ghost btn--sm" data-act="discard">${icon("refresh")}<span>${esc(t("admin.form.discard"))}</span></button></p></div></div>
+          <div class="notice notice--info" role="status" data-restored hidden>${icon("info")}<div class="notice__body"><p>${esc(t("admin.form.restored"))}</p><p><button type="button" class="btn btn--ghost btn--sm" data-act="discard">${icon("refresh")}<span>${esc(t("admin.form.discard"))}</span></button></p></div></div>
           <div class="card"><div class="stack">
             <h3>${esc(t("admin.form.basics"))}</h3>
             <div class="stack stack--s">
@@ -478,7 +484,7 @@
             ${textField({ field: "postWechat", id: "ar-wechat", name: "wechat", label: t("admin.form.wechat"), hint: t("admin.form.wechatHint"), max: MAX.wechat, value: post.wechat || "", area: true, rows: 8 })}
           </div></div>
 
-          <div class="notice notice--danger" role="alert" tabindex="-1" data-form-error hidden>${icon("info")}<div class="notice__body"><p data-form-error-text></p></div></div>
+          <div class="notice notice--danger" role="alert" tabindex="-1" data-form-error hidden>${icon("alertCircle")}<div class="notice__body"><p data-form-error-text></p></div></div>
           <div class="cluster cluster--end">
             <button type="button" class="btn btn--secondary" data-status="draft">${esc(published ? t("admin.form.unpublish") : t("admin.form.saveDraft"))}</button>
             <button type="button" class="btn btn--primary" data-status="published">${esc(published ? t("admin.form.saveChanges") : t("admin.form.publish"))}</button>
@@ -701,8 +707,8 @@
         if (!ctx.isActive()) return;
         if (!r.ok) { m.paint(errorBox(r.error)); if (focusAfter) m.page.focus(); return; }
         round = (Array.isArray(r.data) ? r.data : []).find((x) => x.id === id) || null;
-        if (!round) { m.paint(YL.ui.emptyState("calendar", t("admin.form.notFound"), back)); return; }
-        if (round.kind !== "event") { m.paint(YL.ui.emptyState("lock", t("admin.form.weekly"), back)); return; }
+        if (!round) { m.paint(empty("calendar", t("admin.form.notFound"), "", back)); return; }
+        if (round.kind !== "event") { m.paint(empty("lock", t("admin.form.weekly"), "", back)); return; }
       }
       m.paint(formHtml(round));
       bindForm(m.page, ctx, round);
@@ -719,7 +725,7 @@
   const needsYale = () => { const u = YL.auth.user(); return !!u && !!u.adminNeedsYale && !YL.auth.isAdmin(); };
   function renderGate(root, ctx) {
     if (!needsYale()) {
-      root.innerHTML = YL.ui.emptyState("lock", t("router.forbidden"), `<a class="btn btn--primary" href="#/home">${esc(t("router.goHome"))}</a>`);
+      root.innerHTML = empty("lock", t("router.forbidden"), "", `<a class="btn btn--primary" href="#/home">${esc(t("router.goHome"))}</a>`);
       return;
     }
     root.innerHTML = `<section class="page page--narrow" data-admin-gate>
@@ -730,7 +736,7 @@
           </div>
         </header>
         <div class="card"><div class="stack">
-          ${noticeHtml("notice--warn", "lock", `<p><strong>${esc(t("admin.needsYale.title"))}</strong></p><p>${esc(t("admin.needsYale.body"))}</p>`)}
+          ${noticeHtml("notice--warn", "", `<p><strong>${esc(t("admin.needsYale.title"))}</strong></p><p>${esc(t("admin.needsYale.body"))}</p>`)}
           <button type="button" class="btn btn--primary btn--block" data-act="relogin">${icon("cap")}<span>${esc(t("admin.needsYale.cta"))}</span></button>
           <p class="xsmall faint">${esc(t("admin.needsYale.note"))}</p>
         </div></div>
@@ -766,7 +772,7 @@
       if (sub === "rounds" && ctx.id) return renderForm(root, ctx, ctx.id === "new" ? null : ctx.id);
       const view = VIEWS[sub];
       if (!view) {
-        mount(root, null).paint(YL.ui.emptyState("info", t("admin.notFound"), `<a class="btn btn--primary" href="#/admin">${esc(t("admin.backToOverview"))}</a>`));
+        mount(root, null).paint(empty("info", t("admin.notFound"), "", `<a class="btn btn--primary" href="#/admin">${esc(t("admin.backToOverview"))}</a>`));
         return;
       }
       return renderView(root, ctx, sub, view);

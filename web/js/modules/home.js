@@ -50,18 +50,25 @@
           ${meta ? `<span>${icon(r.open ? "people" : "clock")}${esc(meta)}</span>` : ""}
         </div>
         <div class="banner__actions">
-          <a class="btn btn--accent" href="#/events/${esc(encodeURIComponent(r.id))}">${esc(t("home.event.view"))}${icon("arrowRight")}</a>
+          <a class="btn btn--secondary" href="#/events/${esc(encodeURIComponent(r.id))}">${esc(t("home.event.view"))}${icon("chevronRight")}</a>
         </div>
       </section>`;
   }
 
   /* ---------- 落地页的各个部分 ---------- */
+  // 翻译句子先转义，再把 {占位符} 换成已转义的 HTML 片段
+  const fill = (text, parts) => esc(text).replace(/\{(\w+)\}/g, (m, k) => (parts[k] != null ? parts[k] : m));
+  // 主视觉（设计规范 §9 第 5 条）：当前语言的 tagline 做 Display 标题，「相遇 / connects」用 .lit 划一笔（这一屏唯一的一处）；
+  // 另一种语言的 tagline 放在下面的导语里
   function heroHtml() {
+    const other = YL.i18n.getLang() === "zh" ? "en" : "zh-CN";
+    const lit = `<span class="lit">${esc(t("home.hero.lit"))}</span>`;
     return `
       <div class="hero">
-        <p class="hero__eyebrow">${icon("sun")}<span>${esc(t("home.hero.eyebrow"))}</span></p>
-        <h1 class="hero__title">${esc(t("home.hero.title"))}<br><em>${esc(t("home.hero.titleEm"))}</em></h1>
-        <p class="hero__lead">${esc(t("home.hero.lead"))}</p>
+        <p class="hero__eyebrow"><span>${esc(t("home.hero.eyebrow"))}</span></p>
+        <h1 class="hero__title">${esc(t("home.hero.line1"))}<br>${fill(t("home.hero.line2"), { lit })}</h1>
+        <p class="hero__lead" lang="${other}">${esc(t("home.hero.alt"))}</p>
+        <p class="page-sub">${esc(t("home.hero.lead"))}</p>
         <div class="hero__cta" data-cta>
           <a class="btn btn--primary btn--lg" href="#/login">${icon("mail")}${esc(t("home.hero.login"))}</a>
         </div>
@@ -89,7 +96,7 @@
           <div class="tags">${tag(t("home.sample.tagGoal"), "tag--goal")}${tag(t("home.sample.tag1"), "tag--shared")}${tag(t("home.sample.tag2"), "tag--shared")}${tag(t("home.sample.tag3"))}</div>
           <div class="person__foot">
             <span class="person__overlap">${icon("clock")}${esc(t("home.sample.overlap"))}</span>
-            <span class="pill pill--matched">${icon("check")}${esc(t("home.sample.mutual"))}</span>
+            <span class="pill pill--success">${icon("check")}${esc(t("home.sample.mutual"))}</span>
           </div>
         </article>
         <p class="small muted">${esc(t("home.sample.note"))}</p>

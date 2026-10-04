@@ -6,18 +6,19 @@
      #/coffee/browse?identity&goal&interest&field   找人（按标签筛选池子）
      #/coffee/p/:id                             个人详情（公开答案 + 共同空闲时间）
      #/coffee/times                             选空闲时间（纽约时间，旁边显示北京时间）
-     #/coffee/inbox                             收件箱：想认识你的人 / 我发出的
-     #/coffee/matches                           匹配：联系方式、一键约时间、见到了吗
+     #/coffee/inbox?tab=sent                    收件箱：想认识你的人 / 我发出的（分段控件）
+     #/coffee/matches                           匹配：成功页头、联系方式、一键约时间、见到了吗
 
    数据只走 YL.api（契约见 docs/api.md）；时间表与截止判断用 YL.domain.coffee（只做显示）。
-   界面不自己判断权限：按钮由接口返回的 relation / canSchedule / canReport 决定。 */
+   界面不自己判断权限：按钮由接口返回的 relation / canSchedule / canReport 决定。
+   样式见 docs/design/components.md（关系状态四级阶梯、时段格、横幅、匹配页头），模块里不写样式。 */
 (function () {
   "use strict";
   const { t, L, esc, icon, avatar } = YL.ui;
   const D = YL.domain.coffee;
   const isReady = () => YL.auth.isReady();
 
-  // 本次会话内记住的小状态（不持久化）
+  // 本次会话内记住的小状态（只在内存里，不持久化）
   let backPath = "coffee/browse"; // 详情页"返回"回到哪个列表
   let filtersOpen = null;          // 找人页筛选区是否展开（null = 按屏幕宽度决定）
   let pendingFocus = null;         // 改筛选会重新渲染页面，渲染完把焦点还给刚点的那个标签
@@ -26,12 +27,16 @@
   let draft = null;                // 选时间页还没保存的选择 { roundId, base, picks }：切语言、切页面回来还在
   let timesOpen = false;           // 当前（或刚才）显示的是选时间页
   let ownModal = null;             // 本模块打开的弹窗：换页时关掉，不让它浮在别的页面上
+  let showBj = true;               // 选时间页"显示北京时间"开关（本次会话内记住）
+  let limitHit = false;            // 这一页上发邀请被拒（too_many_open）：其余"想认识"显示"已达上限"。每次渲染重置
+  const seenMatches = new Set();   // 本次会话里已经在匹配页头展示过的匹配：第一次展示才播放拱线动画
 
   // 只注册一次（不随每次渲染重复添加）
   window.addEventListener("yl:route", (e) => {
     const to = (e.detail && e.detail.path) || "";
     if (ownModal && ownModal.isConnected) YL.ui.closeModal();
     ownModal = null;
+    if (to !== "coffee/times") document.body.classList.remove("has-savebar"); // 吸底保存条只在选时间页
     if (timesOpen && to !== "coffee/times") {
       timesOpen = false;
       if (draft) YL.ui.toast(t("coffee.times.draftKept"));
@@ -75,6 +80,9 @@
   const nowIso = () => new Date().toISOString();
   // 还没过截止的已选时间（已约定的始终算）
   const openPicks = (round, slots, locked) => list(slots).filter((s) => list(locked).indexOf(s) >= 0 || !D.isClosed(round, s, nowIso()));
+  // 文案里的数字单独包一层（Newsreader 大数字）：t(key, { n: NUM }) 按占位符切开，各段 esc()
+  const NUM = "\u0001";
+  const numIn = (text, n, cls) => String(text).split(NUM).map(esc).join(`<strong class="${cls}">${esc(YL.ui.num(n))}</strong>`);
 
   /* ---------- 问卷标签 ---------- */
   const question = (id) => YL.auth.questions().find((q) => q.id === id);
@@ -100,7 +108,8 @@
     const field = list(p.answers && p.answers.field)[0];
     return `<p class="person__meta"><span>${esc(whoLine(p))}</span>${field ? `<span>${esc(optLabel("field", field))}</span>` : ""}</p>`;
   }
-  const sharedTag = (label) => `<span class="tag tag--shared">${icon("heart", { size: 12 })}${esc(label)}<span class="sr-only">${esc(t("coffee.person.sharedSr"))}</span></span>`;
+  // 共同兴趣：灯点由 CSS 画（tag--shared），不放图标
+  const sharedTag = (label) => `<span class="tag tag--shared">${esc(label)}<span class="sr-only">${esc(t("coffee.person.sharedSr"))}</span></span>`;
   function interestTags(values) {
     const mine = myInterests(), isShared = (x) => (mine.indexOf(x) >= 0 ? 1 : 0);
     return list(values).slice().sort((x, y) => isShared(y) - isShared(x))
@@ -116,32 +125,39 @@
       ? `<span class="person__overlap">${icon("clock")}${esc(n === 1 ? t("coffee.person.overlapOne") : t("coffee.person.overlap", { n }))}</span>`
       : `<span class="person__overlap person__overlap--none">${icon("clock")}${esc(t("coffee.person.noOverlap"))}</span>`;
   }
-  // relation.state → 右下角的按钮或状态（见 docs/design/components.md）
+  /* relation.state → 右下角的状态按钮（§5.4 四级明暗阶梯，见 docs/design/components.md）：
+     none 想认识（海军蓝 + plus）→ invited 已邀请（透明虚线 + clock）→ incoming TA 想认识你 · 匹配（灯色 + arch）
+     → matched 已匹配（苔绿链接，check … chevronRight）；no_reply 未回应（只读标签）；
+     本页发邀请被拒（too_many_open）后，none 显示"已达上限"（aria-disabled，点击出 toast，原因见页面上的 #coffee-limit） */
   function relationHtml(p) {
     const r = p.relation || { state: "none" }, id = esc(p.id);
-    if (r.state === "invited") return `<span class="pill pill--waiting">${icon("check")}${esc(t("coffee.rel.invited"))}</span>`;
-    if (r.state === "incoming") return `<button type="button" class="btn btn--accent btn--sm" data-act="accept" data-id="${id}">${icon("heart")}${esc(t("coffee.rel.incoming"))}</button>`;
-    if (r.state === "matched") return `<a class="pill pill--matched" href="#/coffee/matches">${icon("sparkle")}${esc(t("coffee.rel.matched"))}</a>`; // 在 person__actions 里按按钮尺寸显示
+    if (r.state === "invited") return `<span class="btn btn--invited btn--sm" aria-disabled="true">${icon("clock")}${esc(t("coffee.rel.invited"))}<span class="sr-only">${esc(t("coffee.rel.invitedSr"))}</span></span>`;
+    if (r.state === "incoming") return `<button type="button" class="btn btn--accent btn--sm" data-act="accept" data-id="${id}">${icon("arch")}${esc(t("coffee.rel.incoming"))}</button>`;
+    if (r.state === "matched") return `<a class="btn btn--matched btn--sm" href="#/coffee/matches">${icon("check")}${esc(t("coffee.rel.matched"))}${icon("chevronRight")}</a>`;
     if (r.state === "no_reply") return `<span class="pill">${esc(t("coffee.rel.noReply"))}</span>`;
-    return `<button type="button" class="btn btn--accent btn--sm" data-act="invite" data-id="${id}">${esc(t("coffee.rel.invite"))}</button>`;
+    if (limitHit) return `<button type="button" class="btn btn--primary btn--sm" data-act="limit" data-id="${id}" aria-disabled="true" aria-describedby="coffee-limit">${icon("info")}${esc(t("coffee.rel.limit", { n: maxOpen }))}</button>`;
+    return `<button type="button" class="btn btn--primary btn--sm" data-act="invite" data-id="${id}">${icon("plus")}${esc(t("coffee.rel.invite"))}</button>`;
   }
-  /* o = { rec, reasons, overlap（数字）, foot（左下角 html）, note, link（名字是否链到详情）, actions（覆盖右下角）, dismiss } */
+  /* o = { rec, reasons, overlap（数字）, foot（左下角 html）, note, link（名字是否链到详情）, actions（覆盖右下角）, dismiss, after（卡片底部再加一行） } */
   function personHtml(p, o) {
     o = o || {};
     const intro = typeof (p.answers && p.answers.intro) === "string" ? p.answers.intro.trim() : "";
     const name = o.link === false
       ? `<p class="person__name">${esc(p.name)}</p>`
       : `<a class="person__name" href="#/coffee/p/${esc(encodeURIComponent(p.id))}">${esc(p.name)}</a>`;
+    // 推荐理由前的灯点由 CSS 画（.reason::before），不放图标
     const reasons = (o.reasons || []).length
-      ? `<ul class="person__reasons">${o.reasons.map((r) => `<li class="reason">${icon("sparkle")}<span>${esc(L(r))}</span></li>`).join("")}</ul>` : "";
+      ? `<ul class="person__reasons">${o.reasons.map((r) => `<li class="reason"><span>${esc(L(r))}</span></li>`).join("")}</ul>` : "";
+    // 不感兴趣：右上角的 ×（icon-btn）
     const dismiss = o.dismiss && (!p.relation || p.relation.state === "none")
-      ? `<button type="button" class="btn btn--ghost btn--sm" data-act="dismiss" data-id="${esc(p.id)}">${esc(t("coffee.rec.dismiss"))}</button>` : "";
+      ? `<button type="button" class="icon-btn" data-act="dismiss" data-id="${esc(p.id)}" aria-label="${esc(t("coffee.rec.dismissLabel", { name: p.name }))}">${icon("x")}</button>` : "";
     return `<article class="person${o.rec ? " person--rec" : ""}" data-person="${esc(p.id)}">
-      <div class="person__head">${avatar(p.name)}<div class="person__who">${name}${metaHtml(p)}</div></div>
+      <div class="person__head">${avatar(p.name)}<div class="person__who">${name}${metaHtml(p)}</div>${dismiss}</div>
       ${reasons}${tagsHtml(p)}
       ${intro ? `<p class="person__intro">${esc(intro)}</p>` : ""}
       ${o.note ? `<p class="person__note">${esc(o.note)}</p>` : ""}
-      <div class="person__foot">${o.overlap != null ? overlapHtml(o.overlap) : o.foot || ""}<div class="person__actions">${dismiss}${o.actions != null ? o.actions : relationHtml(p)}</div></div>
+      <div class="person__foot">${o.overlap != null ? overlapHtml(o.overlap) : o.foot || ""}<div class="person__actions">${o.actions != null ? o.actions : relationHtml(p)}</div></div>
+      ${o.after || ""}
     </article>`;
   }
 
@@ -150,29 +166,33 @@
     root.innerHTML = `<section class="page${cls ? " " + cls : ""}"></section>`;
     return root.firstElementChild;
   }
+  // 空状态（§5.11）：拱形图标框 + 标题 + 一句正文 + 最多一个操作
+  function emptyBlock(iconName, title, body, actionHtml) {
+    return `<div class="empty"><div class="empty__icon">${icon(iconName, { size: 28 })}</div>
+      <p class="empty__title">${esc(title)}</p>${body ? `<p>${esc(body)}</p>` : ""}${actionHtml || ""}</div>`;
+  }
   const retryBtn = (act) => `<button type="button" class="btn btn--primary" data-act="${act || "retry"}">${esc(t("common.retry"))}</button>`;
   const backHomeBtn = () => `<a class="btn btn--primary" href="#/coffee">${esc(t("coffee.backHome"))}</a>`;
+  const browseBtn = () => `<a class="btn btn--primary" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a>`;
+  const timesBtn = (cls) => `<a class="btn btn--primary${cls ? " " + cls : ""}" href="#/coffee/times">${icon("clock")}${esc(t("coffee.join.cta"))}</a>`;
   // 出错时给一条走得通的路：资料不完整 → 去补资料；没有进行中的轮 → 回约咖啡首页；其他 → 重试
   function errorBlock(error, act) {
     const reason = error && error.reason;
     if (reason === "profile_incomplete") {
       YL.auth.refresh().catch(() => {}); // 让外壳的导航也知道要先补资料
-      return YL.ui.emptyState("user", t("coffee.err.profile_incomplete"), `<a class="btn btn--primary" href="#/profile/setup?next=coffee">${esc(t("coffee.finishProfile"))}</a>`);
+      return emptyBlock("user", t("coffee.err.profile_incomplete"), "", `<a class="btn btn--primary" href="#/profile/setup?next=coffee">${esc(t("coffee.finishProfile"))}</a>`);
     }
-    if (reason === "round_closed") return YL.ui.emptyState("coffee", t("coffee.err.round_closed"), act === "retry-recs" ? retryBtn("retry") : backHomeBtn());
-    return YL.ui.emptyState("info", YL.ui.errorText(error, "coffee"), retryBtn(act));
+    if (reason === "round_closed") return emptyBlock("coffee", t("coffee.err.round_closed"), "", act === "retry-recs" ? retryBtn("retry") : backHomeBtn());
+    return emptyBlock("info", YL.ui.errorText(error, "coffee"), "", retryBtn(act));
   }
   const noticeHtml = (kind, iconName, bodyHtml, role) => `<div class="notice notice--${kind}"${role ? ` data-role="${esc(role)}"` : ""}>${icon(iconName)}<div class="notice__body">${bodyHtml}</div></div>`;
-  function joinCard() {
-    return `<section class="card stack" data-role="join">
-      <div class="stack stack--s">
-        <h2 class="card__title">${esc(t("coffee.join.title"))}</h2>
-        <p class="muted">${esc(t("coffee.join.body", { min: slotMin }))}</p>
-      </div>
-      <div><a class="btn btn--primary" href="#/coffee/times">${icon("clock")}${esc(t("coffee.join.cta"))}</a></div>
-    </section>`;
+  // 还没参加这一轮（§10.3"先亮出自己，才能看到别人"）。cta = false：同一屏上面已经有"选空闲时间"了
+  function joinBlock(cta) {
+    return `<div data-role="join">${emptyBlock("clock", t("coffee.join.title"), t("coffee.join.body", { min: slotMin }), cta === false ? "" : timesBtn())}</div>`;
   }
-  const noRound = (link) => YL.ui.emptyState("coffee", t("coffee.home.noRound"), link ? backHomeBtn() : "");
+  const noRound = (link) => emptyBlock("coffee", t("coffee.home.noRound"), t("coffee.home.noRoundBody"), link ? backHomeBtn() : "");
+  // "已达上限"的说明（按钮 aria-describedby 指向它）：先放一个隐藏的空位，被拒时填上
+  const limitSlot = () => `<div data-role="limit" id="coffee-limit" hidden></div>`;
   // 拿到 /coffee/state 后记下本轮的几个数字（弹窗、加入卡片里用）
   function rememberRound(round) {
     if (!round) return;
@@ -194,7 +214,7 @@
     const card = cardEl(env, id);
     if (card) {
       if (on) card.dataset.busy = "1"; else delete card.dataset.busy;
-      card.querySelectorAll(".person__actions [data-act]").forEach((b) => { b.disabled = !!on; });
+      card.querySelectorAll("button[data-act]").forEach((b) => { b.disabled = !!on; });
     }
     YL.ui.busy(btn, on);
   }
@@ -207,13 +227,26 @@
     p.relation = r.ok && r.data && r.data.relation ? r.data.relation : { state: reason === "already_matched" ? "matched" : "none" };
     redraw(env, p);
   }
-  function redraw(env, p) {
+  function redraw(env, p, focus) {
     const old = cardEl(env, p.id);
     if (!old) return;
     old.outerHTML = env.draw(p);
+    if (focus === false) return;
     const fresh = cardEl(env, p.id);
     const target = fresh && fresh.querySelector(".person__actions button, .person__actions a, a.person__name, [data-focus]");
     if (target) target.focus();
+  }
+  // 发邀请被拒（等待回复的邀请到上限）：页面上给一条 notice--warn，其余"想认识"都换成"已达上限"
+  function applyLimit(env) {
+    limitHit = true;
+    const box = env.page.querySelector('[data-role="limit"]');
+    if (box && box.hidden) {
+      box.innerHTML = noticeHtml("warn", "alert", `<p><strong>${esc(t("coffee.limit.title", { n: maxOpen }))}</strong></p>
+        <p>${esc(t("coffee.limit.body"))}</p>
+        <div><a class="btn btn--secondary btn--sm" href="#/coffee/inbox?tab=sent">${esc(t("coffee.invite.seeSent"))}</a></div>`);
+      box.hidden = false;
+    }
+    env.people.forEach((x) => { if (!x.relation || x.relation.state === "none") redraw(env, x, false); });
   }
   function removeCard(env, id) {
     const el = cardEl(env, id);
@@ -233,15 +266,16 @@
     else if (act === "accept") accept(btn, p, env);
     else if (act === "skip") skip(btn, p, env);
     else if (act === "dismiss") dismiss(btn, p, env);
+    else if (act === "limit") YL.ui.toast(t("coffee.rel.limitToast", { n: maxOpen })); // aria-disabled：留在 Tab 顺序里，点了说明原因
   }
+  // 弹窗底部按钮（§5.13）：手机竖排、主操作在上；桌面横排靠右（沿用 confirm__actions）
+  const modalActions = (cancelHtml, mainHtml) => `<div class="confirm__actions">${cancelHtml}${mainHtml}</div>`;
   function showMatched(name) {
     ownModal = YL.ui.modal(`<h2 class="modal__title" tabindex="-1" data-role="title">${esc(t("coffee.matched.title", { name }))}</h2>
       <div class="stack">
-        ${noticeHtml("success", "heart", `<p>${esc(t("coffee.matched.body"))}</p>`)}
-        <div class="cluster cluster--end">
-          <button type="button" class="btn btn--ghost" data-close>${esc(t("coffee.matched.later"))}</button>
-          <a class="btn btn--primary" href="#/coffee/matches">${esc(t("coffee.matched.go"))}${icon("arrowRight")}</a>
-        </div>
+        ${noticeHtml("success", "check", `<p>${esc(t("coffee.matched.body"))}</p>`)}
+        ${modalActions(`<button type="button" class="btn btn--ghost" data-close>${esc(t("coffee.matched.later"))}</button>`,
+          `<a class="btn btn--primary" href="#/coffee/matches">${esc(t("coffee.matched.go"))}${icon("arrowRight")}</a>`)}
       </div>`, {
       label: t("coffee.matched.title", { name }),
       onMount(panel, close) {
@@ -262,21 +296,25 @@
           <textarea class="textarea" id="coffee-note" name="note" rows="3" maxlength="${max}" aria-describedby="coffee-note-count" placeholder="${esc(t("coffee.invite.notePh"))}"></textarea>
           <p class="field__count" id="coffee-note-count">0/${max}</p>
         </div>
-        ${noticeHtml("info", "lock", `<p>${esc(t("coffee.invite.ruleContact"))}</p><p>${esc(t("coffee.invite.ruleSkip"))}</p><p>${esc(t("coffee.invite.ruleExpire", { n: maxOpen }))}</p>`)}
-        <div data-role="err" aria-live="assertive"></div>
-        <button type="submit" class="btn btn--accent btn--block">${icon("heart")}${esc(t("coffee.invite.send"))}</button>
+        ${noticeHtml("info", "info", `<p>${esc(t("coffee.invite.ruleContact"))}</p><p>${esc(t("coffee.invite.ruleSkip"))}</p><p>${esc(t("coffee.invite.ruleExpire", { n: maxOpen }))}</p>`)}
+        <div data-role="err" aria-live="assertive" hidden></div>
+        ${modalActions(`<button type="button" class="btn btn--ghost" data-close>${esc(t("common.cancel"))}</button>`,
+          `<button type="submit" class="btn btn--primary">${icon("plus")}${esc(t("coffee.invite.send"))}</button>`)}
       </form>`, {
       label: t("coffee.invite.title", { name: p.name }),
-      onMount(panel) {
+      onMount(panel, close) {
         const form = panel.querySelector("form"), note = form.elements.note, count = panel.querySelector("#coffee-note-count"), errBox = panel.querySelector('[data-role="err"]');
         panel.querySelector('[data-role="title"]').focus(); // 不自动聚焦输入框：手机上不要一打开就弹键盘
         note.addEventListener("input", () => { count.textContent = note.value.length + "/" + max; });
-        panel.addEventListener("click", (e) => { if (e.target.closest("a[href]")) YL.ui.closeModal(); });
+        panel.addEventListener("click", (e) => {
+          if (e.target.closest("a[href]")) YL.ui.closeModal();
+          else if (e.target.closest("[data-close]")) close();
+        });
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
           const btn = form.querySelector('[type="submit"]');
           YL.ui.clearFieldErrors(form);
-          errBox.innerHTML = "";
+          errBox.innerHTML = ""; errBox.hidden = true;
           YL.ui.busy(btn, true);
           const r = await YL.api.post("/coffee/invites", { toId: p.id, note: note.value.trim(), source: env.source });
           YL.ui.busy(btn, false);
@@ -286,7 +324,7 @@
             p.relation = { state: r.data.matched ? "matched" : "invited", inviteId: r.data.id };
             redraw(env, p);
             if (r.data.matched) { changed(env); showMatched(p.name); } // 对方之前邀请过你：直接匹配，数量变了
-            else YL.ui.toast(t("coffee.invite.sent"), "success");
+            else YL.ui.toast(t("coffee.invite.sent", { name: p.name }), "success");
             return;
           }
           const reason = r.error && r.error.reason;
@@ -298,8 +336,17 @@
             YL.ui.toast(YL.ui.errorText(r.error, "coffee"));
             return;
           }
-          const more = reason === "too_many_open" ? `<p><a href="#/coffee/inbox">${esc(t("coffee.invite.seeSent"))}</a></p>` : "";
-          errBox.innerHTML = noticeHtml("danger", "info", `<p>${esc(YL.ui.errorText(r.error, "coffee"))}</p>${more}`);
+          if (reason === "too_many_open") {
+            // 等待回复的邀请到上限：关掉弹层，这一页的"想认识"都换成"已达上限"，焦点留在这张卡的按钮上
+            YL.ui.closeModal();
+            applyLimit(env);
+            const lb = cardEl(env, p.id) && cardEl(env, p.id).querySelector('[data-act="limit"]');
+            if (lb) lb.focus();
+            YL.ui.toast(t("coffee.rel.limitToast", { n: maxOpen }), "error");
+            return;
+          }
+          errBox.innerHTML = noticeHtml("danger", "alertCircle", `<p>${esc(YL.ui.errorText(r.error, "coffee"))}</p>`);
+          errBox.hidden = false;
         });
       }
     });
@@ -340,7 +387,7 @@
     if (!env.ctx.isActive()) return;
     if (!r.ok) { setCardBusy(env, p.id, btn, false); YL.ui.toast(YL.ui.errorText(r.error, "coffee"), "error"); return; }
     removeCard(env, p.id);
-    YL.ui.toast(t("coffee.rec.dismissed"));
+    YL.ui.toast(t("coffee.rec.dismissed", { name: p.name }));
   }
   const bindRetry = (page) => page.addEventListener("click", (e) => { if (e.target.closest('[data-act="retry"]')) YL.router.render(); });
   function bindPeople(page, env, extra) {
@@ -393,10 +440,19 @@
     if (!st.round) { page.innerHTML = noRound(); return; }
     rememberRound(st.round);
     page.innerHTML = homeHtml(st);
+    fillProgress(page);
     if (st.joined) loadRecs(env);
   }
+  const freeCount = (st) => openPicks(st.round, st.slots, st.locked).length;
+  // 活动轮还没参加：横幅里已经有灯色的"参加"按钮，别处不再重复放"选空闲时间"
+  const joinInBanner = (st) => st.round.kind === "event" && !st.joined;
+  // 我的进度（§5.6）：三个数字；空闲时间为 0 时整条换成 notice--accent + "选空闲时间"
   function statusHtml(st) {
-    const free = openPicks(st.round, st.slots, st.locked).length;
+    const free = freeCount(st);
+    if (!free) {
+      return noticeHtml("accent", "arch", `<p>${esc(st.joined ? t("coffee.status.noneOpen") : t("coffee.status.none"))}</p>
+        ${joinInBanner(st) ? "" : `<div>${timesBtn("btn--sm")}</div>`}`, "status");
+    }
     return `<nav class="statusbar" data-role="status" aria-label="${esc(t("coffee.status.label"))}">
       <a class="statusbar__item" href="#/coffee/times"><strong>${esc(YL.ui.num(free))}</strong><span>${esc(t("coffee.status.times"))}</span></a>
       <a class="statusbar__item" href="#/coffee/inbox"><strong>${esc(YL.ui.num(st.incoming))}</strong><span>${esc(t("coffee.status.incoming"))}</span></a>
@@ -404,22 +460,36 @@
     </nav>`;
   }
   function homeNotices(st) {
-    return (st.incoming ? noticeHtml("accent", "heart", `<p><strong>${esc(st.incoming === 1 ? t("coffee.home.incomingOne") : t("coffee.home.incoming", { n: st.incoming }))}</strong></p><p><a href="#/coffee/inbox">${esc(t("coffee.home.incomingCta"))}</a></p>`, "notice-incoming") : "")
-      + (st.matches ? noticeHtml("success", "sparkle", `<p><strong>${esc(st.matches === 1 ? t("coffee.home.matchesOne") : t("coffee.home.matches", { n: st.matches }))}</strong></p><p><a href="#/coffee/matches">${esc(t("coffee.home.matchesCta"))}</a></p>`, "notice-matches") : "");
+    return (st.incoming ? noticeHtml("accent", "arch", `<p><strong>${esc(st.incoming === 1 ? t("coffee.home.incomingOne") : t("coffee.home.incoming", { n: st.incoming }))}</strong></p>
+        <div><a class="btn btn--secondary btn--sm" href="#/coffee/inbox">${esc(t("coffee.home.incomingCta"))}</a></div>`, "notice-incoming") : "")
+      + (st.matches ? noticeHtml("success", "check", `<p><strong>${esc(st.matches === 1 ? t("coffee.home.matchesOne") : t("coffee.home.matches", { n: st.matches }))}</strong></p>
+        <div><a class="btn btn--secondary btn--sm" href="#/coffee/matches">${esc(t("coffee.home.matchesCta"))}</a></div>`, "notice-matches") : "");
+  }
+  // 进度条的宽度是动态值：渲染后用 CSSOM 设置（模块的 HTML 里不写 style 属性）
+  function fillProgress(scope) {
+    scope.querySelectorAll(".progress > [data-pct]").forEach((el) => { el.style.width = el.dataset.pct + "%"; });
   }
   function homeHtml(st) {
     const r = st.round, ev = r.kind === "event", name = YL.auth.displayName();
     const upcoming = D.localDate(nowIso(), r.timezone) < r.startDate;
     const eyebrow = ev ? t("coffee.home.eyebrowEvent") : upcoming ? t("coffee.home.eyebrowSoon") : t("coffee.home.eyebrowWeek");
     const hello = !st.joined ? t("coffee.home.hello", { name }) : st.recsEnabled === false ? t("coffee.home.helloLocked", { name }) : t("coffee.home.helloJoined", { name });
-    const n = st.participants || 0;
+    const n = st.participants || 0, threshold = Number(r.poolThreshold) || 0;
     const themes = list(r.themeTags).map((x) => {
       const q = ["interests", "goals"].map(question).find((qq) => qq && (qq.options || []).some((o) => o.id === x));
       return `<span class="tag tag--theme">${esc(q ? optLabel(q.id, x) : x)}</span>`;
     }).join("");
-    const actions = (st.joined ? `<a class="btn btn--secondary btn--sm" href="#/coffee/times">${icon("clock")}${esc(t("coffee.home.editTimes"))}</a>` : "")
+    // 横幅按钮：活动轮还没参加 → 灯色"参加这次 Coffee Chat"（btn--accent 的两种用法之一）；已参加且有空闲时间 → 改时间
+    const actions = (joinInBanner(st) ? `<a class="btn btn--accent" href="#/coffee/times">${esc(t("coffee.home.joinEvent"))}</a>` : "")
+      + (st.joined && freeCount(st) ? `<a class="btn btn--secondary btn--sm" href="#/coffee/times">${icon("clock")}${esc(t("coffee.home.editTimes"))}</a>` : "")
       + (ev ? `<a class="btn btn--secondary btn--sm" href="#/events/${esc(encodeURIComponent(r.id))}">${esc(t("coffee.home.eventLink"))}${icon("arrowRight")}</a>` : "");
-    const steps = [["clock", t("coffee.how.s1"), t("coffee.how.s1d", { min: r.slotMinutes || slotMin, tz: tzName(r.timezone) })],["heart", t("coffee.how.s2"), t("coffee.how.s2d")], ["coffee", t("coffee.how.s3"), t("coffee.how.s3d")]];
+    // 人数不足、推荐还没开放：4px 进度条 + "14/20 人，满 20 人开放推荐"
+    const warming = st.recsEnabled === false && threshold > 0 && n < threshold;
+    const progress = warming ? `<div class="stack stack--s">
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${esc(threshold)}" aria-valuenow="${esc(n)}" aria-label="${esc(t("coffee.home.warmLabel"))}"><span data-pct="${esc(Math.round((n / threshold) * 100))}"></span></div>
+        <p class="xsmall muted">${esc(t("coffee.home.warm", { n, threshold }))}</p>
+      </div>` : "";
+    const steps = [["clock", t("coffee.how.s1"), t("coffee.how.s1d", { min: r.slotMinutes || slotMin, tz: tzName(r.timezone) })], ["plus", t("coffee.how.s2"), t("coffee.how.s2d")], ["coffee", t("coffee.how.s3"), t("coffee.how.s3d")]];
     return `<div class="split">
       <div class="stack stack--l">
         <section class="banner${ev ? " banner--event" : ""}">
@@ -429,15 +499,16 @@
           ${themes ? `<div class="tags">${themes}</div>` : ""}
           <div class="banner__meta">
             <span>${icon("calendar")}${esc(rangeText(r))}</span>
-            <span>${icon("people")}${esc(n === 1 ? t("coffee.home.participantsOne") : t("coffee.home.participants", { n }))}</span>
+            <span>${numIn(n === 1 ? t("coffee.home.participantsOne", { n: NUM }) : t("coffee.home.participants", { n: NUM }), n, "banner__stat")}</span>
           </div>
+          ${progress}
           ${actions ? `<div class="banner__actions">${actions}</div>` : ""}
         </section>
         ${statusHtml(st)}
-        ${st.joined ? `<section class="stack" aria-label="${esc(t("coffee.rec.title"))}">
-            ${YL.ui.sectionTitle(t("coffee.rec.title"), "", t("coffee.rec.sub"))}
-            <div class="stack" data-role="recs-body">${YL.ui.spinner()}</div>
-          </section>` : joinCard()}
+        <section class="stack" aria-label="${esc(t("coffee.rec.title"))}">
+          ${YL.ui.sectionTitle(t("coffee.rec.title"), "", st.joined ? t("coffee.rec.sub") : "")}
+          ${st.joined ? `${limitSlot()}<div class="stack" data-role="recs-body">${YL.ui.spinner()}</div>` : joinBlock(false)}
+        </section>
       </div>
       <aside class="stack" data-role="aside">
         ${homeNotices(st)}
@@ -448,7 +519,7 @@
       </aside>
     </div>`;
   }
-  const recsEmpty = () => YL.ui.emptyState("sparkle", t("coffee.rec.empty"), `<a class="btn btn--primary" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a>`);
+  const recsEmpty = () => emptyBlock("coffee", t("coffee.rec.empty"), t("coffee.rec.emptyBody"), browseBtn());
   async function loadRecs(env) {
     const box = env.page.querySelector('[data-role="recs-body"]');
     if (!box) return;
@@ -456,21 +527,19 @@
     const r = await YL.api.get("/coffee/recommendations");
     if (!env.ctx.isActive()) return;
     if (!r.ok) {
-      if (r.error.reason === "not_joined") { box.closest("section").outerHTML = joinCard(); return; }
+      if (r.error.reason === "not_joined") { box.outerHTML = joinBlock(); return; }
       box.innerHTML = errorBlock(r.error, "retry-recs");
       return;
     }
     const d = r.data;
     if (!d.enabled) {
-      box.innerHTML = noticeHtml("info", "people", `<p><strong>${esc(t("coffee.rec.lockedTitle"))}</strong></p>
-        <p>${esc(t("coffee.rec.locked", { threshold: d.threshold, n: d.participants }))}</p>
-        <div><a class="btn btn--primary btn--sm" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a></div>`);
+      box.innerHTML = emptyBlock("people", t("coffee.rec.lockedTitle"), t("coffee.rec.locked", { threshold: d.threshold, n: d.participants }), browseBtn());
       return;
     }
     env.people = new Map(list(d.items).map((p) => [p.id, p]));
     if (!env.people.size) { box.innerHTML = recsEmpty(); return; }
     box.innerHTML = d.items.map(env.draw).join("")
-      + (d.engine === "deepseek" ? `<p class="cluster xsmall faint">${icon("sparkle", { size: 14 })}<span>${esc(t("coffee.rec.engineAi"))}</span></p>` : "")
+      + (d.engine === "deepseek" ? `<p class="cluster xsmall faint">${icon("info", { size: 14 })}<span>${esc(t("coffee.rec.engineAi"))}</span></p>` : "")
       + `<a class="btn btn--secondary btn--block" href="#/coffee/browse">${icon("people")}${esc(t("coffee.rec.more"))}</a>`;
   }
 
@@ -517,6 +586,7 @@
           </div>`).join("")}
         </div>
       </div>
+      ${limitSlot()}
       <div data-role="results">${YL.ui.spinner()}</div>`;
 
     // 让每行选中的标签滚到看得见的位置；刚点过的标签拿回焦点
@@ -560,8 +630,8 @@
     if (!r.ok) {
       const reason = r.error && r.error.reason;
       if (reason === "not_joined" || reason === "browse_closed") page.querySelector('[data-role="tools"]').hidden = true;
-      if (reason === "not_joined") box.innerHTML = joinCard();
-      else if (reason === "browse_closed") box.innerHTML = YL.ui.emptyState("lock", t("coffee.err.browse_closed"), `<a class="btn btn--primary" href="#/coffee">${esc(t("coffee.backHome"))}</a>`);
+      if (reason === "not_joined") box.innerHTML = joinBlock();
+      else if (reason === "browse_closed") box.innerHTML = emptyBlock("lock", t("coffee.err.browse_closed"), "", backHomeBtn());
       else box.innerHTML = errorBlock(r.error);
       return;
     }
@@ -570,15 +640,16 @@
     page.querySelector('[data-role="count"]').textContent = items.length === 1 ? t("coffee.browse.countOne") : t("coffee.browse.count", { n: items.length });
     box.innerHTML = items.length
       ? `<div class="grid-cards">${items.map(env.draw).join("")}</div>`
-      : YL.ui.emptyState("search", active ? t("coffee.browse.emptyFiltered") : t("coffee.browse.empty"),
-        active ? `<button type="button" class="btn btn--primary" data-act="clear">${esc(t("coffee.browse.clear"))}</button>` : "");
+      : active
+        ? emptyBlock("search", t("coffee.browse.emptyFiltered"), t("coffee.browse.emptyFilteredBody"), `<button type="button" class="btn btn--primary" data-act="clear">${esc(t("coffee.browse.clear"))}</button>`)
+        : emptyBlock("people", t("coffee.browse.empty"), t("coffee.browse.emptyBody"), "");
   }
 
   /* ================= #/coffee/p/:id 个人详情 ================= */
   async function viewPerson(root, ctx) {
     const page = mount(root, "page--medium");
     const back = `<div><a class="btn btn--ghost btn--sm" href="#/${esc(backPath)}">${icon("chevronLeft")}${esc(t("common.back"))}</a></div>`;
-    const notFound = () => back + YL.ui.emptyState("user", t("coffee.person.notFound"), `<a class="btn btn--primary" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a>`);
+    const notFound = () => back + emptyBlock("user", t("coffee.person.notFound"), t("coffee.person.notFoundBody"), browseBtn());
     if (!ctx.id) { page.innerHTML = notFound(); return; }
     page.innerHTML = back + YL.ui.spinner();
     const env = { ctx, page, people: new Map(), source: backPath === "coffee" ? "rec" : "browse", draw: null };
@@ -587,7 +658,7 @@
     if (!ctx.isActive()) return;
     if (!r.ok) {
       const reason = r.error && r.error.reason;
-      page.innerHTML = reason === "not_joined" ? back + joinCard() : r.error.code === "not_found" ? notFound() : back + errorBlock(r.error);
+      page.innerHTML = reason === "not_joined" ? back + joinBlock() : r.error.code === "not_found" ? notFound() : back + errorBlock(r.error);
       return;
     }
     if (s.ok) rememberRound(s.data.round);
@@ -595,8 +666,9 @@
     const p = r.data;
     env.people.set(p.id, p);
     env.draw = (x) => detailHtml(x, tz);
-    page.innerHTML = back + detailHtml(p, tz);
+    page.innerHTML = back + limitSlot() + detailHtml(p, tz);
   }
+  // 详情页的小标题用中性的 field__label（琥珀色眉题只留给"亮着"的东西，§1.3-1）
   function detailHtml(p, tz) {
     const a = p.answers || {};
     const blocks = YL.auth.questions().filter((q) => list(a[q.id]).some((v) => String(v).trim())).map((q) => {
@@ -604,16 +676,16 @@
       if (q.type === "text") body = `<p>${esc(String(a[q.id]).trim())}</p>`;
       else if (q.id === "interests") body = `<div class="tags">${interestTags(a[q.id]).join("")}</div>`;
       else body = `<div class="tags">${list(a[q.id]).map((v) => `<span class="tag${q.id === "goals" ? " tag--goal" : ""}">${esc(optLabel(q.id, v))}</span>`).join("")}</div>`;
-      return `<div class="stack stack--s"><h2 class="eyebrow">${esc(shortLabel(q))}</h2>${body}</div>`;
+      return `<div class="stack stack--s"><h2 class="field__label">${esc(shortLabel(q))}</h2>${body}</div>`;
     }).join("");
     const overlap = list(p.overlap);
     return `<article class="person" data-person="${esc(p.id)}">
       <div class="person__head">${avatar(p.name, "lg")}<div class="person__who"><h1 class="person__name" tabindex="-1" data-focus>${esc(p.name)}</h1>${metaHtml(p)}</div></div>
       ${blocks}
       <div class="stack stack--s">
-        <h2 class="eyebrow">${esc(t("coffee.person.timesTitle"))}</h2>
+        <h2 class="field__label">${esc(t("coffee.person.timesTitle"))}</h2>
         ${overlap.length
-          ? `<ul class="list">${overlap.map((s) => `<li class="list__item">${icon("clock")}<div class="list__main"><p class="list__title">${esc(whenText(s))}</p><p class="list__sub">${esc(bjFull(tz, s))}</p></div></li>`).join("")}</ul>
+          ? `<div class="times">${overlap.map((s) => `<span class="time">${esc(whenText(s))}<small>${esc(bjFull(tz, s))}</small></span>`).join("")}</div>
              <p class="small faint">${esc(t("coffee.person.timesHint", { tz: tzName(tz) }))}</p>`
           : `<p class="small muted">${esc(t("coffee.person.timesNone"))}</p>`}
       </div>
@@ -624,6 +696,7 @@
   /* ================= #/coffee/times 选空闲时间 ================= */
   async function viewTimes(root, ctx) {
     timesOpen = true;
+    document.body.classList.remove("has-savebar");
     const page = mount(root, "page--medium");
     page.innerHTML = YL.ui.spinner();
     const s = await YL.api.get("/coffee/state");
@@ -634,10 +707,12 @@
     rememberRound(st.round);
     const round = st.round, tz = round.timezone, dates = D.roundDates(round), times = D.slotTimes(round), allIds = D.slotIds(round);
     const closedNow = () => { const at = nowIso(); return new Set(allIds.filter((x) => D.isClosed(round, x, at))); };
+    const today = D.localDate(nowIso(), tz);
     let closed = closedNow();
     let locked = new Set(list(st.locked));
     let saved = list(st.slots).slice().sort();
     let joined = !!st.joined, left = false;
+    let flashTimer = null; // 保存后按钮上显示"已保存"的 2 秒
     const picked = new Set(saved);
     // 切语言 / 切到别的页面再回来：接着显示还没保存的选择（服务器上的已保存时间没变才接着用）
     if (draft && draft.roundId === round.id && draft.base === saved.join(",")) {
@@ -648,18 +723,28 @@
     const anyOpen = () => dates.some((d) => openIn(d).length);
     let day = dates.find((d) => openIn(d).length) || dates[0];
 
+    // §5.5 顺序：时区说明（一行 + 显示北京时间开关）→ 图例 → 日期条 → 格子 → 吸底保存条
     page.innerHTML = `<header class="page-head"><div class="page-head__text">
         <p class="eyebrow">${esc(roundTitle(round))} · ${esc(rangeText(round))}</p>
         <h1 class="page-title">${esc(t("coffee.times.title"))}</h1>
-        <p class="page-sub">${esc(t("coffee.times.sub", { min: round.slotMinutes || slotMin }))}</p>
+        <p class="page-sub">${esc(t("coffee.times.sub", { min: round.slotMinutes || slotMin, h: round.cutoffHours }))}</p>
       </div></header>
-      ${noticeHtml("accent", "sparkle", `<p data-role="hint-text"></p>`, "hint")}
-      ${noticeHtml("warn", "info", `<p>${esc(t("coffee.times.allClosed"))}</p>`, "all-closed")}
+      ${noticeHtml("accent", "arch", `<p data-role="hint-text"></p>`, "hint")}
+      ${noticeHtml("warn", "alert", `<p>${esc(t("coffee.times.allClosed"))}</p>`, "all-closed")}
       <div class="slots">
-        <p class="slots__tz"><span>${esc(t("coffee.times.tz", { tz: tzName(tz) }))}</span><span>${esc(t("coffee.times.rules", { min: round.slotMinutes, h: round.cutoffHours }))}</span></p>
+        <div class="slots__tz cluster--between">
+          <span>${esc(t("coffee.times.tz", { tz: tzName(tz) }))}</span>
+          <label class="switch"><span class="switch__text"><span>${esc(t("coffee.times.showBj"))}</span></span><input type="checkbox" role="switch" data-role="bj"${showBj ? " checked" : ""}><span class="switch__track"></span></label>
+        </div>
+        <div class="slot-legend">
+          <span><i></i>${esc(t("coffee.times.legendOpen"))}</span>
+          <span><i class="is-selected"></i>${esc(t("coffee.times.legendPicked"))}</span>
+          <span><i class="is-locked"></i>${esc(t("coffee.times.legendLocked"))}</span>
+          <span><i class="is-closed"></i>${esc(t("coffee.times.legendClosed"))}</span>
+        </div>
         <div class="slots__days" role="group" aria-label="${esc(t("coffee.times.days"))}">
           ${dates.map((d) => `<button type="button" class="day" data-act="day" data-date="${esc(d)}">
-            <span class="day__wd">${esc(weekday(d))}</span><span class="day__d">${esc(md(d))}</span><span class="day__n"></span></button>`).join("")}
+            <span class="day__wd">${esc(d === today ? t("coffee.times.today") : weekday(d))}</span><span class="day__d">${esc(md(d))}</span><span class="day__dots" aria-hidden="true"></span><span class="sr-only" data-role="day-sr"></span></button>`).join("")}
         </div>
         <div class="cluster cluster--between">
           <h2 class="section-title" id="coffee-day-title" data-role="day-title"></h2>
@@ -669,26 +754,23 @@
           </div>
         </div>
         <div class="slots__grid" role="group" aria-labelledby="coffee-day-title" data-role="grid"></div>
-        <div class="slot-legend">
-          <span><i></i>${esc(t("coffee.times.legendOpen"))}</span>
-          <span><i class="is-selected"></i>${esc(t("coffee.times.legendPicked"))}</span>
-          <span><i class="is-locked"></i>${esc(t("coffee.times.legendLocked"))}</span>
-          <span><i class="is-closed"></i>${esc(t("coffee.times.legendClosed"))}</span>
-        </div>
       </div>
       <div class="savebar">
-        <span data-role="count" aria-live="polite"></span>
-        <button type="button" class="btn btn--primary btn--sm" data-act="save">${esc(t("common.save"))}</button>
+        <div class="savebar__count"><p data-role="count" aria-live="polite"></p><p class="xsmall faint" data-role="unsaved" hidden>${esc(t("coffee.times.unsaved"))}</p></div>
+        <button type="button" class="btn btn--primary btn--sm" data-act="save" disabled>${esc(t("common.save"))}</button>
       </div>`;
+    document.body.classList.add("has-savebar"); // 老内核不支持 :has()：toast 靠这个 class 让开保存条
 
     const grid = page.querySelector('[data-role="grid"]');
+    const saveBtn = page.querySelector('[data-act="save"]');
     const dirty = () => { const now = Array.from(picked).sort(); return now.length !== saved.length || now.some((x, i) => x !== saved[i]); };
     // 记下没保存的选择（模块级变量，只在本次会话内存里）
     const syncDraft = () => { draft = dirty() ? { roundId: round.id, base: saved.join(","), picks: Array.from(picked) } : null; };
+    // 已约定 / 已截止：aria-disabled 留在 Tab 顺序里，点了用 toast 说明（§5.5）；已截止的第二行写"已截止"
     function slotHtml(id) {
-      const tm = timeOf(id), bj = `<small>${esc(bjShort(tz, id))}</small>`;
-      if (locked.has(id)) return `<button type="button" class="slot is-locked" disabled aria-pressed="true">${esc(tm)}${bj}<span class="sr-only">${esc(t("coffee.times.legendLocked"))}</span></button>`;
-      if (closed.has(id)) return `<button type="button" class="slot is-closed" disabled>${esc(tm)}${bj}<span class="sr-only">${esc(t("coffee.times.legendClosed"))}</span></button>`;
+      const tm = timeOf(id), bj = showBj ? `<small>${esc(bjShort(tz, id))}</small>` : "";
+      if (locked.has(id)) return `<button type="button" class="slot is-locked" data-act="slot" data-slot="${esc(id)}" aria-disabled="true" aria-pressed="true">${esc(tm)}${bj}<span class="sr-only"> ${esc(t("coffee.times.legendLocked"))}</span></button>`;
+      if (closed.has(id)) return `<button type="button" class="slot is-closed" data-act="slot" data-slot="${esc(id)}" aria-disabled="true">${esc(tm)}<small>${esc(t("coffee.times.legendClosed"))}</small></button>`;
       return `<button type="button" class="slot" data-act="slot" data-slot="${esc(id)}" aria-pressed="${picked.has(id)}">${esc(tm)}${bj}</button>`;
     }
     // 顶部提示：还没加入 → 怎么加入；刚退出 → 怎么回来；时间全截止 → 下一轮再来
@@ -699,6 +781,7 @@
       page.querySelector('[data-role="hint-text"]').textContent = left ? t("coffee.times.leftHint") : t("coffee.times.joinHint");
       page.querySelector('[data-role="all-closed"]').hidden = open;
     }
+    // 日期条：日期下方最多 3 个小点表示这天选了几个，读屏读"已选 3 个"
     function drawDays() {
       page.querySelectorAll(".day").forEach((b) => {
         const d = b.dataset.date, n = times.filter((tm) => picked.has(d + "T" + tm) || locked.has(d + "T" + tm)).length, on = d === day;
@@ -706,16 +789,22 @@
         b.classList.toggle("is-active", on);
         b.classList.toggle("has-picks", n > 0);
         b.setAttribute("aria-pressed", String(on));
-        b.querySelector(".day__n").textContent = n ? t("coffee.times.dayPicked", { n }) : "";
+        b.querySelector(".day__dots").innerHTML = "<i></i>".repeat(Math.min(3, n));
+        b.querySelector('[data-role="day-sr"]').textContent = n ? " " + t("coffee.times.dayPicked", { n }) : "";
       });
       const open = openIn(day);
       page.querySelector('[data-act="day-all"]').disabled = !open.length || open.every((x) => picked.has(x));
       page.querySelector('[data-act="day-clear"]').disabled = !open.some((x) => picked.has(x));
     }
+    const openCount = () => openPicks(round, Array.from(new Set(Array.from(picked).concat(Array.from(locked)))), Array.from(locked)).length;
+    // 保存条：已选 N 个（Newsreader 数字）；有改动时第二行"有改动，还没保存"；没有改动时"保存"不可点
     function drawCount() {
-      const n = openPicks(round, Array.from(new Set(Array.from(picked).concat(Array.from(locked)))), Array.from(locked)).length;
-      const d = dirty();
-      page.querySelector('[data-role="count"]').textContent = (n === 1 ? t("coffee.times.countOne") : t("coffee.times.count", { n })) + (d ? " · " + t("coffee.times.unsaved") : "");
+      const n = openCount(), d = dirty();
+      page.querySelector('[data-role="count"]').innerHTML = numIn(n === 1 ? t("coffee.times.countOne", { n: NUM }) : t("coffee.times.count", { n: NUM }), n, "savebar__num");
+      page.querySelector('[data-role="unsaved"]').hidden = !d;
+      if (saveBtn.classList.contains("is-busy")) return;
+      if (d && flashTimer) { clearTimeout(flashTimer); flashTimer = null; saveBtn.textContent = t("common.save"); }
+      saveBtn.disabled = !d;
     }
     function drawGrid() {
       page.querySelector('[data-role="day-title"]').textContent = dayLabel(day);
@@ -724,6 +813,12 @@
     const drawAll = () => { drawHints(); drawGrid(); drawDays(); drawCount(); };
     drawAll();
 
+    // 保存成功：按钮 2 秒内显示勾和"已保存"
+    function flashSaved() {
+      clearTimeout(flashTimer);
+      saveBtn.innerHTML = icon("check") + esc(t("common.saved"));
+      flashTimer = setTimeout(() => { flashTimer = null; if (saveBtn.isConnected && !dirty()) saveBtn.textContent = t("common.save"); }, 2000);
+    }
     async function save(btn) {
       closed = closedNow(); // 页面开着的时候可能又过了几个截止时间
       if (!joined && !Array.from(picked).some((x) => !closed.has(x))) { drawAll(); YL.ui.toast(t("coffee.times.pickOne"), "error"); return; }
@@ -751,16 +846,27 @@
       draft = null;
       joined = r.data.joined !== false;
       if (!joined) { left = was; drawAll(); YL.ui.toast(t("coffee.times.left")); return; }
-      YL.ui.toast(t("coffee.times.saved"), "success");
+      const n = openCount();
+      YL.ui.toast(n === 1 ? t("coffee.times.savedOne", { n }) : t("coffee.times.saved", { n }), "success");
       if (!was) { YL.router.navigate("coffee"); return; } // 刚加入：回首页看推荐
       drawAll();
+      flashSaved();
     }
 
+    page.addEventListener("change", (e) => {
+      if (!e.target.matches('[data-role="bj"]')) return;
+      showBj = e.target.checked; // 只在本次会话内记住
+      drawGrid();
+    });
     page.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-act]");
       if (!btn || !page.contains(btn) || btn.disabled) return;
       const act = btn.dataset.act;
       if (act === "slot") {
+        if (btn.getAttribute("aria-disabled") === "true") {
+          YL.ui.toast(btn.classList.contains("is-locked") ? t("coffee.times.lockedToast") : t("coffee.times.closedToast", { h: round.cutoffHours }));
+          return;
+        }
         const id = btn.dataset.slot;
         if (picked.has(id)) picked.delete(id); else picked.add(id);
         btn.setAttribute("aria-pressed", String(picked.has(id)));
@@ -773,42 +879,49 @@
         syncDraft(); drawGrid(); drawDays(); drawCount();
         // 刚点的按钮会变成不可用：焦点交给旁边那个，或者这天的第一个格子
         const other = page.querySelector(`[data-act="${act === "day-all" ? "day-clear" : "day-all"}"]`);
-        const target = [btn, other].find((b) => b && !b.disabled) || grid.querySelector(".slot:not([disabled])");
+        const target = [btn, other].find((b) => b && !b.disabled) || grid.querySelector('.slot:not([aria-disabled="true"])');
         if (target) target.focus();
       } else if (act === "save") {
-        save(btn).catch((err) => { console.error(err); YL.ui.busy(btn, false); });
+        save(btn).catch((err) => { console.error(err); YL.ui.busy(btn, false); drawCount(); });
       }
     });
   }
 
   /* ================= #/coffee/inbox 收件箱 ================= */
+  // 分段控件（§5.8）：想认识你的人 / 我发出的（英文 Incoming / Sent），用链接切换，前进后退都能用
   async function viewInbox(root, ctx) {
-    backPath = "coffee/inbox";
+    const tab = ctx.query.tab === "sent" ? "sent" : "incoming";
+    backPath = "coffee/inbox" + (tab === "sent" ? "?tab=sent" : "");
     const page = mount(root, "page--medium");
     page.innerHTML = YL.ui.spinner();
     let roundId = null;
     const linkable = (p) => !!roundId && p.roundId === roundId; // 详情页只能看本轮的人
+    const sentAt = (p) => `<span class="person__overlap">${icon("mail")}${esc(t("coffee.inbox.sentAt", { date: YL.ui.formatDate(p.createdAt) }))}</span>`;
+    // 想认识你的人：两个一样宽的按钮（想认识 / 跳过），下面一行"跳过不会通知对方"（§5.4）
     const env = {
       ctx, page, people: new Map(), source: "browse",
       draw: (p) => personHtml(p, {
-        link: linkable(p), note: p.note,
-        foot: `<span class="person__overlap">${icon("mail")}${esc(t("coffee.inbox.sentAt", { date: YL.ui.formatDate(p.createdAt) }))}</span>`,
-        actions: `<button type="button" class="btn btn--ghost btn--sm" data-act="skip" data-id="${esc(p.id)}">${esc(t("coffee.inbox.skip"))}</button>
-          <button type="button" class="btn btn--accent btn--sm" data-act="accept" data-id="${esc(p.id)}">${icon("heart")}${esc(t("coffee.inbox.accept"))}</button>`
+        link: linkable(p), note: p.note, foot: sentAt(p),
+        actions: `<button type="button" class="btn btn--primary btn--sm" data-act="accept" data-id="${esc(p.id)}">${icon("plus")}${esc(t("coffee.inbox.accept"))}</button>
+          <button type="button" class="btn btn--secondary btn--sm" data-act="skip" data-id="${esc(p.id)}">${esc(t("coffee.inbox.skip"))}</button>`,
+        after: `<p class="xsmall faint">${esc(t("coffee.inbox.ruleSkip"))}</p>`
       }),
       onAccepted: (p) => removeCard(env, p.id),
       onRemoved: () => {
+        const n = env.people.size, badge = page.querySelector('[data-role="inc-count"]');
+        if (badge) { if (n) badge.textContent = YL.ui.num(n); else badge.remove(); }
         const listEl = page.querySelector('[data-role="incoming"]');
         if (listEl && !listEl.querySelector("[data-person]")) listEl.outerHTML = incomingEmpty();
       },
       reload: () => load()
     };
+    // 我发出的：状态是"已邀请"那一级（透明虚线 + 时钟），写"等待回复"
     const outHtml = (p) => personHtml(p, {
-      link: linkable(p),
-      foot: `<span class="person__overlap">${icon("mail")}${esc(t("coffee.inbox.sentAt", { date: YL.ui.formatDate(p.createdAt) }))}</span>`,
-      actions: `<span class="pill pill--waiting">${icon("clock")}${esc(t("coffee.inbox.waiting"))}</span>`
+      link: linkable(p), foot: sentAt(p),
+      actions: `<span class="btn btn--invited btn--sm" aria-disabled="true">${icon("clock")}${esc(t("coffee.inbox.waiting"))}</span>`
     });
-    const incomingEmpty = () => `<div data-role="incoming-empty">${YL.ui.emptyState("inbox", t("coffee.inbox.incomingEmpty"), `<a class="btn btn--secondary" href="#/coffee/times">${esc(t("coffee.home.editTimes"))}</a>`)}</div>`;
+    const incomingEmpty = () => `<div data-role="incoming-empty">${emptyBlock("inbox", t("coffee.inbox.incomingEmpty"), t("coffee.inbox.incomingEmptyBody"), timesBtn())}</div>`;
+    const segItem = (id, href, label, badge) => `<a class="segmented__item${tab === id ? " is-active" : ""}"${tab === id ? ' aria-current="page"' : ""} href="${href}">${esc(label)}${badge}</a>`;
     bindPeople(page, env);
 
     async function load() {
@@ -822,21 +935,26 @@
       const max = maxOpen;
       const inc = list(r.data.incoming), out = list(r.data.outgoing);
       env.people = new Map(inc.map((p) => [p.id, p]));
+      const panel = tab === "incoming"
+        ? `<section class="stack" aria-label="${esc(t("coffee.inbox.incoming"))}">
+            <p class="small muted">${esc(t("coffee.inbox.incomingSub"))}</p>
+            ${inc.length ? `<div class="grid-cards" data-role="incoming">${inc.map(env.draw).join("")}</div>` : incomingEmpty()}
+          </section>`
+        : `<section class="stack" aria-label="${esc(t("coffee.inbox.outgoing"))}">
+            <p class="small muted">${esc(t("coffee.inbox.outgoingSub", { n: out.length, max }))}</p>
+            ${out.length ? `<div class="grid-cards">${out.map(outHtml).join("")}</div>`
+              : emptyBlock("message", t("coffee.inbox.outgoingEmpty"), t("coffee.inbox.outgoingEmptyBody"), browseBtn())}
+          </section>`;
       page.innerHTML = `<header class="page-head"><div class="page-head__text">
           <p class="eyebrow">${esc(t("coffee.inbox.eyebrow"))}</p>
           <h1 class="page-title">${esc(t("coffee.inbox.title"))}</h1>
           <p class="page-sub">${esc(t("coffee.inbox.sub"))}</p>
         </div></header>
-        ${noticeHtml("info", "info", `<p>${esc(t("coffee.inbox.ruleSkip"))}</p><p>${esc(t("coffee.inbox.ruleExpire"))}</p><p>${esc(t("coffee.inbox.ruleMax", { n: max }))}</p>`)}
-        <section class="stack" aria-label="${esc(t("coffee.inbox.incoming"))}">
-          ${YL.ui.sectionTitle(t("coffee.inbox.incoming"), "", t("coffee.inbox.incomingSub"))}
-          ${inc.length ? `<div class="grid-cards" data-role="incoming">${inc.map(env.draw).join("")}</div>` : incomingEmpty()}
-        </section>
-        <section class="stack" aria-label="${esc(t("coffee.inbox.outgoing"))}">
-          ${YL.ui.sectionTitle(t("coffee.inbox.outgoing"), "", t("coffee.inbox.outgoingSub", { n: out.length, max }))}
-          ${out.length ? `<div class="grid-cards">${out.map(outHtml).join("")}</div>`
-            : YL.ui.emptyState("message", t("coffee.inbox.outgoingEmpty"), `<a class="btn btn--secondary" href="#/coffee">${esc(t("coffee.inbox.toRecs"))}</a>`)}
-        </section>`;
+        <nav class="segmented" aria-label="${esc(t("coffee.inbox.title"))}">
+          ${segItem("incoming", "#/coffee/inbox", t("coffee.inbox.tabIncoming"), inc.length ? `<span class="count" data-role="inc-count">${esc(YL.ui.num(inc.length))}</span>` : "")}
+          ${segItem("sent", "#/coffee/inbox?tab=sent", t("coffee.inbox.tabSent"), out.length ? `<span class="count count--neutral">${esc(YL.ui.num(out.length))}</span>` : "")}
+        </nav>
+        ${panel}`;
     }
     await load();
   }
@@ -844,12 +962,13 @@
   /* ================= #/coffee/matches 匹配 ================= */
   async function viewMatches(root, ctx) {
     const page = mount(root, "page--medium");
-    page.innerHTML = `<header class="page-head"><div class="page-head__text">
+    // 有匹配时页头换成 §5.17 的夜色页头（最新的一个匹配）；没有时用普通页头 + 空状态
+    const headHtml = () => `<header class="page-head"><div class="page-head__text">
         <p class="eyebrow">${esc(t("coffee.matches.eyebrow"))}</p>
         <h1 class="page-title">${esc(t("coffee.matches.title"))}</h1>
         <p class="page-sub">${esc(t("coffee.matches.sub"))}</p>
-      </div></header>
-      <div data-role="list">${YL.ui.spinner()}</div>`;
+      </div></header>`;
+    page.innerHTML = `<div class="stack stack--l" data-role="list"><h1 class="sr-only">${esc(t("coffee.matches.title"))}</h1>${YL.ui.spinner()}</div>`;
     const box = page.querySelector('[data-role="list"]');
     const expanded = new Set(); // 正在"改时间"的匹配
     let items = [];
@@ -857,13 +976,12 @@
     async function load(focusId) {
       const r = await YL.api.get("/coffee/matches");
       if (!ctx.isActive()) return;
-      if (!r.ok) { box.innerHTML = errorBlock(r.error); return; }
-      items = list(r.data);
+      if (!r.ok) { box.innerHTML = headHtml() + errorBlock(r.error); return; }
+      items = list(r.data); // 后端按匹配时间倒序：第一个是最新的
       box.innerHTML = items.length
-        ? `<div class="stack">${items.map((m) => matchHtml(m, expanded.has(m.matchId))).join("")}</div>`
-        : YL.ui.emptyState("sparkle", t("coffee.matches.empty"), `<div class="cluster">
-            <a class="btn btn--primary" href="#/coffee">${esc(t("coffee.inbox.toRecs"))}</a>
-            <a class="btn btn--secondary" href="#/coffee/browse">${esc(t("coffee.rec.browse"))}</a></div>`);
+        ? `<h1 class="sr-only">${esc(t("coffee.matches.title"))}</h1>${heroHtml(items[0], items.length)}
+           <div class="stack">${items.map((m) => matchHtml(m, expanded.has(m.matchId))).join("")}</div>`
+        : headHtml() + emptyBlock("arch", t("coffee.matches.empty"), t("coffee.matches.emptyBody"), browseBtn());
       if (focusId) {
         const el = box.querySelector(`[data-match="${CSS.escape(focusId)}"] [data-role="title"]`);
         if (el) el.focus();
@@ -918,6 +1036,20 @@
 
     await load();
   }
+  /* §5.17 匹配成功页头：夜色块，两个一样大的拱形头像（我 + 最新匹配的人），中间的拱线和灯点由 CSS 画。
+     本次会话里第一次展示这个匹配时加 is-new（拱线画出来、灯亮起；减弱动效时直接是最终状态） */
+  function heroHtml(m, total) {
+    const me = YL.auth.displayName(), fresh = !seenMatches.has(m.matchId);
+    seenMatches.add(m.matchId);
+    return `<header class="match-hero${fresh ? " is-new" : ""}">
+      <div class="match-hero__pair">
+        <div class="match-hero__person">${avatar(me, "lg")}<span>${esc(me)}</span></div>
+        <div class="match-hero__person">${avatar(m.name, "lg")}<span>${esc(m.name)}</span></div>
+      </div>
+      <h2 class="match-hero__title">${esc(t("coffee.matches.heroTitle"))}</h2>
+      <p class="match-hero__sub">${esc(total > 1 ? t("coffee.matches.heroSubMore", { name: m.name, n: total }) : t("coffee.matches.heroSub", { name: m.name }))}</p>
+    </header>`;
+  }
   // 每周轮的 id 是 "week-<周一日期>"（见 domain 的 weekStarting）：用日期称呼，不用后端写死的"本周…"
   function matchRound(m) {
     const wk = /^week-(\d{4}-\d{2}-\d{2})$/.exec(String(m.roundId || ""));
@@ -931,8 +1063,9 @@
     let when;
     if (m.slot) {
       const who = m.scheduledBy === "me" ? t("coffee.matches.byMe") : m.scheduledBy === "them" ? t("coffee.matches.byThem") : "";
-      when = `<div class="cluster"><span class="pill pill--success">${icon("check")}${esc(t("coffee.matches.scheduled", { when: whenText(m.slot), tz: tzName(tz) }))}</span></div>
-        <p class="small muted">${esc(bjFull(tz, m.slot))}${who ? " · " + esc(who) : ""}</p>`;
+      // 约好的时间：已约定样式（海军蓝 + 锁），只读
+      when = `<div class="times"><span class="time is-selected">${esc(t("coffee.matches.scheduled", { when: whenText(m.slot), tz: tzName(tz) }))}<small>${esc(bjFull(tz, m.slot))}</small></span></div>
+        ${who ? `<p class="small muted">${esc(who)}</p>` : ""}`;
       if (m.canSchedule && !metAlready) {
         when += `<div class="cluster">
             <button type="button" class="btn btn--secondary btn--sm" data-act="change" aria-expanded="${!!expanded}" aria-controls="coffee-chg-${mid}">${icon("edit")}${esc(t("coffee.matches.change"))}</button>
@@ -948,19 +1081,22 @@
     } else if (avail.length) {
       when = `<p class="small">${esc(t("coffee.matches.pickHint"))}</p><div class="times">${avail.map((s) => timeBtn(s, false)).join("")}</div>`;
     } else if (m.canSchedule) {
-      when = noticeHtml("info", "message", `<p>${esc(t("coffee.matches.noCommon"))}</p>`);
+      when = noticeHtml("info", "info", `<p><strong>${esc(t("coffee.matches.noCommon"))}</strong></p><p>${esc(t("coffee.matches.noCommonBody"))}</p>
+        <div><a class="btn btn--secondary btn--sm" href="#/coffee/times">${icon("clock")}${esc(t("coffee.home.editTimes"))}</a></div>`);
     } else {
       when = `<p class="small faint">${esc(t("coffee.matches.roundOver"))}</p>`;
     }
     let outcome = "";
     if (m.myOutcome) {
-      outcome = `<div class="person__foot"><span><span class="pill${metAlready ? " pill--success" : ""}">${metAlready ? icon("check") : ""}${esc(metAlready ? t("coffee.outcome.met") : t("coffee.outcome.missed"))}</span></span><span class="small faint">${esc(t("coffee.outcome.recorded"))}</span></div>`;
+      // 答过之后（§5.17）：见到了 → notice--success；没见到 → 中性的 notice--info
+      outcome = noticeHtml(metAlready ? "success" : "info", metAlready ? "check" : "info",
+        `<p><strong>${esc(metAlready ? t("coffee.outcome.met") : t("coffee.outcome.missed"))}</strong></p><p>${esc(t("coffee.outcome.recorded"))}</p>`);
     } else if (m.canReport && m.slot) {
-      // 约定的时间已经开始：问见到了没有
+      // 约定的时间已经开始：问见到了没有（见到了 = primary，没见到 = secondary）
       outcome = `<div class="person__foot"><span class="small">${esc(t("coffee.outcome.ask"))}</span>
         <div class="person__actions">
-          <button type="button" class="btn btn--ghost btn--sm" data-act="outcome" data-met="0">${esc(t("coffee.outcome.no"))}</button>
-          <button type="button" class="btn btn--secondary btn--sm" data-act="outcome" data-met="1">${icon("check")}${esc(t("coffee.outcome.yes"))}</button>
+          <button type="button" class="btn btn--primary btn--sm" data-act="outcome" data-met="1">${icon("check")}${esc(t("coffee.outcome.yes"))}</button>
+          <button type="button" class="btn btn--secondary btn--sm" data-act="outcome" data-met="0">${esc(t("coffee.outcome.no"))}</button>
         </div></div>`;
     } else if (m.canReport) {
       // 还没约时间（可能私下约了）：只给一个低调的"我们聊过了"，不问"没见到"——刚匹配时"还没"不等于"没见到"
@@ -975,7 +1111,7 @@
         ${m.contactMethod ? `<button type="button" class="btn btn--secondary btn--sm" data-act="copy">${icon("copy")}${esc(t("common.copy"))}</button>` : ""}
       </div>
       ${when ? `<div class="stack stack--s">
-        <h3 class="eyebrow">${esc(t("coffee.matches.timeTitle"))}</h3>
+        <h3 class="field__label">${esc(t("coffee.matches.timeTitle"))}</h3>
         ${when}
       </div>` : ""}
       ${outcome}
@@ -991,10 +1127,11 @@
       { path: "coffee", icon: "coffee", labelKey: "nav.coffee", order: 10, mobile: true, when: isReady },
       { path: "coffee/browse", icon: "people", labelKey: "nav.browse", order: 20, mobile: true, when: isReady },
       { path: "coffee/inbox", icon: "inbox", labelKey: "nav.inbox", order: 30, mobile: true, when: isReady, badge: "inbox" },
-      { path: "coffee/matches", icon: "sparkle", labelKey: "nav.matches", order: 40, mobile: true, when: isReady }
+      { path: "coffee/matches", icon: "arch", labelKey: "nav.matches", order: 40, mobile: true, when: isReady }
     ],
     badges,
     render(root, ctx) {
+      limitHit = false; // "已达上限"只在被拒的那一页上显示；换页后下一次邀请再由后端判断
       switch (ctx.sub) {
         case "": return viewHome(root, ctx);
         case "browse": return viewBrowse(root, ctx);
@@ -1003,7 +1140,7 @@
         case "inbox": return viewInbox(root, ctx);
         case "matches": return viewMatches(root, ctx);
         default:
-          root.innerHTML = YL.ui.emptyState("info", t("router.notFound"), `<a class="btn btn--primary" href="#/coffee">${esc(t("coffee.backHome"))}</a>`);
+          root.innerHTML = emptyBlock("info", t("router.notFound"), "", backHomeBtn());
       }
     }
   });

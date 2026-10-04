@@ -45,7 +45,11 @@
   const fill = (text, parts) => esc(text).replace(/\{(\w+)\}/g, (m, k) => (parts[k] != null ? parts[k] : m));
   const limits = () => YL.domain.coffee.LIMITS;
   const thisYear = () => new Date().getFullYear();
-  const notice = (kind, iconName, bodyHtml, role) => `<div class="notice${kind ? " notice--" + kind : ""}"${role ? ` role="${role}"` : ""}>${icon(iconName)}<div class="notice__body">${bodyHtml}</div></div>`;
+  // 提示条（§5.7）：图标跟着变体走（info / arch / check / alert / alertCircle）；不带变体的中性提示条用传入的图标
+  const NOTICE_ICON = { info: "info", accent: "arch", success: "check", warn: "alert", danger: "alertCircle" };
+  const notice = (kind, iconName, bodyHtml, role) => `<div class="notice${kind ? " notice--" + kind : ""}"${role ? ` role="${role}"` : ""}>${icon(NOTICE_ICON[kind] || iconName)}<div class="notice__body">${bodyHtml}</div></div>`;
+  // 空状态（§5.11）：标题 + 正文 + 最多一个操作
+  const empty = (ic, title, body, action) => `<div class="empty"><div class="empty__icon">${icon(ic, { size: 28 })}</div><p class="empty__title">${esc(title)}</p>${body ? `<p>${esc(body)}</p>` : ""}${action || ""}</div>`;
   // 长邮箱在 @ 前允许换行
   const emailHtml = (e) => { const s = String(e || ""), i = s.lastIndexOf("@"); return i > 0 ? esc(s.slice(0, i)) + "<wbr>" + esc(s.slice(i)) : esc(s); };
   const withoutSentTo = (data) => { const m = Object.assign({}, data); delete m.sentTo; return m; };
@@ -57,7 +61,7 @@
     if (!box) return;
     const ok = kind === "success";
     box.hidden = !text;
-    box.innerHTML = text ? notice(ok ? "success" : "danger", ok ? "check" : "info", esc(text), ok ? "status" : "alert") : "";
+    box.innerHTML = text ? notice(ok ? "success" : "danger", "", `<p>${esc(text)}</p>`, ok ? "status" : "alert") : "";
   }
   // 用户改了某一项就把这一项的报错清掉
   function clearOne(field) {
@@ -143,7 +147,7 @@
             <button type="button" class="btn btn--ghost" data-cw="resend">${esc(t("profile.contact.resend"))}</button>
             <button type="button" class="link-btn" data-cw="change">${esc(t("profile.contact.change"))}</button>
           </div>
-          ${opts.onLater ? notice("", "clock", `<span>${esc(t("profile.contact.laterBody"))}</span><span><button type="button" class="link-btn" data-cw="later">${esc(t("profile.contact.later"))}</button></span>`) : ""}
+          ${opts.onLater ? notice("", "clock", `<p>${esc(t("profile.contact.laterBody"))}</p><p><button type="button" class="link-btn" data-cw="later">${esc(t("profile.contact.later"))}</button></p>`) : ""}
           ${cancelBtn}
         </form>`;
       if (note) setMsg(w, note, "success");
@@ -165,7 +169,7 @@
     function showReverify() {
       const box = w.querySelector("[data-msg]");
       if (box) box.hidden = false;
-      if (box) box.innerHTML = notice("warn", "lock", `<span>${esc(t("profile.err.reverify_yale"))}</span><span><button type="button" class="btn btn--secondary" data-cw="relogin">${esc(t("profile.contact.relogin"))}</button></span>`, "alert");
+      if (box) box.innerHTML = notice("warn", "", `<p>${esc(t("profile.err.reverify_yale"))}</p><p><button type="button" class="btn btn--secondary btn--sm" data-cw="relogin">${esc(t("profile.contact.relogin"))}</button></p>`, "alert");
     }
 
     async function send(email, btn) {
@@ -505,14 +509,14 @@
     const r = await YL.api.get("/me");
     if (!ctx.isActive()) return null;
     if (!r.ok) {
-      root.innerHTML = `<section class="page">${headHtml}${YL.ui.emptyState("info", YL.ui.errorText(r.error, "profile"), `<button type="button" class="btn btn--primary" data-retry>${icon("refresh")}${esc(t("common.retry"))}</button>`)}</section>`;
+      root.innerHTML = `<section class="page">${headHtml}${empty("alertCircle", YL.ui.errorText(r.error, "profile"), "", `<button type="button" class="btn btn--primary" data-retry>${icon("refresh")}${esc(t("common.retry"))}</button>`)}</section>`;
       root.querySelector("[data-retry]").addEventListener("click", () => YL.router.render());
       return null;
     }
     YL.auth.set(r.data);
     if (!r.data.ready) { YL.router.navigate("profile/setup?next=" + encodeURIComponent(ctx.path || "profile"), { replace: true }); return null; }
     if (!YL.auth.questions().length) {
-      root.innerHTML = `<section class="page">${headHtml}${YL.ui.emptyState("info", t("profile.err.noQuestions"), `<button type="button" class="btn btn--primary" data-reload>${esc(t("common.retry"))}</button>`)}</section>`;
+      root.innerHTML = `<section class="page">${headHtml}${empty("alertCircle", t("profile.err.noQuestionsTitle"), t("profile.err.noQuestions"), `<button type="button" class="btn btn--primary" data-reload>${icon("refresh")}${esc(t("common.retry"))}</button>`)}</section>`;
       root.querySelector("[data-reload]").addEventListener("click", () => location.reload());
       return null;
     }
@@ -563,12 +567,12 @@
       if (cur === "consent") drawConsent();
       else if (cur === "contact") drawContact(u);
       else if (cur === "profile") drawProfile(u);
-      else body.innerHTML = YL.ui.emptyState("info", t("router.error"), `<a class="btn btn--primary" href="#/profile">${esc(t("nav.me"))}</a>`);
+      else body.innerHTML = empty("alertCircle", t("router.error"), "", `<a class="btn btn--primary" href="#/profile">${esc(t("nav.me"))}</a>`);
       if (focus) focusHeading(body);
     }
 
     function drawConsent() {
-      const items = [["shield", "collect"], ["user", "visible"], ["lock", "contact"], ["mail", "emails"], ["sparkle", "smart"], ["trash", "leave"]];
+      const items = [["shield", "collect"], ["user", "visible"], ["lock", "contact"], ["mail", "emails"], ["sliders", "smart"], ["trash", "leave"]];
       body.innerHTML = `
         <form class="card stack" data-consent novalidate>
           <div class="stack stack--s">
@@ -615,7 +619,7 @@
             <h2 class="section-title" id="setup-contact-title" tabindex="-1" data-focus>${esc(t("profile.contact.setupTitle"))}</h2>
             <p class="small muted">${esc(t("profile.contact.why"))}</p>
           </div>
-          ${notice("info", "mail", esc(t("profile.contact.untilVerified")))}
+          ${notice("info", "", `<p>${esc(t("profile.contact.untilVerified"))}</p>`)}
           <div data-cw-host></div>
         </section>`;
       const done = () => { contactStepOpen = null; draw(true); };
@@ -632,7 +636,7 @@
 
     function drawProfile(u) {
       if (!YL.auth.questions().length) {
-        body.innerHTML = YL.ui.emptyState("info", t("profile.err.noQuestions"), `<button type="button" class="btn btn--primary" data-reload>${esc(t("common.retry"))}</button>`);
+        body.innerHTML = empty("alertCircle", t("profile.err.noQuestionsTitle"), t("profile.err.noQuestions"), `<button type="button" class="btn btn--primary" data-reload>${icon("refresh")}${esc(t("common.retry"))}</button>`);
         body.querySelector("[data-reload]").addEventListener("click", () => location.reload());
         return;
       }
@@ -642,7 +646,7 @@
             <h2 class="section-title" id="setup-profile-title" tabindex="-1" data-focus>${esc(t("profile.setup.profileTitle"))}</h2>
             <p class="small muted">${esc(t("profile.setup.profileSub"))}</p>
           </div>
-          ${u.contactVerified ? "" : notice("warn", "mail", esc(t("profile.setup.contactUnverified")))}
+          ${u.contactVerified ? "" : notice("warn", "", `<p>${esc(t("profile.setup.contactUnverified"))}</p>`)}
           ${profileFormHtml(withDraft(u), t("profile.setup.finish"), "")}
         </section>`;
       bindProfileForm(body.querySelector("[data-profile-form]"), ctx, () => draw(true));
@@ -705,7 +709,7 @@
     const meta = YL.auth.meta();
     const prefs = u.prefs || {};
     const pill = u.contactVerified
-      ? `<span class="pill pill--matched">${icon("check")}${esc(t("profile.account.verified"))}</span>`
+      ? `<span class="pill pill--success">${icon("check")}${esc(t("profile.account.verified"))}</span>`
       : `<span class="pill pill--warn">${esc(t("profile.account.unverified"))}</span>`;
     root.innerHTML = `
       <section class="page" data-me>
@@ -760,7 +764,7 @@
           </div>
 
           <aside class="stack stack--l">
-            ${u.adminNeedsYale ? notice("warn", "lock", `<span>${esc(t("profile.links.adminNeedsYale"))}</span><span><button type="button" class="btn btn--secondary" data-act="admin-relogin">${esc(t("profile.links.adminRelogin"))}</button></span>`) : ""}
+            ${u.adminNeedsYale ? notice("warn", "", `<p>${esc(t("profile.links.adminNeedsYale"))}</p><p><button type="button" class="btn btn--secondary btn--sm" data-act="admin-relogin">${esc(t("profile.links.adminRelogin"))}</button></p>`) : ""}
             <nav class="card card--tight" aria-label="${esc(t("profile.links.title"))}">
               <div class="list">
                 ${u.isAdmin ? linkRow("#/admin", "chart", t("profile.links.admin"), t("profile.links.adminSub")) : ""}
@@ -786,7 +790,7 @@
     function closedPanel() {
       clearInterval(timer);
       panel.innerHTML = `<div class="stack stack--s">
-          ${u.contactVerified ? "" : notice("warn", "info", esc(t("profile.account.unverifiedBody")))}
+          ${u.contactVerified ? "" : notice("warn", "", `<p>${esc(t("profile.account.unverifiedBody"))}</p>`)}
           <div class="cluster">
             ${u.contactVerified ? "" : `<button type="button" class="btn btn--primary" data-act="verify-contact">${icon("mail")}${esc(t("profile.account.verifyNow"))}</button>`}
             <button type="button" class="btn btn--secondary" data-act="change-contact">${icon("edit")}${esc(t("profile.account.change"))}</button>
@@ -806,7 +810,7 @@
       setDraft({ contactOpen: true, contactEmail: email || "" });
       if (!changeNeedsYale(u)) { openPanel("enter", email || "", false, focus); return; }
       panel.innerHTML = `<div class="stack stack--s">
-          ${notice("warn", "lock", `<span>${esc(t("profile.err.reverify_yale"))}</span>`)}
+          ${notice("warn", "", `<p>${esc(t("profile.err.reverify_yale"))}</p>`)}
           <div class="cluster">
             <button type="button" class="btn btn--primary" data-act="relogin">${icon("logout")}${esc(t("profile.contact.relogin"))}</button>
             <button type="button" class="btn btn--ghost" data-act="close-change">${esc(t("common.cancel"))}</button>
