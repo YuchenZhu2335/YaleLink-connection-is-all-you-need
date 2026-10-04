@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>YaleLink · 耶鲁校友社群 / Yale Alumni Community</title>
-  <meta name="description" content="YaleLink — 面向耶鲁在校生与校友的开源社群平台原型：职业发展、活动、创业、生活指南、校友目录。">
-  <meta name="theme-color" content="#00356B">
+  <title>Yalelux · Where Yale's light connects resources and ideas</title>
+  <meta name="description" content="Yalelux — 耶鲁在校生与校友的轻量社群：每周约一杯咖啡，认识同路人。Where Yale's light connects resources and ideas.">
+  <meta name="theme-color" content="#0B2545">
+  <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
@@ -13,12 +14,13 @@
 </head>
 <body>
   <div id="app" class="app">
+    <a class="skip-link" href="#main">跳到正文 / Skip to content</a>
     <header id="topbar" class="topbar"></header>
-    <aside id="sidenav" class="sidenav"></aside>
     <main id="main" class="main" tabindex="-1"></main>
-    <nav id="bottomnav" class="bottomnav" aria-label="primary"></nav>
+    <footer id="footer" class="footer"></footer>
+    <nav id="tabbar" class="tabbar" aria-label="tabs" hidden></nav>
   </div>
-  <noscript><p style="padding:2rem;text-align:center">YaleLink needs JavaScript. / 请启用 JavaScript。</p></noscript>
+  <noscript><p class="noscript">Yalelux 需要启用 JavaScript。 / Yalelux needs JavaScript.</p></noscript>
 
   <!-- 装载顺序 = 分层顺序：config → core → domain → api → modules → app（scripts/check-architecture.mjs 会检查）
        Load order mirrors the layers; enforced by scripts/check-architecture.mjs -->
@@ -28,30 +30,20 @@
   <script src="js/core/i18n.js"></script>
   <script src="js/core/ui.js"></script>
   <script src="js/core/registry.js"></script>
-  <script src="js/core/audit.js"></script>
-  <script src="js/core/store.js"></script>
-  <script src="js/core/auth.js"></script>
   <script src="js/core/api.js"></script>
+  <script src="js/core/auth.js"></script>
   <script src="js/core/router.js"></script>
 
   <!-- 业务规则 / domain — 纯函数，浏览器与 Node 后端共用 -->
   <script src="js/domain/coffee.js"></script>
 
-  <!-- 接口实现 / api — 原型版"后端"，每条 route 就是一份后端契约 -->
-  <script src="js/api/coffee.js"></script>
-
   <!-- 功能模块 / feature modules — 新增模块在这里加一行 / add one line per new module -->
-  <script src="js/modules/login.js"></script>
   <script src="js/modules/home.js"></script>
-  <script src="js/modules/coffee.js"></script>
-  <script src="js/modules/careers.js"></script>
-  <script src="js/modules/events.js"></script>
-  <script src="js/modules/circles.js"></script>
-  <script src="js/modules/acssy.js"></script>
-  <script src="js/modules/startup.js"></script>
-  <script src="js/modules/life.js"></script>
-  <script src="js/modules/directory.js"></script>
+  <script src="js/modules/login.js"></script>
   <script src="js/modules/profile.js"></script>
+  <script src="js/modules/coffee.js"></script>
+  <script src="js/modules/events.js"></script>
+  <script src="js/modules/admin.js"></script>
   <script src="js/modules/about.js"></script>
 
   <script src="js/app.js"></script>

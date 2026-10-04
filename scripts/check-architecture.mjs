@@ -11,10 +11,18 @@
    A7 index.html 按 config → core → domain → api → modules → app 的顺序引入 web/js 下每个文件，各一次
    A8 国内可达：index.html 与 CSS 不引用外部域名的脚本、样式、字体
    A9 安全：禁止 eval / new Function / document.write；数据里的链接用 YL.ui.safeUrl() 输出
-   A10 每个 domain 文件都有单元测试 tests/unit/<id>*.test.js；domain / api 文件与某个模块同名 */
+   A10 每个 domain 文件都有单元测试 tests/unit/<id>*.test.js；domain / api 文件与某个模块同名
+   A11 暂停的 v0 文件（PARKED）不被 index.html 加载
+
+   后端（server/）：
+   S1 零依赖：只 require node: 内置模块、server/ 里的文件和 web/js/domain/ 的规则；package.json 没有 dependencies
+   S2 SQL 一律用 ? 占位符：db.run/get/all 的 SQL 里不拼接变量（唯一例外：IN (?, ?, …) 占位符列表）
+   S3 管理员接口（server/admin.js）每一条都声明 auth: "admin"
+   S4 仓库里不出现密钥（DeepSeek / Resend / 私钥等）——密钥只放环境变量 */
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PARKED } from "./parked.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const web = resolve(root, "web");
@@ -22,19 +30,20 @@ const errors = [], warnings = [];
 const err = (rule, file, msg) => errors.push(`${rule}  ${file}: ${msg}`);
 const warn = (rule, file, msg) => warnings.push(`${rule}  ${file}: ${msg}`);
 
-// 存量模块：直接用 YL.store 读写。v0.2 接后端时逐个迁到 YL.api，迁完一个就从名单里删掉它。
-const LEGACY_STORE_MODULES = new Set(["home", "careers", "events", "circles", "acssy", "startup", "life", "directory", "profile", "login"]);
+// 暂停的 v0 静态原型文件见 scripts/parked.mjs：不加载、不检查
+// 存量模块：直接用 YL.store 读写（上线版没有了；保留这个机制给以后迁回的模块）
+const LEGACY_STORE_MODULES = new Set([]);
 // 模块对外公开的接口：跨模块调用只许用这些（新增需在 PR 里说明并更新 docs/modules.md）
-const PUBLIC_MODULE_API = new Set(["YL.careers.postCard", "YL.careers.postForm", "YL.acssy.openWizard"]);
+const PUBLIC_MODULE_API = new Set([]);
 // 模块可以使用的平台命名空间
-const PLATFORM_NS = new Set(["i18n", "ui", "registry", "audit", "store", "auth", "api", "router", "domain"]);
+const PLATFORM_NS = new Set(["i18n", "ui", "registry", "auth", "api", "router", "domain"]);
 const STORE_READONLY = new Set(["term", "terms", "region", "regions"]);
 
 const LAYERS = ["core", "domain", "api", "modules"];
 const read = (p) => readFileSync(p, "utf8");
 const jsFiles = (layer) => {
   const dir = resolve(web, "js", layer);
-  return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".js")).sort() : [];
+  return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".js") && !PARKED.has(`${layer}/${f}`)).sort() : [];
 };
 // 去掉注释再检查，避免注释里的词误报（不去掉 "https://" 这类字符串里的 //）
 const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
@@ -150,10 +159,45 @@ for (const l of ["domain", "api"]) for (const f of files[l]) {
   if (!moduleIds.has(f.replace(/\.js$/, ""))) err("A10", `web/js/${l}/${f}`, `没有同名模块 web/js/modules/${f} —— ${l} 文件按模块 id 命名`);
 }
 
+// A11 暂停文件不加载
+for (const p of PARKED) if (scripts.includes(`js/${p}`)) err("A11", "web/index.html", `js/${p} 已暂停（PARKED），上线版不加载`);
+
+// S1–S4 后端
+const serverDir = resolve(root, "server");
+const serverFiles = existsSync(serverDir) ? readdirSync(serverDir).filter((f) => f.endsWith(".js")).sort() : [];
+for (const f of serverFiles) {
+  const rel = `server/${f}`, src = strip(read(resolve(serverDir, f)));
+  for (const m of src.matchAll(/require\(\s*["'`]([^"'`]+)["'`]\s*\)/g)) {
+    const dep = m[1];
+    if (!(dep.startsWith("node:") || /^\.\/[\w.-]+$/.test(dep) || /^\.\.\/web\/js\/domain\/[\w-]+\.js$/.test(dep))) err("S1", rel, `require("${dep}") —— 后端零依赖：只用 node: 内置模块、server/ 文件与 web/js/domain 规则`);
+  }
+  for (const m of src.matchAll(/\bdb\.(?:run|get|all)\(\s*`([^`]*)`/g)) {
+    const sql = m[1].replace(/\$\{\w+\.map\(\(\) => "\?"\)\.join\(","\)\}/g, "");
+    if (/\$\{/.test(sql)) err("S2", rel, `SQL 里拼接了变量：${m[1].slice(0, 80)}… —— 用 ? 占位符传参`);
+  }
+}
+const pkg = JSON.parse(read(resolve(root, "package.json")));
+if (pkg.dependencies && Object.keys(pkg.dependencies).length) err("S1", "package.json", `不允许运行时依赖：${Object.keys(pkg.dependencies).join(", ")}`);
+if (existsSync(resolve(serverDir, "admin.js"))) {
+  const admin = strip(read(resolve(serverDir, "admin.js")));
+  for (const m of admin.matchAll(/app\.route\(\s*"(\w+)",\s*"([^"]+)"[\s\S]*?\}\s*,\s*\{([^{}]*)\}\s*\);/g)) {
+    if (!/auth:\s*"admin"/.test(m[3])) err("S3", "server/admin.js", `${m[1]} ${m[2]} 没有声明 auth: "admin"`);
+  }
+  const declared = (admin.match(/app\.route\(/g) || []).length, checked = [...admin.matchAll(/auth:\s*"admin"/g)].length;
+  if (declared !== checked) err("S3", "server/admin.js", `共 ${declared} 条接口，只有 ${checked} 条声明了 auth: "admin"`);
+}
+const SECRET = /\b(sk-[A-Za-z0-9]{24,}|re_[A-Za-z0-9]{16,}_[A-Za-z0-9]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)/;
+const scan = (dir) => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
+  const p = resolve(dir, d.name);
+  if (d.isDirectory()) return ["node_modules", ".git", "data", "test-results", "playwright-report"].includes(d.name) ? [] : scan(p);
+  return /\.(js|mjs|json|md|html|css|sql|yml|example)$/.test(d.name) ? [p] : [];
+}) : [];
+for (const p of scan(root)) if (SECRET.test(read(p))) err("S4", p.slice(root.length + 1), "疑似密钥写进了仓库 —— 密钥只放 server/.env（不进仓库）");
+
 // 报告
 console.log(`layers: ${LAYERS.map((l) => `${l} ${files[l].length}`).join(", ")}`);
 const legacyCount = [...LEGACY_STORE_MODULES].filter((x) => moduleIds.has(x)).length;
-console.log(`modules: ${files.modules.length} (legacy, still on YL.store → migrate to YL.api: ${legacyCount})`);
+console.log(`modules: ${files.modules.length}${legacyCount ? ` (legacy, still on YL.store: ${legacyCount})` : ""}; parked v0 files: ${PARKED.size}; server files: ${serverFiles.length}`);
 warnings.forEach((w) => console.log("warn:", w));
 if (errors.length) {
   errors.forEach((e) => console.error("error:", e));

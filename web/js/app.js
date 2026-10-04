@@ -1,55 +1,97 @@
-/* 启动：加载词典与数据 → 渲染外壳 → 启动路由 */
+/* 启动：词典 → 登录状态（GET /auth/me、/meta）→ 外壳（顶栏、手机底部标签栏、页脚）→ 路由 */
 (async function () {
-  const { t, esc, avatar } = YL.ui;
+  const { t, esc, icon, avatar } = YL.ui;
+  const $ = (id) => document.getElementById(id);
+
+  function navLink(n, cls) {
+    const count = n.badge ? YL.registry.badge(n.badge) : 0;
+    return `<a class="${cls}" data-nav-path="${esc(n.path)}" href="#/${esc(n.path)}">${icon(n.icon)}<span class="${cls}__label">${esc(t(n.labelKey))}</span>${n.badge ? `<span class="count" data-badge="${esc(n.badge)}"${count ? "" : " hidden"}>${count}</span>` : ""}</a>`;
+  }
 
   function renderShell() {
-    const logged = YL.auth.isLoggedIn();
+    const me = YL.auth.user();
     const lang = YL.i18n.getLang();
     const items = YL.registry.navItems();
     const mobile = YL.registry.navItems({ mobile: true });
 
-    YL.ui.$("#topbar").innerHTML = `
-      <a class="brand" href="#/home">
-        <img src="assets/logo.svg" alt="" class="brand__logo" width="34" height="34">
-        <span class="brand__name">${esc(YL_CONFIG.siteName)}<small>${t("brand.tagline")}</small></span>
-      </a>
-      <div class="topbar__actions">
-        <button class="btn btn--ghost btn--sm lang-toggle" id="lang-toggle" aria-label="switch language" title="${lang === "zh" ? "Switch to English" : "切换到中文"}">
-          <span class="${lang === "zh" ? "is-on" : ""}">中</span><span class="sep">/</span><span class="${lang === "en" ? "is-on" : ""}">EN</span>
-        </button>
-        ${logged
-          ? `<a class="topbar__user" href="#/profile" title="${esc(YL.auth.user().email)}">${avatar(YL.auth.displayName(), "sm")}<span class="topbar__name">${esc(YL.auth.displayName())}</span></a>`
-          : `<a class="btn btn--primary btn--sm" href="#/login">${t("nav.login")}</a>`}
+    $("topbar").innerHTML = `
+      <div class="topbar__inner">
+        <a class="brand" href="#/${me && me.ready ? "coffee" : "home"}" aria-label="${esc(YL_CONFIG.siteName)}">
+          <img class="brand__mark" src="assets/logo.svg" alt="" width="32" height="32">
+          <span class="brand__word">${esc(YL_CONFIG.siteName)}</span>
+        </a>
+        <nav class="topnav" aria-label="${esc(t("nav.primary"))}">${items.map((n) => navLink(n, "topnav__item")).join("")}</nav>
+        <div class="topbar__actions">
+          <button type="button" class="lang-toggle" id="lang-toggle" aria-label="${esc(lang === "zh" ? "Switch to English" : "切换到中文")}">
+            <span${lang === "zh" ? ' class="is-on"' : ""}>中</span><span aria-hidden="true">/</span><span${lang === "en" ? ' class="is-on"' : ""}>EN</span>
+          </button>
+          ${me
+            ? `<a class="topbar__me" href="#/me" aria-label="${esc(t("nav.me"))}">${avatar(YL.auth.displayName(), "sm")}<span class="topbar__name">${esc(YL.auth.displayName())}</span></a>`
+            : `<a class="btn btn--primary btn--sm" href="#/login">${esc(t("nav.login"))}</a>`}
+        </div>
       </div>`;
-    YL.ui.$("#lang-toggle").onclick = () => YL.i18n.toggle();
+    $("lang-toggle").onclick = () => YL.i18n.toggle();
 
-    YL.ui.$("#sidenav").innerHTML = `
-      <nav class="sidenav__list">
-        ${items.map((m) => `<a class="sidenav__item" data-nav-id="${m.id}" href="#/${m.id}"><span class="ico">${m.nav.icon}</span><span>${t(m.nav.labelKey)}</span></a>`).join("")}
-      </nav>
-      <div class="sidenav__foot">
-        <a href="${YL_CONFIG.github}" target="_blank" rel="noopener">⭐ ${t("nav.github")}</a>
-        <span class="sidenav__ver">v${YL_CONFIG.version} · ${t("brand.prototype")}</span>
+    $("tabbar").innerHTML = mobile.map((n) => navLink(n, "tabbar__item")).join("");
+    $("tabbar").hidden = !mobile.length;
+    document.body.classList.toggle("has-tabbar", mobile.length > 0);
+
+    $("footer").innerHTML = `
+      <div class="footer__inner">
+        <div class="footer__brand"><strong>${esc(YL_CONFIG.siteName)}</strong><span>${esc(t("brand.tagline"))}</span></div>
+        <nav class="footer__links" aria-label="${esc(t("nav.footer"))}">
+          <a href="#/events">${esc(t("nav.events"))}</a>
+          <a href="#/about">${esc(t("nav.about"))}</a>
+          <a href="#/about/privacy">${esc(t("nav.privacy"))}</a>
+          <a href="#/about/feedback">${esc(t("nav.feedback"))}</a>
+          <a href="${YL.ui.safeUrl(YL_CONFIG.github)}" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+        <p class="footer__note">${esc(t("brand.by"))}</p>
       </div>`;
+    markActive();
+  }
 
-    YL.ui.$("#bottomnav").innerHTML = mobile.map((m) =>
-      `<a data-nav-id="${m.id}" href="#/${m.id}"><span class="ico">${m.nav.icon}</span>${t(m.nav.labelKey)}</a>`).join("");
-
+  function markActive() {
     const ctx = YL.router.currentCtx();
-    if (ctx) YL.ui.$$("[data-nav-id]").forEach((a) => a.classList.toggle("is-active", a.dataset.navId === ctx.module));
+    const active = ctx ? YL.registry.activeNav(ctx.path || ctx.module) : null;
+    YL.ui.$$("[data-nav-path]").forEach((a) => {
+      const on = !!active && a.dataset.navPath === active.path;
+      a.classList.toggle("is-active", on);
+      if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+  }
+  function updateBadges() {
+    YL.ui.$$("[data-badge]").forEach((el) => {
+      const n = YL.registry.badge(el.dataset.badge);
+      el.textContent = n > 99 ? "99+" : String(n);
+      el.hidden = !n;
+    });
+  }
+  // 模块可以提供 badges()：登录后拉一次角标（例如收件箱数量），不用等用户点进去
+  function refreshBadges() {
+    if (!YL.auth.isReady()) return;
+    YL.registry.all().forEach((m) => { if (typeof m.badges === "function") Promise.resolve(m.badges()).catch(() => {}); });
   }
 
   try {
     await YL.i18n.load();
-    await YL.store.load();
   } catch (e) {
-    console.error(e);
-    document.getElementById("main").innerHTML = `<div class="empty"><div class="empty__icon">⚠️</div><p>Failed to load data. Please serve this folder over HTTP, e.g. <code>python3 -m http.server 8000</code></p></div>`;
+    $("main").innerHTML = `<div class="empty"><p>Failed to load. Please run <code>npm start</code> and open the address it prints.</p></div>`;
     return;
   }
+  const booted = await YL.auth.boot();
+  if (!booted.ok && booted.error && booted.error.code === "network") {
+    $("main").innerHTML = YL.ui.emptyState("globe", t("api.err.network"), `<button type="button" class="btn btn--primary" id="retry">${esc(t("common.retry"))}</button>`);
+    $("retry").onclick = () => location.reload();
+    return;
+  }
+  document.title = `${YL_CONFIG.siteName} · ${t("brand.tagline")}`;
   renderShell();
   YL.router.start();
-  window.addEventListener("yl:langchange", () => { renderShell(); YL.router.render(); });
-  window.addEventListener("yl:authchange", () => { renderShell(); });
+  refreshBadges();
+  window.addEventListener("yl:route", () => setTimeout(markActive));
+  window.addEventListener("yl:badges", updateBadges);
+  window.addEventListener("yl:langchange", () => { document.title = `${YL_CONFIG.siteName} · ${t("brand.tagline")}`; renderShell(); YL.router.render(); });
+  window.addEventListener("yl:authchange", () => { renderShell(); refreshBadges(); });
   document.getElementById("app").classList.add("is-ready");
 })();

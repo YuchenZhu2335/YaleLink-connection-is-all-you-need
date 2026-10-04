@@ -1,71 +1,76 @@
-/* 鉴权（信任边界）— 静态原型版：邮箱域名白名单 + 演示验证码 + localStorage 会话
-   Auth (the trust boundary) — prototype edition: domain allowlist + demo code + localStorage session.
-   真实后端只需替换 requestCode / verify 两个函数为 API 调用。 */
+/* 登录状态（信任边界在后端：server/auth.js）。前端只保存"后端说我是谁"，不保存任何凭证。
+   Session state mirrored from the backend; the trust boundary lives in server/auth.js.
+
+   登录流程：耶鲁邮箱 → 验证码 → 同意隐私说明 → 联系邮箱 → 资料问卷 → 可以使用约咖啡
+     YL.auth.nextStep() 返回还差的那一步（"consent" | "contact" | "profile" | null），
+     路由在进入 requiresReady 的模块前会把人带到 #/me/setup 补完。
+
+   boot()    启动时调一次：GET /auth/me + GET /meta（问卷题目、隐私说明版本等公开信息）
+   user()    后端返回的本人资料（含 ready / isAdmin / needs*），未登录为 null
+   set(u)    接口返回了新的本人资料时调用（资料、联系邮箱、偏好更新后），会广播 yl:authchange */
 window.YL = window.YL || {};
 YL.auth = (function () {
-  const KEY = "yl.session";
-  let session = null;
-  try { session = JSON.parse(localStorage.getItem(KEY)); } catch (e) { session = null; }
+  let me = null;
+  let meta = { consentVersion: "", dev: false, smartRecAvailable: false, questions: [] };
 
-  function normalize(email) { return String(email || "").trim().toLowerCase(); }
-  function domainOf(email) { const i = email.lastIndexOf("@"); return i < 0 ? "" : email.slice(i + 1); }
-  function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
-  function isAllowedEmail(email) {
-    email = normalize(email);
-    if (!isValidEmail(email)) return false;
-    const d = domainOf(email);
-    return YL_CONFIG.allowedEmailDomains.some((allowed) =>
-      d === allowed || (YL_CONFIG.allowSubdomains && d.endsWith("." + allowed)));
+  function set(user) {
+    const before = JSON.stringify(me);
+    me = user || null;
+    if (JSON.stringify(me) !== before) window.dispatchEvent(new CustomEvent("yl:authchange"));
+    return me;
   }
-  function kindOf(email) {
-    const d = domainOf(normalize(email));
-    if (d === "aya.yale.edu") return "alumni";
-    return "student";
+  async function boot() {
+    const [u, m] = await Promise.all([YL.api.get("/auth/me"), YL.api.get("/meta")]);
+    if (m.ok) meta = m.data;
+    me = u.ok ? u.data.user : null;
+    return { ok: u.ok && m.ok, error: (!u.ok && u.error) || (!m.ok && m.error) || null };
   }
-  function save() { if (session) localStorage.setItem(KEY, JSON.stringify(session)); else localStorage.removeItem(KEY); }
+  async function refresh() {
+    const r = await YL.api.get("/auth/me");
+    if (r.ok) set(r.data.user);
+    return me;
+  }
 
-  // 演示版：立刻返回成功，真实版应调用后端发送邮件
-  async function requestCode(email) {
-    email = normalize(email);
-    if (!isAllowedEmail(email)) return { ok: false, reason: "domain" };
-    return { ok: true, email, hint: YL_CONFIG.demoVerificationCode };
-  }
+  // 发验证码：via = "yale" 时强制发到耶鲁邮箱（默认老用户发到已验证的联系邮箱）
+  const requestCode = (email, via) => YL.api.post("/auth/request-code", { email: String(email || "").trim(), via: via || undefined });
   async function verify(email, code) {
-    email = normalize(email);
-    if (!isAllowedEmail(email)) return { ok: false, reason: "domain" };
-    if (String(code).trim() !== YL_CONFIG.demoVerificationCode) return { ok: false, reason: "code" };
-    session = { email, kind: kindOf(email), profile: null, createdAt: new Date().toISOString() };
-    save();
-    window.dispatchEvent(new CustomEvent("yl:authchange"));
-    return { ok: true };
+    const r = await YL.api.post("/auth/verify", { email: String(email || "").trim(), code: String(code || "").trim() });
+    if (r.ok) set(r.data.user);
+    return r;
   }
-  function completeProfile(profile) {
-    if (!session) return false;
-    session.profile = Object.assign({}, session.profile || {}, profile);
-    save();
-    window.dispatchEvent(new CustomEvent("yl:authchange"));
-    return true;
+  async function logout() {
+    const r = await YL.api.post("/auth/logout");
+    set(null);
+    return r;
   }
-  function logout() { session = null; save(); window.dispatchEvent(new CustomEvent("yl:authchange")); }
-  function isLoggedIn() { return !!session; }
-  function needsProfile() { return !!session && !session.profile; }
-  function user() { return session; }
-  // 学联身份：profile.acssyRole = "" | "member" | "lead"
-  function acssyRole() { return (session && session.profile && session.profile.acssyRole) || ""; }
-  function isAcssy() { return !!acssyRole(); }
-  function isAcssyLead() { return acssyRole() === "lead"; }
+
+  const user = () => me;
+  const isLoggedIn = () => !!me;
+  const isReady = () => !!me && !!me.ready;
+  const isAdmin = () => !!me && !!me.isAdmin;
+  const getMeta = () => meta;
+  const questions = () => meta.questions || [];
+  function nextStep() {
+    if (!me) return "login";
+    if (me.needsConsent) return "consent";
+    if (me.needsContact) return "contact";
+    if (me.needsProfile) return "profile";
+    return null;
+  }
   function displayName() {
-    if (!session) return "";
-    if (session.profile && session.profile.name) return session.profile.name;
-    return session.email.split("@")[0];
+    if (!me) return "";
+    return me.name || String(me.loginEmail || "").split("@")[0];
   }
   // 需要登录的操作入口：未登录时提示并跳到登录页，登录后回到当前页。返回 true 表示可以继续。
-  // Gate for actions that need a session; redirects to login and comes back afterwards.
   function requireLogin() {
     if (isLoggedIn()) return true;
     YL.ui.toast(YL.ui.t("common.loginFirst"), "error");
-    YL.router.navigate("login?next=" + encodeURIComponent(location.hash.slice(2)));
+    YL.router.navigate("login?next=" + encodeURIComponent(location.hash.replace(/^#\/?/, "")));
     return false;
   }
-  return { isAllowedEmail, isValidEmail, requestCode, verify, completeProfile, logout, isLoggedIn, needsProfile, user, displayName, kindOf, acssyRole, isAcssy, isAcssyLead, requireLogin };
+
+  // 会话在后端过期或被注销：清掉本地状态，由路由决定去哪
+  window.addEventListener("yl:unauthorized", () => { if (me) { set(null); YL.router.render(); } });
+
+  return { boot, refresh, set, requestCode, verify, logout, user, isLoggedIn, isReady, isAdmin, meta: getMeta, questions, nextStep, displayName, requireLogin };
 })();

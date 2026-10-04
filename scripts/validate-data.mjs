@@ -11,11 +11,11 @@ const errors = [], warnings = [];
 const err = (m) => errors.push(m), warn = (m) => warnings.push(m);
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
 
-// 1. 数据文件清单来自 config.js
-const config = readFileSync(resolve(root, "config.js"), "utf8");
-const m = config.match(/dataFiles:\s*\[([^\]]*)\]/);
-if (!m) { err("config.js: dataFiles not found"); }
-const files = m ? [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [];
+// 1. web/data/ 下的数据文件（问卷配置 matchQuestions.json 单独校验，见下文）
+//    除问卷外都是 v0 静态原型的示例数据（上线版不加载），继续校验以免以后迁回时出错
+import { readdirSync } from "node:fs";
+import { PARKED } from "./parked.mjs";
+const files = readdirSync(resolve(root, "data")).filter((f) => f.endsWith(".json") && f !== "matchQuestions.json").map((f) => f.replace(/\.json$/, ""));
 const data = {};
 for (const name of files) {
   const p = resolve(root, "data", name + ".json");
@@ -68,7 +68,7 @@ const ref = (val, set, path, allowNull) => { if (val == null) { if (!allowNull) 
 (data.projects || []).forEach((p) => { ref(p.founderId, users, `projects.${p.id}.founderId`); ref(p.stage, term("stages"), `projects.${p.id}.stage`); ref(p.region, regions, `projects.${p.id}.region`); (p.needs || []).forEach((n) => ref(n, term("projectNeeds"), `projects.${p.id}.needs`)); });
 (data.timelines || []).forEach((t) => { ref(t.industry, term("industries"), `timelines.${t.id}.industry`); (t.maintainers || []).forEach((u) => ref(u, users, `timelines.${t.id}.maintainers`)); });
 (data.circles || []).forEach((c) => { ref(c.type, term("circleTypes"), `circles.${c.id}.type`); ref(c.leadId, users, `circles.${c.id}.leadId`); if (c.region && c.region !== "all") ref(c.region, regions, `circles.${c.id}.region`); });
-const depts = new Set([...config.matchAll(/acssyDepartments:\s*\[([^\]]*)\]/g)].flatMap((x) => [...x[1].matchAll(/"([^"]+)"/g)].map((y) => y[1])));
+const depts = new Set(["career", "events", "media", "outreach", "secretariat"]); // v0 学联部门（原 config.acssyDepartments）
 (data.playbooks || []).forEach((pb) => { ref(pb.category, term("eventTypes"), `playbooks.${pb.id}.category`); ref(pb.maintainerId, users, `playbooks.${pb.id}.maintainerId`); (pb.templateIds || []).forEach((t) => ref(t, idsOf("templates"), `playbooks.${pb.id}.templateIds`)); (pb.contactIds || []).forEach((k) => ref(k, idsOf("contacts"), `playbooks.${pb.id}.contactIds`)); (pb.phases || []).forEach((ph) => (ph.tasks || []).forEach((tk, i) => { ref(tk.role, depts, `playbooks.${pb.id}.${ph.id}.tasks[${i}].role`); if (typeof tk.days !== "number") err(`playbooks.${pb.id}.${ph.id}.tasks[${i}].days must be a number`); })); });
 (data.campaigns || []).forEach((c) => { ref(c.leadId, users, `campaigns.${c.id}.leadId`); ref(c.playbookId, idsOf("playbooks"), `campaigns.${c.id}.playbookId`); ref(c.department, depts, `campaigns.${c.id}.department`); if (c.eventId) ref(c.eventId, idsOf("events"), `campaigns.${c.id}.eventId`); (c.memberIds || []).forEach((u) => ref(u, users, `campaigns.${c.id}.memberIds`)); const tids = new Set(); (c.tasks || []).forEach((tk) => { if (tids.has(tk.id)) err(`campaigns.${c.id} duplicate task id ${tk.id}`); tids.add(tk.id); ref(tk.assigneeId, users, `campaigns.${c.id}.tasks.${tk.id}.assigneeId`, true); ref(tk.role, depts, `campaigns.${c.id}.tasks.${tk.id}.role`); if (!["todo", "doing", "done"].includes(tk.status)) err(`campaigns.${c.id}.tasks.${tk.id}.status invalid`); }); });
 (data.contacts || []).forEach((k) => { ref(k.kind, term("contactKinds"), `contacts.${k.id}.kind`); ref(k.ownerId, users, `contacts.${k.id}.ownerId`, true); });
@@ -84,9 +84,8 @@ try {
 const zh = readJson(resolve(root, "i18n/zh.json")), en = readJson(resolve(root, "i18n/en.json"));
 for (const k of Object.keys(zh)) if (!(k in en)) err(`i18n: "${k}" in zh.json but not en.json`);
 for (const k of Object.keys(en)) if (!(k in zh)) err(`i18n: "${k}" in en.json but not zh.json`);
-import { readdirSync } from "node:fs";
 const used = new Set(), prefixes = new Set();
-for (const dir of ["js/core", "js/domain", "js/api", "js/modules", "js"]) if (existsSync(resolve(root, dir))) for (const f of readdirSync(resolve(root, dir))) if (f.endsWith(".js")) {
+for (const dir of ["js/core", "js/domain", "js/api", "js/modules", "js"]) if (existsSync(resolve(root, dir))) for (const f of readdirSync(resolve(root, dir))) if (f.endsWith(".js") && !PARKED.has(dir.slice(3) + "/" + f)) {
   const src = readFileSync(resolve(root, dir, f), "utf8");
   for (const x of src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"\s*[,)]/g)) used.add(x[1]);
   for (const x of src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"\s*\+/g)) prefixes.add(x[1]);

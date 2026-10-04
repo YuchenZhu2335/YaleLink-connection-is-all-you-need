@@ -1,73 +1,94 @@
 /* ============================================================
-   设计令牌 / Design tokens
-   品牌色取自耶鲁官方色：Yale Blue #00356B、Medium Blue #286DC0、Light Blue #63AAFF
+   Yalelux 设计令牌 / Design tokens（临时值，设计定稿后按 docs/design/system.md 替换）
+   组件只用这里的语义变量，不直接写颜色；换主题 = 只改这个文件。
    ============================================================ */
 :root {
-  --yale-blue: #00356B;
-  --yale-mid: #286DC0;
-  --yale-light: #63AAFF;
-  --accent: #BD5319;          /* 暖色强调（耶鲁辅助色 Orange） */
-  --accent-soft: #FCEBDD;
-  --green: #5F712D;
-  --green-soft: #EAF0D8;
+  /* 颜色：底 / 面 / 线 / 字 */
+  --c-bg: #F6F4EF;
+  --c-surface: #FFFFFF;
+  --c-surface-2: #EFEDE6;
+  --c-line: #E0DCD2;
+  --c-line-strong: #C9C3B6;
+  --c-ink: #14213D;
+  --c-ink-2: #4A5468;
+  --c-ink-3: #6E7685;
+  /* 主色（Yale 蓝的致敬色）与"光"的强调色 */
+  --c-primary: #0B2545;
+  --c-primary-hover: #13315C;
+  --c-primary-ink: #FFFFFF;
+  --c-primary-soft: #E4EAF3;
+  --c-accent: #E9A23B;
+  --c-accent-ink: #1B1405;
+  --c-accent-soft: #FBEBD2;
+  --c-link: #1D4E89;
+  /* 语义色 */
+  --c-success: #2F6B3A;
+  --c-success-soft: #E3F0E3;
+  --c-warn: #8A5A00;
+  --c-warn-soft: #FFF1D6;
+  --c-danger: #A4282B;
+  --c-danger-soft: #FBE7E6;
+  --c-focus: #E9A23B;
+  /* 头像底色（文字为白色，均满足 4.5:1） */
+  --c-avatar-0: #0B2545; --c-avatar-1: #1D4E89; --c-avatar-2: #2F6B3A;
+  --c-avatar-3: #8C4A12; --c-avatar-4: #5B3F8C; --c-avatar-5: #6B5E4A;
 
-  --bg: #F4F6FA;
-  --surface: #FFFFFF;
-  --surface-2: #EEF2F8;
-  --border: #DCE3EE;
-  --text: #16213A;
-  --text-2: #52607A;
-  --text-3: #8A94A8;
-  --primary: var(--yale-blue);
-  --primary-hover: #002A55;
-  --primary-soft: #E3EDF9;
-  --on-primary: #FFFFFF;
-  --link: var(--yale-mid);
-  --danger: #B3261E;
-  --danger-soft: #FBE9E7;
-  --warn: #8A5A00;
-  --warn-soft: #FFF3D6;
-
-  --radius-s: 8px;
-  --radius: 14px;
-  --radius-l: 20px;
-  --shadow-s: 0 1px 2px rgba(16, 33, 58, .06);
-  --shadow: 0 4px 16px rgba(16, 33, 58, .08);
-  --shadow-l: 0 16px 40px rgba(16, 33, 58, .16);
-
-  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* 字体：中文用系统字体；西文展示字体自托管（assets/fonts） */
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  --font-display: var(--font-body);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 12px; --fs-sm: 14px; --fs-md: 16px; --fs-lg: 18px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px; --fs-4xl: 48px;
+  --lh-tight: 1.25; --lh-body: 1.65;
+  --fw-regular: 400; --fw-medium: 500; --fw-bold: 600;
 
-  --topbar-h: 60px;
-  --sidenav-w: 236px;
-  --bottomnav-h: 60px;
-  --content-max: 1080px;
+  /* 形状 */
+  --radius-xs: 6px; --radius-s: 10px; --radius: 14px; --radius-l: 20px; --radius-pill: 999px;
+  --shadow-s: 0 1px 2px rgba(20, 33, 61, .06);
+  --shadow: 0 2px 10px rgba(20, 33, 61, .07);
+  --shadow-l: 0 16px 40px rgba(20, 33, 61, .18);
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px; --sp-16: 64px;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --dur: .18s;
+
+  /* 布局 */
+  --topbar-h: 56px;
+  --tabbar-h: 60px;
+  --content-max: 1120px;
+  --gutter: 16px;
   color-scheme: light;
+}
+
+@media (min-width: 900px) {
+  :root { --topbar-h: 64px; --gutter: 32px; }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0F1624;
-    --surface: #182236;
-    --surface-2: #1F2B44;
-    --border: #2B3A57;
-    --text: #EAF0FA;
-    --text-2: #A9B6CD;
-    --text-3: #7583A0;
-    --primary: #4A8FE0;
-    --primary-hover: #63AAFF;
-    --primary-soft: #1D3557;
-    --on-primary: #0B1730;
-    --link: #7FBBFF;
-    --accent-soft: #3A2415;
-    --green-soft: #26301A;
-    --danger-soft: #3A1D1B;
-    --warn-soft: #3A2E12;
-    --warn: #F0C36D;
-    --shadow-s: 0 1px 2px rgba(0,0,0,.3);
-    --shadow: 0 4px 16px rgba(0,0,0,.35);
-    --shadow-l: 0 16px 40px rgba(0,0,0,.5);
+    --c-bg: #0E1420;
+    --c-surface: #161E2D;
+    --c-surface-2: #1D2738;
+    --c-line: #2A3549;
+    --c-line-strong: #3A4760;
+    --c-ink: #ECEFF4;
+    --c-ink-2: #B4BCCB;
+    --c-ink-3: #8C96A8;
+    --c-primary: #9CC1F0;
+    --c-primary-hover: #B7D2F5;
+    --c-primary-ink: #0B1626;
+    --c-primary-soft: #1D2D47;
+    --c-accent: #F0B456;
+    --c-accent-ink: #1B1405;
+    --c-accent-soft: #3A2C14;
+    --c-link: #9CC1F0;
+    --c-success: #8FCB98;
+    --c-success-soft: #1D3222;
+    --c-warn: #F0C36D;
+    --c-warn-soft: #3A2E12;
+    --c-danger: #F2A09B;
+    --c-danger-soft: #3D1E1D;
+    --shadow-s: 0 1px 2px rgba(0, 0, 0, .3);
+    --shadow: 0 2px 10px rgba(0, 0, 0, .35);
+    --shadow-l: 0 16px 40px rgba(0, 0, 0, .5);
     color-scheme: dark;
   }
 }
