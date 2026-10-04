@@ -79,7 +79,7 @@ for (const k of Object.keys(zh)) if (!(k in en)) err(`i18n: "${k}" in zh.json bu
 for (const k of Object.keys(en)) if (!(k in zh)) err(`i18n: "${k}" in en.json but not zh.json`);
 import { readdirSync } from "node:fs";
 const used = new Set(), prefixes = new Set();
-for (const dir of ["js/core", "js/modules", "js"]) for (const f of readdirSync(resolve(root, dir))) if (f.endsWith(".js")) {
+for (const dir of ["js/core", "js/domain", "js/api", "js/modules", "js"]) if (existsSync(resolve(root, dir))) for (const f of readdirSync(resolve(root, dir))) if (f.endsWith(".js")) {
   const src = readFileSync(resolve(root, dir, f), "utf8");
   for (const x of src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"\s*[,)]/g)) used.add(x[1]);
   for (const x of src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"\s*\+/g)) prefixes.add(x[1]);
