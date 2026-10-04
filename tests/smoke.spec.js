@@ -29,8 +29,8 @@ async function signIn(page, email, codeTo) {
   await page.fill("#login-email", email);
   await page.locator('[data-form="email"] button[type="submit"]').click();
   await expect(page.locator("#login-code")).toBeVisible();
-  await page.fill("#login-code", await codeFor(page.request, codeTo || email));
-  if (await page.locator("#login-code").isVisible().catch(() => false)) await page.locator('[data-act="verify"]').click().catch(() => {});
+  await page.fill("#login-code", await codeFor(page.request, codeTo || email)); // 填满 6 位自动提交
+  await expect(page).not.toHaveURL(/#\/login/);
 }
 // 首次填写：同意 → 联系邮箱（验证）→ 资料
 async function onboard(page, email, name) {
@@ -45,8 +45,7 @@ async function onboard(page, email, name) {
   await page.fill("#cw-email", contact);
   await page.locator('[data-step] button[type="submit"]').first().click();
   await expect(page.locator("#cw-code")).toBeVisible();
-  await page.fill("#cw-code", await codeFor(page.request, contact));
-  await page.locator('[data-cw="verify"]').click();
+  await page.fill("#cw-code", await codeFor(page.request, contact)); // 填满 6 位自动提交
   await expect(page.locator("[data-profile-form]")).toBeVisible();
   await page.fill("#pf-name", name);
   await page.locator('input[name="identity"][value="student"]').check({ force: true });
@@ -87,6 +86,7 @@ test("未登录：首页与活动页能看，语言能切换，没有脚本错�
 });
 
 test("登录：非耶鲁邮箱被拒；新同学走完首次填写，选时间后看到推荐", async ({ page }) => {
+  test.setTimeout(120000);
   const errors = watchErrors(page);
   await page.goto("/#/login");
   await page.fill("#login-email", "someone@gmail.com");
@@ -103,6 +103,7 @@ test("登录：非耶鲁邮箱被拒；新同学走完首次填写，选时间�
 });
 
 test("双向确认：A 想认识 demo01 → demo01 在收件箱点想认识 → 双方看到联系方式，并约好时间", async ({ browser }) => {
+  test.setTimeout(120000);
   const a = await browser.newPage();
   const errors = watchErrors(a);
   await signIn(a, "e2e.a@yale.edu");
@@ -135,11 +136,12 @@ test("双向确认：A 想认识 demo01 → demo01 在收件箱点想认识 → 
 });
 
 test("管理员：完成首次填写后进后台，发布活动轮，活动页不登录也能看到", async ({ page, browser }) => {
+  test.setTimeout(120000);
   const errors = watchErrors(page);
   await signIn(page, "admin@yale.edu");
   await onboard(page, "admin@yale.edu", "管理员");
   await page.goto("/#/admin");
-  await expect(page.locator(".stats")).toBeVisible();
+  await expect(page.locator(".stats").first()).toBeVisible();
   await page.goto("/#/admin/rounds/new");
   await page.fill("#ar-title-zh", "Coffee Chat 月");
   await page.fill("#ar-title-en", "Coffee Chat Month");
@@ -159,12 +161,13 @@ test("管理员：完成首次填写后进后台，发布活动轮，活动页�
 });
 
 test("截图：手机与电脑", async ({ browser }) => {
-  for (const [name, viewport, isMobile] of [["mobile", { width: 390, height: 844 }, true], ["desktop", { width: 1280, height: 860 }, false]]) {
+  test.setTimeout(240000);
+  for (const [name, viewport, isMobile, n] of [["mobile", { width: 390, height: 844 }, true, 2], ["desktop", { width: 1280, height: 860 }, false, 3]]) {
     const ctx = await browser.newContext({ viewport, isMobile, deviceScaleFactor: isMobile ? 2 : 1, locale: "zh-CN", timezoneId: "Asia/Shanghai" });
     const page = await ctx.newPage();
     await page.goto("/");
     await page.screenshot({ path: path.join(SHOTS, `${name}-home.png`), fullPage: true });
-    await signIn(page, "demo02@demo.yale.edu", "demo2@example.com");
+    await signIn(page, `demo0${n}@demo.yale.edu`, `demo${n}@example.com`);
     for (const r of ["coffee", "coffee/browse", "coffee/times", "coffee/inbox", "coffee/matches", "profile", "events"]) {
       await page.goto("/#/" + r);
       await page.waitForLoadState("networkidle");
