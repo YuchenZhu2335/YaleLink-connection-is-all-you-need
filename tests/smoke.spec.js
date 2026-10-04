@@ -91,12 +91,82 @@ test("ACSSY console: gate, board, claim task, wizard creates project", async ({ 
   await expect(page.locator("[data-status]").first()).toBeVisible();
 });
 
+test("coffee chat beta: sign up → offer times → book → get booked → accept → contacts revealed, all audited", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.clock.setFixedTime(new Date("2026-10-10T16:00:00Z")); // 活动（11/2–11/15）开始之前
+  await login(page, { acssyRole: "lead" }); // 原型里学联负责人 = 管理员
+
+  await page.goto(BASE + "#/coffee/people");
+  await expect(page.locator(".tab.is-active")).toContainText("活动介绍"); // 没报名：看不到参与者
+
+  // 报名：规则在 domain 里，错误按字段显示
+  await page.goto(BASE + "#/coffee/join");
+  await page.click("#f-join button[type=submit]");
+  await expect(page.locator('[data-err="program"]')).toHaveText("这一项必填");
+  await expect(page.locator('[data-err="goals"]')).not.toBeEmpty();
+  await page.fill("#cf-program", "MS Statistics");
+  await page.check('input[name="goals"][value="industry"]');
+  await page.fill("#cf-meetPlace", "zoom 123");
+  await page.click("#f-join button[type=submit]");
+  await expect(page.locator('[data-err="meetPlace"]')).toContainText("https://");
+  await page.fill("#cf-meetPlace", "https://zoom.example.com/j/me");
+  await page.fill("#cf-contact", "微信 test-me");
+  await page.click("#f-join button[type=submit]");
+  await page.waitForURL(/#\/coffee\/schedule/);
+
+  // 选时间：整行 19:20（14 天）+ 单格
+  await page.click('[data-time="19:20"]');
+  await page.click('[data-slot="2026-11-02T10:00"]');
+  await expect(page.locator("#slot-count")).toContainText("15");
+  await page.click("#btn-save-slots");
+  await expect(page.locator(".toast")).toContainText("15");
+
+  // 从校友目录点"约咖啡"进入 TA 的时间表；示例数据里 11/3 19:20 已被约走
+  await page.goto(BASE + "#/directory/u/u01");
+  await page.click("#btn-coffee");
+  await expect(page.locator('[data-book="2026-11-03T19:20"]')).toBeDisabled();
+  await page.click('[data-book="2026-11-03T19:55"]');
+  await page.click("#f-book button[type=submit]"); // 没勾选免责声明
+  await expect(page.locator('[data-err="agree"]')).not.toBeEmpty();
+  await page.check('#f-book input[name="agree"]');
+  await page.click("#f-book button[type=submit]");
+  await expect(page.locator('[data-book="2026-11-03T19:55"]')).toContainText("你约的");
+
+  // 被约：模拟一位参与者约我 → 接受 → 双方联系方式出现
+  await page.goto(BASE + "#/coffee/bookings");
+  await page.click("#btn-demo");
+  const incoming = page.locator("[data-booking]").filter({ has: page.locator('[data-act="accept"]') });
+  await expect(incoming).toHaveCount(1);
+  await incoming.locator('[data-act="accept"]').click();
+  await page.click("#btn-answer");
+  await expect(page.locator(".callout--green").first()).toContainText("@example.com");
+  await expect(page.locator(".tabs")).toContainText("我的预约 1"); // 未读通知
+
+  // 意见箱与管理统计
+  await page.goto(BASE + "#/coffee/feedback");
+  await page.fill("#cf-text", "希望可以导出到日历");
+  await page.click("#f-fb button[type=submit]");
+  await expect(page.locator(".toast")).toContainText("谢谢");
+  await page.goto(BASE + "#/coffee/admin");
+  await expect(page.locator("#admin-stats .stat").first()).toContainText("11"); // 10 位示例参与者 + 我
+
+  // 每个写操作（以及管理员查看）都留痕
+  await page.goto(BASE + "#/profile");
+  for (const op of ["GET /coffee/admin", "POST /coffee/bookings/:id/accept", "POST /coffee/bookings", "POST /coffee/availability"]) await expect(page.locator("#audit-log")).toContainText(op);
+
+  // "关于"页自动列出后端契约（演示路由不算）
+  await page.goto(BASE + "#/about");
+  await expect(page.locator("#api-contract .list-row")).toHaveCount(12);
+  expect(errors).toEqual([]);
+});
+
 test("screenshots at mobile and desktop widths", async ({ browser }) => {
   for (const [name, vp] of [["mobile", { width: 390, height: 844 }], ["desktop", { width: 1280, height: 800 }]]) {
     const ctx = await browser.newContext({ viewport: vp });
     const page = await ctx.newPage();
     await login(page, { acssyRole: "lead" });
-    for (const r of ["home", "careers/jobs", "events", "acssy/board/c01"]) {
+    for (const r of ["home", "coffee", "careers/jobs", "events", "acssy/board/c01"]) {
       await page.goto(BASE + "#/" + r);
       await page.waitForFunction(() => document.querySelector("#main").children.length > 0);
       await page.screenshot({ path: `tests/screenshots/${name}-${r.replace(/\//g, "_")}.png`, fullPage: true });

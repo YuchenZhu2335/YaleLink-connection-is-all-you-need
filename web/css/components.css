@@ -8,6 +8,7 @@
 .row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .row--between { justify-content: space-between; }
 .spacer { flex: 1; }
+.grow { flex: 1; min-width: 0; }
 .section { margin-bottom: var(--sp-8); }
 .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .section-title { font-size: 1.15rem; }
@@ -98,6 +99,8 @@ a.card, a.card:hover { color: inherit; text-decoration: none; }
 .person { display: flex; gap: 12px; align-items: flex-start; }
 .person__name { font-weight: 700; }
 .person__sub { color: var(--text-2); font-size: .84rem; }
+a.person { color: inherit; }
+a.person:hover { text-decoration: none; }
 
 /* 表单 */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--sp-4); }
@@ -186,3 +189,24 @@ body.has-modal { overflow: hidden; }
 .match-box.is-active { border-color: var(--primary); background: var(--primary-soft); }
 .module-list { display: grid; gap: 10px; }
 .module-list .list-row .ico { font-size: 1.4rem; }
+
+/* 时段选择（coffee chat 等预约类模块共用）：.slot-grid 编辑自己的空闲时段，.slot-chip 选别人的时段 */
+.slot-grid-wrap { overflow-x: auto; margin: var(--sp-3) 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.slot-grid { border-collapse: separate; border-spacing: 3px; font-size: .74rem; }
+.slot-grid th { font-weight: 600; color: var(--text-2); white-space: nowrap; background: var(--surface); }
+.slot-grid tbody th, .slot-grid thead th:first-child { position: sticky; left: 0; z-index: 1; }
+.slot-grid__head { background: none; border: 0; padding: 4px 6px; font: inherit; color: inherit; cursor: pointer; border-radius: 6px; white-space: nowrap; }
+.slot-grid__head:hover { background: var(--surface-2); color: var(--primary); }
+.slot { display: block; width: 100%; min-width: 40px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-2); cursor: pointer; user-select: none; -webkit-user-select: none; }
+.slot:hover { border-color: var(--primary); }
+.slot.is-on { background: var(--primary); border-color: var(--primary); }
+.slot.is-locked { background: var(--accent); border-color: var(--accent); cursor: not-allowed; }
+.slot:focus-visible, .slot-chip:focus-visible, .slot-grid__head:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.slot-day { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+.slot-day:last-child { border-bottom: 0; }
+.slot-day__label { font-weight: 600; font-size: .85rem; }
+.slot-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--primary); background: var(--surface); color: var(--primary); font-weight: 600; font-size: .84rem; cursor: pointer; }
+.slot-chip:hover { background: var(--primary-soft); }
+.slot-chip:disabled { cursor: not-allowed; border-color: var(--border); color: var(--text-3); background: var(--surface-2); font-weight: 500; }
+.slot-chip--yours:disabled { border-color: var(--green); color: var(--green); background: var(--green-soft); }
+.check--block { display: flex; border-radius: var(--radius-s); margin-top: 8px; }

@@ -35,7 +35,8 @@ YL.api = (function () {
     }).join("/");
     return { re: new RegExp("^" + src + "/?$"), keys };
   }
-  // 注册一条接口的本地实现。meta: { summary: {zh, en}, auth: false = 允许未登录访问（默认需要登录） }
+  // 注册一条接口的本地实现。meta: { summary: {zh, en}, auth: false = 允许未登录访问（默认需要登录），
+  //   audit: true = 读接口也记审计（如管理员查看数据），demo: true = 仅原型演示用、不属于后端契约 }
   function route(method, pattern, handler, meta) {
     method = String(method).toUpperCase();
     if (typeof handler !== "function") throw new Error("YL.api.route: handler required for " + method + " " + pattern);
@@ -86,7 +87,7 @@ YL.api = (function () {
         else { console.error(e); res = error("internal"); }
       }
     }
-    if (method !== "GET") {
+    if (method !== "GET" || (r && r.audit)) {
       YL.audit.record({
         actor: user ? user.id : null,
         op: method + " " + (r ? r.pattern : pathname),
@@ -126,8 +127,8 @@ YL.api = (function () {
   }
   const get = (path, query) => request("GET", path + qs(query));
   const post = (path, body) => request("POST", path, body || {});
-  // 接口契约清单（"关于"页自动列出，后端照此实现）
-  const list = () => routes.map((r) => ({ method: r.method, pattern: r.pattern, summary: r.summary, auth: r.auth !== false }));
+  // 接口契约清单（"关于"页自动列出，后端照此实现；demo 路由不属于契约）
+  const list = () => routes.map((r) => ({ method: r.method, pattern: r.pattern, summary: r.summary, auth: r.auth !== false, audit: r.method !== "GET" || !!r.audit, demo: !!r.demo }));
 
   return { route, fail, request, get, post, routes: list, STATUS };
 })();

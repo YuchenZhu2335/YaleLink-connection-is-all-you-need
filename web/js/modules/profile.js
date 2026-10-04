@@ -12,6 +12,7 @@ registerModule({
     const rsvps = YL.store.get("events").filter((e) => YL.store.getState("rsvp", e.id));
     const joined = YL.store.get("groups").filter((g) => YL.store.getState("joined", g.id));
     const saved = YL.store.get("jobs").filter((j) => YL.store.getState("savedJobs", j.id));
+    const audit = YL.audit.list({ actor: "me", limit: 8 });
     const points = 50 + myPosts.length * 20 + rsvps.length * 5 + joined.length * 10 + YL.store.countState("likes") * 1 + YL.store.countState("helpful") * 1;
     const badges = [];
     if (myPosts.length) badges.push("author"); if (joined.length) badges.push("teammate"); if (rsvps.length) badges.push("active");
@@ -27,6 +28,7 @@ registerModule({
       ${saved.length ? `<section>${sectionTitle(t("profile.savedJobs", { n: saved.length }))}<div class="list">${saved.map((j) => `<a class="list-row card--hover" href="#/careers/jobs"><div class="list-row__main"><div class="list-row__title">${esc(L(j.title))} · ${esc(L(j.company))}</div><div class="list-row__sub">${t("careers.deadline")} ${YL.ui.formatDate(j.deadline)}</div></div>${YL.ui.deadlineBadge(j.deadline)}</a>`).join("")}</div></section>` : ""}
     </div><div class="stack">
       <div class="card"><div class="row row--between"><span class="muted small">${t("profile.points")}</span><span class="badge">${points}</span></div><p class="small muted" style="margin-top:8px">${t("profile.pointsHow")}</p><div class="divider"></div><div class="muted small" style="margin-bottom:6px">${t("profile.badges")}</div><div>${badges.map((b) => { const x = YL.store.term("badges", b); return `<span class="tag tag--accent" title="${esc(L(x.desc))}">${x.emoji} ${esc(L(x.label))}</span>`; }).join("")}</div></div>
+      <div class="card" id="audit-log"><div class="card__title">🧾 ${t("profile.auditTitle")}</div><p class="muted small">${t("profile.auditSub")}</p>${audit.length ? `<div class="stack" style="margin-top:8px">${audit.map((e) => `<div class="small"><div class="row"><code>${esc(e.op)}</code>${e.ok ? `<span class="badge badge--green">✓</span>` : `<span class="badge badge--warn">${esc(e.code)}</span>`}</div><div class="muted">${esc(YL.ui.formatDate(e.at, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}${e.target ? " · " + esc(e.target) : ""}</div></div>`).join("")}</div>` : `<p class="muted small">—</p>`}</div>
       <div class="card"><div class="card__title">${t("profile.demoData")}</div><p class="muted small">${t("profile.demoDataSub")}</p><button class="btn btn--danger btn--sm" id="btn-reset">${t("profile.reset")}</button></div>
     </div></div>`;
     $("#btn-logout").onclick = () => { YL.auth.logout(); YL.ui.toast(t("profile.loggedOut")); YL.router.navigate("home"); };

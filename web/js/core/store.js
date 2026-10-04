@@ -70,5 +70,7 @@ YL.store = (function () {
     return get("users").find((u) => u.id === id);
   }
   function region(id) { return (seed.regions || []).find((r) => r.id === id) || { id, name: { zh: id, en: id }, emoji: "📍" }; }
-  return { load, get, raw, find, add, patch, getState, setState, toggleState, countState, resetDemo, term, terms, region, user };
+  // 字典表（taxonomy / regions）是公开的参考数据，新模块可直接读：term / terms / region / regions
+  function regions() { return (seed.regions || []).slice(); }
+  return { load, get, raw, find, add, patch, getState, setState, toggleState, countState, resetDemo, term, terms, region, regions, user };
 })();

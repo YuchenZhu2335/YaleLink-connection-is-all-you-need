@@ -6,6 +6,12 @@ YL.ui = (function () {
   const safeUrl = (u) => { const s = String(u == null ? "" : u).trim(); return /^(https?:\/\/|mailto:)/i.test(s) ? esc(s) : ""; };
   const t = (k, v) => YL.i18n.t(k, v);
   const L = (f) => YL.i18n.L(f);
+  // 接口错误 → 提示文案：先找模块自己的 <ns>.err.<reason>，没有就用通用的 api.err.<code>（返回纯文本，插入 HTML 时仍需 esc）
+  function errorText(error, ns) {
+    const e = error || {};
+    if (ns && e.reason) { const key = ns + ".err." + e.reason; const s = t(key); if (s !== key) return s; }
+    return t("api.err." + (e.code || "internal"));
+  }
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
 
@@ -25,11 +31,13 @@ YL.ui = (function () {
   function sectionTitle(title, actionHtml, sub) {
     return `<div class="section-head"><div><h2 class="section-title">${esc(title)}</h2>${sub ? `<p class="section-sub">${esc(sub)}</p>` : ""}</div>${actionHtml || ""}</div>`;
   }
-  function chips(items, activeId, attr) {
-    return `<div class="chips">${items.map((it) => `<button class="chip ${it.id === activeId ? "is-active" : ""}" data-${attr || "chip"}="${esc(it.id)}">${esc(L(it.label || it.name))}</button>`).join("")}</div>`;
+  // cls：额外的容器 class，如 "chips--scroll"
+  function chips(items, activeId, attr, cls) {
+    return `<div class="chips${cls ? " " + esc(cls) : ""}">${items.map((it) => `<button class="chip ${it.id === activeId ? "is-active" : ""}" data-${attr || "chip"}="${esc(it.id)}">${esc(L(it.label || it.name))}</button>`).join("")}</div>`;
   }
+  // it.badge：可选的角标数字（如未读数）
   function tabs(items, activeId, baseHref) {
-    return `<nav class="tabs" role="tablist">${items.map((it) => `<a role="tab" class="tab ${it.id === activeId ? "is-active" : ""}" href="${baseHref}/${it.id}">${it.icon ? it.icon + " " : ""}${esc(t(it.labelKey))}</a>`).join("")}</nav>`;
+    return `<nav class="tabs" role="tablist">${items.map((it) => `<a role="tab" class="tab ${it.id === activeId ? "is-active" : ""}" href="${baseHref}/${it.id}">${it.icon ? it.icon + " " : ""}${esc(t(it.labelKey))}${it.badge ? ` <span class="badge badge--warn">${esc(it.badge)}</span>` : ""}</a>`).join("")}</nav>`;
   }
   function stat(value, label) { return `<div class="stat"><strong>${esc(value)}</strong><span>${esc(label)}</span></div>`; }
 
@@ -76,5 +84,5 @@ YL.ui = (function () {
   function userLink(u) { return u ? `<a class="user-link" href="#/directory/u/${esc(u.id)}">${avatar(u.name, "xs")} ${esc(L(u.name))}</a>` : ""; }
   function num(n) { return new Intl.NumberFormat(YL.i18n.getLang() === "zh" ? "zh-CN" : "en-US").format(n || 0); }
 
-  return { esc, safeUrl, t, L, $, $$, avatar, tag, tags, emptyState, sectionTitle, chips, tabs, stat, formatDate, daysUntil, deadlineBadge, toast, modal, closeModal, formValues, userLink, num };
+  return { esc, safeUrl, t, L, errorText, $, $$, avatar, tag, tags, emptyState, sectionTitle, chips, tabs, stat, formatDate, daysUntil, deadlineBadge, toast, modal, closeModal, formValues, userLink, num };
 })();

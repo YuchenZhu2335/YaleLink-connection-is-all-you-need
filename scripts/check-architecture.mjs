@@ -5,7 +5,7 @@
    A1 domain 层是纯函数：不碰 DOM / 存储 / 网络 / 其他 YL.*，不自己取"现在时间"和随机数，可被 Node require
    A2 api 层没有界面：不碰 document / innerHTML / YL.ui / YL.router，不直接发请求或读写 localStorage
    A3 模块不直接碰存储与网络（localStorage / sessionStorage / indexedDB / fetch / XMLHttpRequest）
-   A4 新模块的业务数据只走 YL.api；YL.store 只许读字典表（term / terms / region）。存量模块见 LEGACY_STORE_MODULES
+   A4 新模块的业务数据只走 YL.api；YL.store 只许读字典表（term / terms / region / regions）。存量模块见 LEGACY_STORE_MODULES
    A5 模块之间只能用 PUBLIC_MODULE_API 白名单里的公开接口
    A6 modules/<id>.js 恰好注册一个模块，且 id 与文件名一致
    A7 index.html 按 config → core → domain → api → modules → app 的顺序引入 web/js 下每个文件，各一次
@@ -28,7 +28,7 @@ const LEGACY_STORE_MODULES = new Set(["home", "careers", "events", "circles", "a
 const PUBLIC_MODULE_API = new Set(["YL.careers.postCard", "YL.careers.postForm", "YL.acssy.openWizard"]);
 // 模块可以使用的平台命名空间
 const PLATFORM_NS = new Set(["i18n", "ui", "registry", "audit", "store", "auth", "api", "router", "domain"]);
-const STORE_READONLY = new Set(["term", "terms", "region"]);
+const STORE_READONLY = new Set(["term", "terms", "region", "regions"]);
 
 const LAYERS = ["core", "domain", "api", "modules"];
 const read = (p) => readFileSync(p, "utf8");
@@ -80,7 +80,7 @@ for (const f of files.modules) {
   const storeCalls = [...src.matchAll(/\bYL\.store\.([A-Za-z_]+)/g)].map((m) => m[1]);
   const businessStore = [...new Set(storeCalls.filter((x) => !STORE_READONLY.has(x)))];
   if (!LEGACY_STORE_MODULES.has(id) && businessStore.length) {
-    err("A4", rel, `新模块的业务数据要走 YL.api，不能用 YL.store.${businessStore.join(" / YL.store.")}（只允许 term / terms / region）`);
+    err("A4", rel, `新模块的业务数据要走 YL.api，不能用 YL.store.${businessStore.join(" / YL.store.")}（只允许 term / terms / region / regions）`);
   }
   if (LEGACY_STORE_MODULES.has(id) && !businessStore.length) {
     warn("A4", rel, "已不再直接使用 YL.store 读写业务数据，可以从 LEGACY_STORE_MODULES 名单里移除");

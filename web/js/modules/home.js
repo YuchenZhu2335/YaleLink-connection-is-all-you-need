@@ -19,6 +19,7 @@ registerModule({
     const jobs = YL.store.get("jobs").filter((j) => j.deadline >= today).length;
 
     const quick = [
+      { href: "#/coffee", icon: "☕", key: "home.quick.coffee" },
       { href: "#/careers/jobs", icon: "💼", key: "home.quick.jobs" },
       { href: "#/careers/groups", icon: "🎯", key: "home.quick.mock" },
       { href: "#/events", icon: "📍", key: "home.quick.events" },

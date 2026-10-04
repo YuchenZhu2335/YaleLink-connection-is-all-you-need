@@ -85,6 +85,15 @@ test("every write is audited (including denied attempts); reads are not", async 
   assert.ok(!JSON.stringify(log).includes("private text"), "audit log must not contain request bodies");
 });
 
+test("reads flagged audit:true are logged too (e.g. an admin viewing data); demo routes are marked", async () => {
+  const YL = boot();
+  YL.api.route("GET", "/admin/stats", () => ({ n: 1 }), { audit: true });
+  YL.api.route("POST", "/_demo/seed", () => ({ id: "d1" }), { demo: true });
+  await YL.api.get("/admin/stats");
+  assert.equal(YL.audit.list()[0].op, "GET /admin/stats");
+  assert.deepEqual(YL.api.routes().map((r) => [r.pattern, r.audit, r.demo]), [["/admin/stats", true, false], ["/_demo/seed", true, true]]);
+});
+
 test("audit.record sets its own id and timestamp, caps the log, and filters", () => {
   const YL = boot();
   const e = YL.audit.record({ actor: "me", op: "POST /x", at: "1999-01-01T00:00:00Z", id: "forged" });
