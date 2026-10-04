@@ -1,9 +1,8 @@
 name: Deploy to GitHub Pages
-# 把 web/ 推到 gh-pages 分支；公开仓库会自动从该分支发布 Pages，无需手动在设置里开启。
-# Publishes web/ to the gh-pages branch; public repos serve Pages from it automatically.
+# Yalelux 上线版需要后端（server/），GitHub Pages 只能放静态文件，所以不再自动发布；
+# 部署见 docs/deploy-china.md。保留手动触发，仅用于发布 v0 静态原型（main 分支旧版本）。
+# The launch version needs the Node backend; Pages can't run it, so this is manual-only now.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write

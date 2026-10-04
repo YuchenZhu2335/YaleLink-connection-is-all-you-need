@@ -6,7 +6,7 @@ const { build } = require("./app");
 const { cfg, app, jobs, db } = build();
 const server = http.createServer((req, res) => app.handle(req, res));
 server.listen(cfg.port, () => {
-  console.log(`YaleLink running at ${cfg.publicUrl}  (mail: ${cfg.mailDriver}${cfg.deepseekKey ? ", deepseek on" : ""}${cfg.adminEmails.length ? ", admins: " + cfg.adminEmails.join(" ") : ""})`);
+  console.log(`Yalelux running at ${cfg.publicUrl}  (mail: ${cfg.mailDriver}${cfg.deepseekKey ? ", deepseek on" : ""}${cfg.adminEmails.length ? ", admins: " + cfg.adminEmails.join(" ") : ""})`);
   if (cfg.mailDriver === "console") console.log(`本地开发：邮件（含验证码）打印在这个终端里，也可以打开 ${cfg.publicUrl}/api/dev/outbox 查看`);
 });
 

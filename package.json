@@ -1,11 +1,12 @@
 {
-  "name": "yalelink",
+  "name": "yalelux",
   "version": "0.1.0",
   "private": true,
-  "description": "耶鲁校友社群开源基础平台 · Open-source community platform for Yale alumni (static prototype)",
+  "description": "Yalelux — Where Yale's light connects resources and ideas. 耶鲁在校生与校友的开源社群平台（第一期：Coffee Chat）",
   "scripts": {
     "start": "node server/index.js",
     "seed": "node server/seed.js",
+    "backup": "node server/backup.js",
     "serve": "python3 -m http.server 8000 --directory web",
     "validate": "node scripts/validate-data.mjs",
     "lint:arch": "node scripts/check-architecture.mjs",

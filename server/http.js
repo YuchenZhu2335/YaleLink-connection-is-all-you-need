@@ -5,7 +5,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const STATUS = { invalid: 400, unauthorized: 401, forbidden: 403, not_found: 404, conflict: 409, too_large: 413, rate_limited: 429, internal: 500 };
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8", ".woff2": "font/woff2", ".woff": "font/woff", ".webmanifest": "application/manifest+json" };
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -13,6 +13,7 @@ const SECURITY_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 };
 const COOKIE = "yl_sid";
+const LOOPBACK = /^(127\.|::1$|::ffff:127\.)/;
 const SESSION_DAYS = 30;
 
 class ApiError extends Error {
@@ -23,6 +24,13 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
 function createApp(ctx) {
   const routes = [];
+  // 真实 IP：只有开启 TRUST_PROXY 且请求来自本机代理时，才采信 X-Forwarded-For 的最后一跳
+  function clientIp(req) {
+    const direct = req.socket.remoteAddress || "";
+    if (!ctx.cfg.trustProxy || !LOOPBACK.test(direct)) return direct;
+    const hops = String(req.headers["x-forwarded-for"] || "").split(",").map((s) => s.trim()).filter(Boolean);
+    return hops.length ? hops[hops.length - 1] : direct;
+  }
   function route(method, pattern, handler, meta) {
     const keys = [];
     const re = new RegExp("^" + pattern.split("/").map((seg) => (seg[0] === ":" ? (keys.push(seg.slice(1)), "([^/]+)") : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("/") + "/?$");
@@ -109,7 +117,7 @@ function createApp(ctx) {
       const body = req.method === "GET" ? {} : await readBody(req);
       const query = Object.fromEntries(url.searchParams.entries());
       const setActor = (id) => (actor = id); // 登录接口在请求开始时还没有用户，登录成功后记下是谁
-      const data = await r.handler({ params, query, body, user, session: who && who.session, req, res, ip: req.socket.remoteAddress, startSession, endSession, setActor });
+      const data = await r.handler({ params, query, body, user, session: who && who.session, req, res, ip: clientIp(req), startSession, endSession, setActor });
       result = { status: 200, body: { ok: true, data: data === undefined ? null : data } };
     } catch (e) {
       if (!(e instanceof ApiError)) { console.error(e); e = fail("internal"); }
@@ -118,7 +126,7 @@ function createApp(ctx) {
     if (r && r.audit) audit(actor, req.method + " " + r.pattern, params.id || (result.body.data && result.body.data.id) || null, result.body.ok, result.body.ok ? null : result.body.error.code);
     if (r && r.html) { // 邮件里点开的链接：返回一个简单网页
       const ok = result.body.ok, msg = ok ? r.html(result.body.data) : "链接无效或已过期。/ This link is invalid or has expired.";
-      return send(res, result.status, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>YaleLink</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.6"><p>${msg}</p><p><a href="/">YaleLink</a></p>`, { "Content-Type": "text/html; charset=utf-8" });
+      return send(res, result.status, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Yalelux</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.6"><p>${msg}</p><p><a href="/">Yalelux</a></p>`, { "Content-Type": "text/html; charset=utf-8" });
     }
     send(res, result.status, result.body);
   }

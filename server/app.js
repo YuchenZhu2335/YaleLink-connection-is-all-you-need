@@ -8,7 +8,7 @@ const { createMailer } = require("./mailer");
 
 function build(overrides) {
   const cfg = config.load(overrides);
-  const db = DB.open(overrides && overrides.DB_FILE ? overrides.DB_FILE : path.join(cfg.dataDir, "yalelink.sqlite"));
+  const db = DB.open(overrides && overrides.DB_FILE ? overrides.DB_FILE : path.join(cfg.dataDir, "yalelux.sqlite"));
   const coffee = require("../web/js/domain/coffee.js");
   const qcfg = JSON.parse(fs.readFileSync(path.join(cfg.webDir, "data", "matchQuestions.json"), "utf8"));
   const qErrors = coffee.validateQuestions(qcfg);
@@ -28,8 +28,8 @@ function build(overrides) {
   ctx.mailer = createMailer(ctx);
 
   const app = createApp(ctx);
-  // 前端需要的少量公开信息
-  app.route("GET", "/meta", () => ({ consentVersion: cfg.consentVersion, dev: !cfg.production && cfg.mailDriver === "console", smartRecAvailable: !!cfg.deepseekKey }), { auth: "none" });
+  // 前端需要的少量公开信息（问卷题目也从这里取：服务端是唯一来源，启动时已校验）
+  app.route("GET", "/meta", () => ({ consentVersion: cfg.consentVersion, dev: !cfg.production && cfg.mailDriver === "console", smartRecAvailable: !!cfg.deepseekKey, questions: qcfg.questions }), { auth: "none", audit: false });
   require("./auth").install(app, ctx);
   const coffeeApi = require("./coffee").install(app, ctx);
   require("./admin").install(app, ctx, coffeeApi);

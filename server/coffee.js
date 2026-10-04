@@ -237,7 +237,7 @@ function install(app, ctx) {
     db.run("UPDATE invites SET slot = ?, scheduled_by = ?, scheduled_at = ?, reminded_at = NULL WHERE id = ?", r.next.slot, r.next.scheduledBy, r.next.scheduledAt, inv.id);
     if (r.next.slot) {
       const other = db.get("SELECT * FROM users WHERE id = ?", otherId);
-      await ctx.mailer.send("scheduled", other, { name: req.user.name, time: r.next.slot.replace("T", " ") });
+      await ctx.mailer.send("scheduled", other, { name: req.user.name, when: ctx.mailer.when(round, r.next.slot) });
     }
     return { id: inv.id, slot: r.next.slot };
   }, { auth: "ready" });

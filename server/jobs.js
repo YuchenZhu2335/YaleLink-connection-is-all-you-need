@@ -46,8 +46,8 @@ function create(ctx, coffee) {
       if (left <= 0 || left > 24 * 3600000) continue;
       db.run("UPDATE invites SET reminded_at = ? WHERE id = ?", t, row.id);
       const a = db.get("SELECT * FROM users WHERE id = ?", row.from_id), b = db.get("SELECT * FROM users WHERE id = ?", row.to_id);
-      const time = row.slot.replace("T", " ");
-      if (a && b) { await ctx.mailer.send("reminder", a, { name: b.name, time }); await ctx.mailer.send("reminder", b, { name: a.name, time }); }
+      const when = ctx.mailer.when(r, row.slot);
+      if (a && b) { await ctx.mailer.send("reminder", a, { name: b.name, when }); await ctx.mailer.send("reminder", b, { name: a.name, when }); }
     }
   }
   return { run };

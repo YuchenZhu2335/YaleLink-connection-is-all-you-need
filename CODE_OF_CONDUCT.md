@@ -1,6 +1,6 @@
 # 社区行为准则 / Code of Conduct
 
-YaleLink 是一个由耶鲁在校生与校友共同维护的开源项目。参与者应当：
+Yalelux 是一个由耶鲁在校生与校友共同维护的开源项目。参与者应当：
 
 - **尊重**：对不同学院、届别、地区、行业和观点保持尊重；不做人身攻击、骚扰或歧视。
 - **真实**：不冒充他人，不伪造校友身份，不发布虚假的岗位、活动或联系人信息。
@@ -11,4 +11,4 @@ YaleLink 是一个由耶鲁在校生与校友共同维护的开源项目。参�
 
 ---
 
-YaleLink is maintained by Yale students and alumni. Participants are expected to be **respectful** (no harassment or discrimination), **honest** (no impersonation, no fake jobs, events or contacts), **careful** (never commit real private data or internal ACSSY information to the public repo) and **constructive**. Report violations to the maintainers, who may remove content or contributors.
+Yalelux is maintained by Yale students and alumni. Participants are expected to be **respectful** (no harassment or discrimination), **honest** (no impersonation, no fake jobs, events or contacts), **careful** (never commit real private data or internal ACSSY information to the public repo) and **constructive**. Report violations to the maintainers, who may remove content or contributors.

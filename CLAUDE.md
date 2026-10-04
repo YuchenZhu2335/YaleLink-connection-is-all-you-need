@@ -1,39 +1,41 @@
-# YaleLink — 给 AI 辅助贡献者的项目约定
+# Yalelux — 给 AI 辅助贡献者的项目约定
 
 ## 项目是什么
-耶鲁校友社群开源平台的**静态原型**：纯 HTML/CSS/原生 JS，零依赖、零构建，`web/` 即部署根目录。
-对外是校友社群平台（约咖啡内测 / 职业 / 活动 / 社群 / 创业 / 生活 / 目录），对内是 ACSSY 学联后台（看板 / SOP / 联系人 / 模板 / 志愿者）。
-开发规则全文见 `docs/engineering.md`，新功能先看 `docs/rfcs/`。
+**Yalelux**（原 YaleLink，呼应校训 Lux et Veritas；tagline: *Where Yale's light connects resources and ideas*）是 ACSSY 志愿者为耶鲁在校生与校友做的开源社群平台。
+第一期只上线 **Coffee Chat**：耶鲁邮箱登录 → 联系邮箱 → 问卷资料 → 每周一轮选空闲时间 → 推荐 / 按标签找人 → "想认识"双向确认 → 匹配后看联系方式与共同时间、一键约定；外加活动轮（Coffee Chat 周 / 月）与活动页、邮件通知、管理后台。
+需求见 `docs/prd/yalelux-mvp.md`，架构决定见 `docs/rfcs/0002-yalelux-launch.md`，接口契约见 `docs/api.md`，开发规则见 `docs/engineering.md`。
 
 ## 硬性约束
-- `web/` 下不引入 npm 运行时依赖、打包器、框架；不引用境外 CDN（要在中国大陆可访问）。
-- 分层，依赖只能往下：`modules`（界面）→ `api`（接口实现 = 后端契约）→ `domain`（纯函数业务规则）；`core` 谁都能用。
-  - 新模块的业务数据只通过 `YL.api.get / post` 读写，不用 `YL.store` 读写（字典表 `term / terms / region / regions` 除外）；
+- **零依赖**：`server/` 只用 Node 22 内置模块（`node:http`、`node:sqlite`…）；`web/` 是原生 HTML/CSS/JS，不引入 npm 运行时依赖、打包器、框架；不引用境外 CDN、不加载外部字体（要在中国大陆可访问）。
+- 前端分层，依赖只能往下：`modules`（界面）→ `domain`（纯函数业务规则，前后端共用）；`core` 谁都能用。
+  - 业务数据只通过 `YL.api.get / post` 读写（对应 `server/*.js` 的接口）；模块里不许 fetch / localStorage；
   - 状态机、权限、校验写在 `web/js/domain/<id>.js`，不碰 DOM / 存储 / 网络 / 当前时间，配 `tests/unit/<id>.test.js`；
-  - 界面不自己判断权限，按接口返回的 `actions` / `state` 显示按钮；`await` 之后先检查 `ctx.isActive()`；
-  - 模块之间只用路由链接，或 `PUBLIC_MODULE_API` 白名单里的接口。
-- 所有可见文案走 `YL.ui.t(key)`，数据中的文案字段是 `{zh, en}` 并用 `YL.ui.L()` 取值；两份词典 key 必须一致。
-- 所有插入 HTML 的动态内容必须 `esc()`；数据里的链接用 `YL.ui.safeUrl()`；`t()` 的 key 含动态部分时结果也要 `esc()`。
-- 数据文件在 `web/data/*.json`，每条有唯一 `id`；新增集合要在 `web/config.js` 的 `dataFiles` 登记。
-- 一个功能 = 一个模块 id：只读模块一个 `web/js/modules/<id>.js`；有写操作的再加同名 `domain/` 与 `api/` 文件；`index.html` 按 core → domain → api → modules 的顺序各加一行 `<script>`。
+  - 界面不自己判断权限，按接口返回的状态显示按钮；`await` 之后先检查 `ctx.isActive()`；
+  - 模块之间只用路由链接（`PUBLIC_MODULE_API` 白名单目前为空）。
+- 后端：SQL 一律 `?` 占位符；管理员接口声明 `auth: "admin"`；每个写操作自动审计；密钥只放 `server/.env`（不进仓库）。
+- 所有可见文案走 `YL.ui.t(key)`（key 以模块 id 开头），数据中的双语字段 `{zh, en}` 用 `YL.ui.L()`；两份词典 key 必须一致。
+- 所有插入 HTML 的动态内容必须 `esc()`；数据里的链接用 `YL.ui.safeUrl()`；不写内联样式，只用 `docs/design/components.md` 里的组件 class；图标用 `YL.ui.icon()`，不用 emoji。
+- 一个功能 = 一个模块 id：`web/js/modules/<id>.js`；`index.html` 按 core → domain → modules 的顺序各加一行 `<script>`。
 - 新增模块、改核心层、改数据契约之前先写 RFC（`docs/rfcs/`）。
+- v0 静态原型的旧模块登记在 `scripts/parked.mjs`（不加载、不检查、不删除），迁回时按 RFC 改写成 `YL.api` 版本。
 
 ## 目录速查
-- `web/js/core/`：i18n、ui、registry、audit（审计日志）、store（seed JSON + localStorage overlay）、auth（邮箱白名单、学联身份）、api（本地 mock / 真实后端二选一）、router（hash、异步渲染）。
-- `web/js/domain/`、`web/js/api/`：coffee（参考实现）。
-- `web/js/modules/`：login、home、coffee、careers、events、circles、acssy、startup、life、directory、profile、about。其中除 coffee、about 外都是直接用 `YL.store` 的存量模块（名单见 `scripts/check-architecture.mjs` 的 `LEGACY_STORE_MODULES`，只减不增）。
-- `web/data/`：regions、taxonomy、users、posts、jobs、timelines、groups、events、resources、projects、circles、playbooks、campaigns、contacts、templates、coffeeEvents、coffeeProfiles、coffeeBookings、coffeeNotices、coffeeFeedback。
-- `docs/`：vision、modules、architecture、engineering（开发规则）、data-model、roadmap、deploy-china、rfcs/。
+- `server/`：`app.js`（装配）、`http.js`（路由、会话、CSRF、安全头、审计）、`auth.js`、`coffee.js`、`admin.js`、`jobs.js`（定时邮件）、`mailer.js`、`recommend.js`（规则 + 可选 DeepSeek）、`db.js` + `migrations/`、`seed.js`。
+- `web/js/core/`：i18n、ui（图标、表单报错、弹窗、复制）、registry（导航、角标）、api（HTTP）、auth（镜像后端登录状态）、router（requiresAuth / requiresReady / adminOnly）。
+- `web/js/modules/`：home、login、profile（首次填写 + 我的）、coffee、events、admin、about。
+- `web/data/matchQuestions.json`：匹配问卷（题目、权重、互补、推荐理由），前后端共用。
+- `docs/`：prd、api、design（brief / system / components）、engineering、rfcs、deploy-china。
 
 ## 验证
 ```bash
-npm run check                           # = 数据与词典校验 + 架构守门（A1–A10）+ node --test 单测，全部零依赖
-npm run test:e2e                        # Playwright：tests/smoke.spec.js（需要 npm ci）
-cd web && python3 -m http.server 8000   # 本地预览
+npm run check        # 问卷与词典校验 + 架构守门（A1–A11、S1–S4）+ 规则单测 + 后端接口测试，全部零依赖
+npm run test:e2e     # Playwright：tests/smoke.spec.js（会自己起一个临时数据库的服务；需要 npm ci）
+npm run seed && npm start   # 本地运行，默认 http://localhost:8787；验证码打印在终端，或看 /api/dev/outbox
 ```
 
-## 演示约定
-- 登录：任意 `@yale.edu` / `@aya.yale.edu`，验证码见 `config.js`（默认 000000）。
-- 用户在演示中创建的内容作者 id 为 `"me"`，`YL.store.user("me")` 会从会话合成；`YL.api` 的本地实现里当前用户 id 也是 `"me"`。
-- Coffee Chat：原型中"学联负责人"即管理员；活动日期在 `web/data/coffeeEvents.json`，涉及时间的测试要固定时钟（`page.clock.setFixedTime`）。
-- 示例数据全部虚构，不要加入真实联系人；示例邮箱一律 `@example.com`（校验脚本会检查）。
+## 演示与测试约定
+- 本地发信驱动是 `console`：邮件不发出，打印在终端并保留在 `/api/dev/outbox`（仅本地存在）。
+- `npm run seed` 生成 24 位虚构用户 `demo01…demo24@demo.yale.edu`（联系邮箱 `@example.com`），都已参加当前报名中的每周轮。
+- 管理员 = `server/.env` 的 `ADMIN_EMAILS`。
+- 每周轮按美东时间周一到周日；周六起报名下一周。涉及时间的测试要固定时间或用 `signupWeek(now)` 计算。
+- 示例数据全部虚构，不要加入真实联系人；示例邮箱一律 `@example.com`。

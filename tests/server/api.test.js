@@ -228,3 +228,18 @@ test("安全：写请求必须是 JSON；跨站来源被拒绝；注销会删除
     assert.equal(srv.db.get("SELECT COUNT(*) n FROM users WHERE login_email = 'gone@yale.edu'").n, 0);
   } finally { await srv.close(); }
 });
+
+test("放在反向代理后面（TRUST_PROXY=1）时按真实 IP 限流；没开启时不采信 X-Forwarded-For", async () => {
+  const send = (srv, ip, i) => fetch(srv.base + "/auth/request-code", { method: "POST", headers: { "Content-Type": "application/json", "X-Forwarded-For": ip }, body: JSON.stringify({ email: `p${i}-${ip.replace(/\./g, "")}@yale.edu` }) }).then((r) => r.status);
+  const behind = await start({ TRUST_PROXY: "1" });
+  try {
+    for (let i = 0; i < 20; i++) assert.equal(await send(behind, "1.1.1.1", i), 200);
+    assert.equal(await send(behind, "1.1.1.1", 20), 429, "同一个真实 IP 每小时 20 次");
+    assert.equal(await send(behind, "2.2.2.2", 0), 200, "别的同学不受影响");
+  } finally { await behind.close(); }
+  const direct = await start();
+  try {
+    for (let i = 0; i < 20; i++) await send(direct, "3.3.3." + i, i);
+    assert.equal(await send(direct, "4.4.4.4", 0), 429, "没开启时伪造的 X-Forwarded-For 无效");
+  } finally { await direct.close(); }
+});

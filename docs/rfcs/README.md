@@ -11,7 +11,8 @@
 
 | 编号 | 标题 | 状态 |
 |---|---|---|
-| [0001](0001-coffee-chat-beta.md) | Coffee Chat 内测活动 | 讨论中（原型已完成） |
+| [0001](0001-coffee-chat-beta.md) | Coffee Chat 内测活动（按时段预约版） | 已被 0002 取代 |
+| [0002](0002-yalelux-launch.md) | Yalelux 上线版：真实后端 + 只开放 Coffee Chat | 已接受 |
 
 ## 模板
 

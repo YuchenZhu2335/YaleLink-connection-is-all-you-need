@@ -1,158 +1,99 @@
 <p align="center">
-  <img src="web/assets/logo.svg" width="72" alt="YaleLink">
+  <img src="web/assets/logo.svg" width="72" alt="Yalelux">
 </p>
 
-<h1 align="center">YaleLink</h1>
+<h1 align="center">Yalelux</h1>
 
 <p align="center">
-  耶鲁校友社群开源基础平台 · 以 <code>@yale.edu</code> 邮箱为信任基础的内部社区<br>
-  <em>An open-source community platform for Yale students and alumni, built on the trust of a yale.edu inbox.</em>
+  <strong>Where Yale's light connects resources and ideas</strong><br>
+  耶鲁之光，连接资源与想法 —— 耶鲁在校生与校友的开源社群平台
 </p>
 
 <p align="center">
   <a href="README.en.md">English</a> ·
-  <a href="docs/vision.md">愿景</a> ·
-  <a href="docs/modules.md">模块</a> ·
-  <a href="docs/architecture.md">架构</a> ·
+  <a href="docs/prd/yalelux-mvp.md">PRD</a> ·
+  <a href="docs/api.md">接口</a> ·
+  <a href="docs/design/system.md">设计规范</a> ·
   <a href="docs/engineering.md">开发规则</a> ·
-  <a href="CONTRIBUTING.md">共创指南</a> ·
-  <a href="docs/deploy-china.md">国内部署</a>
+  <a href="docs/rfcs/README.md">RFC</a> ·
+  <a href="docs/deploy-china.md">部署</a>
 </p>
 
 ---
 
-## 这是什么
+名字呼应耶鲁校训 *Lux et Veritas*（光明与真理）。由耶鲁中国学生学者联合会（ACSSY）的志愿者开发和维护，代码开源。
 
-微信群是我们的默认社群，但它有三个天然缺陷：**圈子封闭、经验不沉淀、活动难组织**。
-学长学姐在学习、生活、求职上踩过的坑，每年都在群聊里重新讲一遍；校招信息、内推机会、
-创业资源散落在几十个群里；学联办一场活动的流程全靠交接时口口相传。
+## 第一期：Coffee Chat
 
-YaleLink 想做的是一个**属于耶鲁人自己的 APP**：
+量级要轻，和领英拉开距离：没有信息流、没有点赞关注、没有站内聊天。
 
-- **第一层信任**：只有 `@yale.edu`（在校）与 `@aya.yale.edu`（校友）邮箱可以登录；
-- **经验沉淀**：内部论坛式的发帖与指南，把求职、生活、创业经验留下来；
-- **走到哪都有组织**：按地区、兴趣、行业的子社群，随时发起或参加校友活动；
-- **职业发展先行**：校招信息、内推、求职时间线、简历工坊、行业求职小组与 mock interview；
-- **学联稳健运营**：ACSSY 成员专属后台，活动 SOP、联系人、沟通模板、志愿者招募、
-  活动项目看板与任务分配，让接手的同学能快速上手。
+1. **注册**：用耶鲁邮箱（`@yale.edu` / `@aya.yale.edu`）收验证码登录；再填一个常用的联系邮箱（国内同学收得到），填几道问卷、打几个标签。
+2. **每周一轮**：勾几个这周有空的时间（美东 10:00–21:00，每次 15 分钟，旁边显示北京时间）。周六起开放下一周。
+3. **推荐 + 自己挑**：池子满 20 人后先给你推荐 3 位（规则打分，可选 DeepSeek 辅助排序，只发匿名标签、可关闭）；也可以按身份 / 诉求 / 兴趣 / 领域自己逛。
+4. **双向确认**：点「想认识」；对方也点了才算匹配。跳过不会通知对方。每人最多同时 5 个未回复的邀请。
+5. **匹配之后**：双方看到彼此的联系方式（如微信）和共同空闲时间，点一下就约定，对方收到邮件；见面后点「见到了吗」。
+6. **活动轮**：学联可以开「Coffee Chat 周 / 月」，活动页带文章和微信推文文案，不登录也能看，方便转发。
+7. **邮件通知**：匹配成功即时发；「有人想认识你」每天最多一封汇总；约定前一天提醒；每周一提醒；活动开始通知。都能退订（匹配成功除外）。
 
-它是一个**开源基底**：模块化、零依赖、数据即文件。任何人都可以提功能、加模块、补内容。
+完整需求、验收清单与上线计划见 [PRD](docs/prd/yalelux-mvp.md)。
 
-## 这个仓库放什么、不放什么
+## 在自己电脑上跑起来
 
-这里只放 **理念与框架**：产品愿景、模块化基底、界面原型、数据模型、部署方案，以及虚构的示例数据。
-
-| 放在这里（公开） | 不放在这里（私有云） |
-|---|---|
-| 平台代码、模块框架、设计令牌 | 真实校友资料、目录、发帖、报名记录 |
-| 数据模型与 API 契约（`docs/data-model.md`） | 学联真实 SOP 中的报价、赞助条款、联系人 |
-| 虚构示例数据（人物、公司、活动均为编造） | 任何密钥、邮件服务凭证、云账号配置 |
-| 愿景、路线图、部署与合规文档 | 用户上传的文件与照片 |
-
-"只有 yale.edu 邮箱能进"是**产品**的边界，由私有云上的后端与数据库保证；代码本身开源，任何人都可以读、fork、复用。
-真实数据的存储与访问控制方案见 [docs/architecture.md](docs/architecture.md) 与 [docs/deploy-china.md](docs/deploy-china.md)。
-
-**欢迎大家一起提案**：功能模块（二手市场、拼车、导师配对、读书会……）、延展思路（其他高校学联复用、小程序壳、校友企业目录），
-都可以通过 [功能提案](../../issues/new?template=feature_proposal.yml) 发起讨论。想法池见 [docs/roadmap.md](docs/roadmap.md)。
-
-## 治理
-
-- `main` 分支受保护：所有改动走 Pull Request，需要维护者（[@YuchenZhu2335](https://github.com/YuchenZhu2335)）审核通过后才能合并，见 [CODEOWNERS](.github/CODEOWNERS)。
-- 外部贡献者 fork 后提 PR；CI 会自动跑数据校验与页面冒烟测试。
-- 功能方向上的分歧在 Issue 里讨论，维护者做最终决定。
-
-## 在线 Demo
-
-> 仓库开启 GitHub Pages 后（Settings → Pages → Source 选 **GitHub Actions**），
-> 地址为 `https://yuchenzhu2335.github.io/YaleLink-connection-is-all-you-need/`。
-> 国内访问建议按 [docs/deploy-china.md](docs/deploy-china.md) 部署到腾讯云 COS / 阿里云 OSS。
-
-**演示登录**：任意 `@yale.edu` / `@aya.yale.edu` 邮箱，验证码 `000000`。
-在资料页把「学联身份」选为部员或负责人，即可看到学联后台。所有数据均为虚构示例。
-
-## 两张面孔
-
-| | 对外：校友社群平台 | 对内：ACSSY 学联后台 |
-|---|---|---|
-| 用户 | 所有通过邮箱验证的在校生与校友 | 声明了学联身份的成员（真实版由管理员审核） |
-| 内容 | 职业发展、活动、子社群、创业、生活指南、校友目录 | 活动项目看板、SOP 库、联系人沉淀、沟通模板、志愿者招募 |
-| 入口 | 首页各模块 | 侧栏「学联后台」（仅学联成员可见） |
-
-两者通过「**我想办活动**」工作流连接：社群活动走轻量流程直接发布；学联官方活动选一份 SOP，
-系统自动生成整套任务与截止日期，负责人分配、部员认领并定期反馈进度，活动页同步对外招募志愿者。
-
-## 模块一览
-
-| 模块 | 路由 | 说明 |
-|---|---|---|
-| 登录 | `#/login` | 邮箱域名白名单 → 验证码 → 首次完善资料（含学联身份） |
-| 约咖啡 · 内测 | `#/coffee` | 报名、选空闲时段（美东 15 分钟一格）、按身份 / 诉求找人、预约与确认、接受后交换联系方式、意见箱、管理统计 —— 三层拆分的参考实现，见 [RFC 0001](docs/rfcs/0001-coffee-chat-beta.md) |
-| 首页 | `#/home` | 学联推送（公告 / 志愿者招募 / 我的任务）、快捷入口、最新帖子、近期活动、精选校友 |
-| 职业发展 | `#/careers` | 机会 & 内推 · 求职时间线 · 简历工坊 · 求职小组 & Mock · 行业研究（含贡献值榜） |
-| 活动 | `#/events` | 按地区 / 类型筛选、RSVP、活动详情、「我想办活动」向导 |
-| 社群 | `#/circles` | 兴趣 / 地区 / 行业子社群，加入、查看社群活动、在社群里办活动 |
-| 创业 | `#/startup` | 校内资源指南（Tsai CITY 等）· 项目 & 找合伙人 · 「我需要 / 我能提供」匹配 |
-| 生活指南 | `#/life` | 衣食住行 × 地区，经验帖，贡献条目 |
-| 校友目录 | `#/directory` | 按行业 / 地区 / 可提供帮助筛选，个人主页，打招呼 |
-| 学联后台 | `#/acssy` | 看板 · SOP · 联系人 · 模板 · 志愿者（仅学联成员） |
-| 个人主页 | `#/profile` | 资料、我的帖子 / 活动 / 小组、贡献值与徽章 |
-| 关于 & 共创 | `#/about` | 愿景、模块列表（自动生成）、路线图、参与方式 |
-
-详细说明与每个模块的扩展点见 [docs/modules.md](docs/modules.md)。
-
-## 快速开始
+只需要装 **Node.js 22 或更高版本**（[nodejs.org](https://nodejs.org) 下载 LTS 版）。不需要装数据库，也不需要任何账号。
 
 ```bash
-git clone https://github.com/YuchenZhu2335/YaleLink-connection-is-all-you-need.git
-cd YaleLink-connection-is-all-you-need/web
-python3 -m http.server 8000      # 或 npx serve .
-# 浏览器打开 http://localhost:8000
+git clone https://github.com/YuchenZhu2335/YaleLink-connection-is-all-you-need.git yalelux
+cd yalelux
+npm run seed     # 可选：放 24 位虚构的演示同学进本周这一轮，登录后马上能看到推荐
+npm start        # 打开终端里打印的地址（默认 http://localhost:8787）
 ```
 
-零构建、零依赖：纯 HTML / CSS / JavaScript，数据在 `web/data/*.json`。
-校验数据与词典：
+- **登录**：输入任意 `@yale.edu` 邮箱。本地不会真的发邮件——验证码会**打印在运行 `npm start` 的终端里**，也可以打开 `http://localhost:8787/api/dev/outbox` 查看。
+- **演示账号**：`demo01@demo.yale.edu` … `demo24@demo.yale.edu`（验证码同样在终端里）。
+- **管理后台**：复制 `server/.env.example` 为 `server/.env`，在 `ADMIN_EMAILS=` 后面填你的耶鲁邮箱，重启 `npm start`，登录后在「我的」里进入「管理」。
+- **数据在哪**：`server/data/yalelux.sqlite`（一个文件；删掉它就是清空重来）。这个目录和 `server/.env` 都不会进 Git。
+
+上线到服务器、配置真实发信（Resend）和 DeepSeek 的步骤见 [docs/deploy-china.md](docs/deploy-china.md)。
+
+## 检查与测试
 
 ```bash
-npm run check      # 数据与词典校验 + 架构规则 + 单测（零依赖，Node ≥ 22）
+npm run check      # 问卷与词典校验 + 架构守门（前端 A1–A11、后端 S1–S4）+ 业务规则单测 + 后端接口测试（零依赖）
+npm run test:e2e   # 浏览器端到端测试（需要先 npm ci）
 ```
+
+测试名就是验收标准（中文），例如 `tests/server/api.test.js` 里的「约咖啡全流程：参加本轮 → 池子里想认识 → 对方想认识 → 匹配……」。
 
 ## 目录结构
 
 ```
-web/                 可部署的静态原型（部署根目录）
-  index.html         单页壳；新增模块在这里加一行 <script>
-  config.js          邮箱白名单、演示验证码、数据文件清单、学联部门
-  css/               tokens（耶鲁蓝设计令牌）/ base（布局）/ components（组件）
-  js/core/           i18n · router · store · auth · registry · ui —— 平台基底
-  js/domain/         业务规则：纯函数，浏览器与将来的 Node 后端共用，配单测
-  js/api/            接口实现：原型版"后端"，每条 YL.api.route 就是一份后端契约
-  js/modules/        每个功能一个文件，registerModule() 注册即出现在导航
-  data/              示例数据（JSON，双语字段 {zh, en}）
-  i18n/              界面词典 zh.json / en.json
-docs/                愿景 · 模块 · 架构 · 开发规则 · 数据模型 · 路线图 · 国内部署 · RFC
-scripts/             数据校验脚本
-tests/               Playwright 冒烟测试
-.github/             Issue / PR 模板，CI 与 Pages 部署
+server/              后端：Node 自带的 http + SQLite，零运行时依赖
+  auth.js coffee.js admin.js   登录与账号 / 约咖啡 / 管理后台的接口
+  jobs.js mailer.js recommend.js  定时任务 / 发信 / 推荐
+  migrations/        数据库结构（按编号顺序执行）
+web/                 网页（由后端一起提供，也是部署根目录）
+  js/core/           平台基底：i18n · ui · registry · api · auth · router
+  js/domain/         业务规则：纯函数，前后端共用，配单测
+  js/modules/        每个功能一个文件：home · login · profile · coffee · events · admin · about
+  data/matchQuestions.json   匹配问卷（改问卷 = 改这个文件，见下）
+  css/ i18n/ assets/
+docs/                PRD · 接口 · 设计 · 开发规则 · RFC · 部署
+scripts/             校验与架构守门脚本
+tests/               unit（规则）· server（接口）· smoke.spec.js（浏览器）
 ```
 
-## 如何共创
+v0 静态原型里的职业、社群、学联后台等模块在 `main` 分支；本分支里它们的文件登记在 `scripts/parked.mjs`（暂停：不加载、不删除），以后一个模块一个 RFC 地迁回。
 
-1. **提功能**：用 [功能提案](../../issues/new?template=feature_proposal.yml) 模板开 Issue，说清楚问题、目标用户和方案；
-2. **加模块**：先写一页 [RFC](docs/rfcs/README.md)；新建 `web/js/modules/xxx.js`，调用 `registerModule()`，补词典与数据 —— 五步流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，有写操作的模块按 [开发规则](docs/engineering.md) 拆成 domain / api / 界面三层；
-3. **补内容**：岗位、活动、指南、SOP、模板都只是 JSON，直接改 `web/data/` 提 PR；
-4. **改文档**：愿景、路线图、部署方案欢迎讨论。
+## 改问卷
 
-所有 PR 会自动跑数据校验与页面冒烟测试。
+匹配问卷完全由 `web/data/matchQuestions.json` 配置：题目、选项、哪些题公开、每题在推荐里的权重、互补关系、推荐理由的文案。同学设计好新问卷后，改这个文件提 PR；`npm run check` 会校验格式，后端启动时也会再校验一次。
 
-## 路线图
+## 治理
 
-- **v0.1 静态原型**（当前）：全部模块可点击，localStorage 模拟写入，双语。
-- **v0.2 真实后端**：邮箱验证码登录、Postgres、内容审核、学联身份审核。
-- **v0.3 国内可用**：微信登录绑定、小程序壳、国内对象存储 + CDN、ICP 备案。
-- **v0.4 社区治理**：贡献值体系、版主机制、活动模板市场。
-
-详见 [docs/roadmap.md](docs/roadmap.md)。
+- `main` 受保护：所有改动走 Pull Request，维护者审核后合并（[CODEOWNERS](.github/CODEOWNERS)）。
+- 新增模块、改核心层、改数据契约先写 [RFC](docs/rfcs/README.md)。开发规则见 [docs/engineering.md](docs/engineering.md)。
+- 示例数据全部虚构；真实数据只在服务器上，不进仓库；密钥只放环境变量。
 
 ## 许可证
 
-[MIT](LICENSE)。示例数据中的人物、公司、联系人均为虚构。
+[MIT](LICENSE)
