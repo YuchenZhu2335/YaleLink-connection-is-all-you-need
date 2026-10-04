@@ -3,7 +3,7 @@
 
    登录流程：耶鲁邮箱 → 验证码 → 同意隐私说明 → 联系邮箱 → 资料问卷 → 可以使用约咖啡
      YL.auth.nextStep() 返回还差的那一步（"consent" | "contact" | "profile" | null），
-     路由在进入 requiresReady 的模块前会把人带到 #/me/setup 补完。
+     路由在进入 requiresReady 的模块前会把人带到 #/profile/setup 补完。
 
    boot()    启动时调一次：GET /auth/me + GET /meta（问卷题目、隐私说明版本等公开信息）
    user()    后端返回的本人资料（含 ready / isAdmin / needs*），未登录为 null

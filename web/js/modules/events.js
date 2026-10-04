@@ -70,11 +70,15 @@
   }
   const rank = (q) => { const i = ["interests", "goals"].indexOf(q.id); return i < 0 ? 9 : i; };
   const themeTags = (r) => ((r.themeTags || []).length ? `<div class="tags">${YL.ui.tags(r.themeTags.map(themeLabel), "tag--theme")}</div>` : "");
-  // 参加按钮：完成首次填写 → 去约咖啡；登录了没填完 → 去填；没登录 → 登录
-  function joinLink(cls) {
-    if (YL.auth.isReady()) return `<a class="btn btn--primary${cls || ""}" href="#/coffee">${icon("coffee")}${esc(t("events.cta.go"))}</a>`;
-    if (YL.auth.isLoggedIn()) return `<a class="btn btn--primary${cls || ""}" href="#/profile/setup?next=coffee">${icon("user")}${esc(t("events.cta.finish"))}</a>`;
-    return `<a class="btn btn--primary${cls || ""}" href="#/login?next=coffee">${icon("mail")}${esc(t("events.cta.login"))}</a>`;
+  // 参加按钮：完成首次填写 → 去约咖啡；登录了没填完 → 去填；没登录 → 登录。
+  // weekly = true：已结束的活动页 / 没有活动时，按钮说的是"参加每周的 Coffee Chat"，不暗示还能参加这场
+  function joinLink(cls, weekly) {
+    const c = "btn btn--primary" + (cls || "");
+    const href = YL.auth.isReady() ? "#/coffee" : YL.auth.isLoggedIn() ? "#/profile/setup?next=coffee" : "#/login?next=coffee";
+    if (weekly) return `<a class="${c}" href="${href}">${icon("coffee")}${esc(t("events.cta.weekly"))}</a>`;
+    if (YL.auth.isReady()) return `<a class="${c}" href="${href}">${icon("coffee")}${esc(t("events.cta.go"))}</a>`;
+    if (YL.auth.isLoggedIn()) return `<a class="${c}" href="${href}">${icon("user")}${esc(t("events.cta.finish"))}</a>`;
+    return `<a class="${c}" href="${href}">${icon("mail")}${esc(t("events.cta.login"))}</a>`;
   }
   const errorBox = (error) => YL.ui.emptyState("info", YL.ui.errorText(error, "events"), `<button type="button" class="btn btn--primary" data-act="retry">${icon("refresh")}${esc(t("common.retry"))}</button>`);
 
@@ -95,13 +99,13 @@
   }
   function listHtml(items) {
     if (!items.length) {
-      return YL.ui.emptyState("flag", t("events.empty"), joinLink());
+      return YL.ui.emptyState("flag", t("events.empty"), joinLink("", true));
     }
     const current = items.filter((r) => r.open).concat(items.filter((r) => !r.open && r.upcoming).sort((a, b) => (a.startDate < b.startDate ? -1 : 1)));
     const past = items.filter((r) => !r.open && !r.upcoming);
     const now = current.length
       ? `<div class="grid-cards">${current.map(card).join("")}</div>`
-      : `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("events.noCurrent"))}</p><div>${joinLink(" btn--sm")}</div></div></div>`;
+      : `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("events.noCurrent"))}</p><div>${joinLink(" btn--sm", true)}</div></div></div>`;
     return `
       <section class="stack" aria-labelledby="ev-now">
         <h2 class="section-title" id="ev-now">${esc(t("events.section.current"))}</h2>
@@ -123,10 +127,12 @@
             <p class="page-sub">${esc(t("events.sub"))}</p>
           </div>
         </header>
-        <div class="stack stack--l" data-ev-list tabindex="-1" aria-live="polite" aria-busy="true">${YL.ui.spinner()}</div>
+        <div class="stack stack--l" data-ev-list tabindex="-1" aria-busy="true">${YL.ui.spinner()}</div>
+        <p class="sr-only" role="status" data-ev-status></p>
       </section>`;
     const page = root.querySelector("[data-ev-root]");
     const box = page.querySelector("[data-ev-list]");
+    const status = page.querySelector("[data-ev-status]");
     page.addEventListener("click", (e) => {
       if (e.target.closest('[data-act="retry"]')) load(true);
     });
@@ -134,10 +140,14 @@
     async function load(refocus) {
       box.setAttribute("aria-busy", "true");
       box.innerHTML = YL.ui.spinner();
+      status.textContent = "";
       const r = await YL.api.get("/rounds/events");
       if (!ctx.isActive()) return;
       box.removeAttribute("aria-busy");
-      box.innerHTML = r.ok ? listHtml(Array.isArray(r.data) ? r.data : []) : errorBox(r.error);
+      const items = r.ok && Array.isArray(r.data) ? r.data.filter((x) => x && x.kind === "event") : [];
+      box.innerHTML = r.ok ? listHtml(items) : errorBox(r.error);
+      // 读屏只念一句短的结果，不念整个列表
+      status.textContent = r.ok ? t("events.loaded", { n: items.length }) : "";
       if (refocus) box.focus();
     }
     await load();
@@ -158,6 +168,7 @@
     const postTitle = String(post.title || "").trim();
     const showPostTitle = postTitle && postTitle !== (r.title && r.title.zh) && postTitle !== (r.title && r.title.en);
     const count = countText(r), tz = tzNote(r);
+    const ended = statusOf(r) === "ended";
     return `
       <article class="article" aria-labelledby="ev-title">
         <div><a class="btn btn--ghost btn--sm" href="#/events">${icon("chevronLeft")}${esc(t("events.back"))}</a></div>
@@ -167,17 +178,17 @@
           <div class="article__meta">
             <span>${icon("calendar")}${esc(rangeText(r))}</span>
             ${count ? `<span>${icon(statusOf(r) === "upcoming" ? "clock" : "people")}${esc(count)}</span>` : ""}
-            ${tz ? `<span>${icon("globe")}${esc(tz)}</span>` : ""}
+            ${tz && statusOf(r) !== "ended" ? `<span>${icon("globe")}${esc(tz)}</span>` : ""}
           </div>
         </header>
         ${themeTags(r)}
         ${statusNote(r)}
         <div class="cluster">
-          ${joinLink()}
+          ${ended ? "" : joinLink()}
           <button type="button" class="btn btn--secondary" data-act="copy-link">${icon("copy")}${esc(t("events.copyLink"))}</button>
         </div>
         ${showPostTitle ? `<h2>${esc(postTitle)}</h2>` : ""}
-        ${body ? `<div class="prose">${esc(body)}</div>` : `<p class="muted">${esc(t("events.noBody"))}</p>`}
+        ${body ? `<div class="prose">${esc(body)}</div>` : ended ? "" : `<p class="muted">${esc(t("events.noBody"))}</p>`}
         ${wechat ? `
         <section class="copybox" aria-labelledby="ev-wechat">
           <div class="copybox__head">
@@ -189,15 +200,15 @@
         </section>` : ""}
         <section class="card card--quiet stack" aria-labelledby="ev-ready">
           <div class="stack stack--s">
-            <h2 class="section-title" id="ev-ready">${esc(t("events.closing.title"))}</h2>
-            <p class="muted">${esc(t("events.closing.text"))}</p>
+            <h2 class="section-title" id="ev-ready">${esc(ended ? t("events.closing.weeklyTitle") : t("events.closing.title"))}</h2>
+            <p class="muted">${esc(ended ? t("events.closing.weeklyText") : t("events.closing.text"))}</p>
           </div>
-          <div class="cluster">${joinLink()}<a class="btn btn--ghost" href="#/about">${esc(t("events.closing.about"))}</a></div>
+          <div class="cluster">${joinLink("", ended)}<a class="btn btn--ghost" href="#/about">${esc(t("events.closing.about"))}</a></div>
         </section>
       </article>`;
   }
   async function viewOne(root, ctx) {
-    root.innerHTML = `<section class="page" data-ev-root><div data-ev-body aria-live="polite" aria-busy="true">${YL.ui.spinner()}</div></section>`;
+    root.innerHTML = `<section class="page" data-ev-root><div data-ev-body aria-busy="true">${YL.ui.spinner()}</div></section>`;
     const page = root.querySelector("[data-ev-root]");
     const box = page.querySelector("[data-ev-body]");
     let round = null;
@@ -215,13 +226,16 @@
       const r = await YL.api.get("/rounds/" + encodeURIComponent(ctx.sub));
       if (!ctx.isActive()) return;
       box.removeAttribute("aria-busy");
-      if (!r.ok) {
-        box.innerHTML = r.error && r.error.code === "not_found"
+      // /rounds/:id 也会返回每周轮（#/events/week-…），#/events/events 会撞上列表接口（返回数组）：都当"不存在"
+      const notEvent = r.ok && (!r.data || Array.isArray(r.data) || r.data.kind !== "event");
+      if (!r.ok || notEvent) {
+        box.innerHTML = notEvent || (r.error && r.error.code === "not_found")
           ? YL.ui.emptyState("flag", t("events.err.not_found"), `<a class="btn btn--primary" href="#/events">${esc(t("events.back"))}</a>`)
           : errorBox(r.error);
+        if (refocus) { const f = box.querySelector("a, button"); if (f) f.focus(); }
         return;
       }
-      round = r.data || {};
+      round = r.data;
       box.innerHTML = articleHtml(round);
       if (refocus) box.querySelector("#ev-title").focus();
     }

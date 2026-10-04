@@ -18,7 +18,7 @@ const pickSome = (a, n) => a.slice().sort(() => rand() - 0.5).slice(0, n);
 const now = new Date().toISOString();
 const week = C.signupWeek(now);
 db.run("INSERT OR IGNORE INTO rounds (id, kind, status, title, theme_tags, config, start_date, end_date, post, created_at, updated_at) VALUES (?, 'weekly', 'published', ?, '[]', '{}', ?, ?, '{}', ?, ?)",
-  week.id, JSON.stringify({ zh: "本周 Coffee Chat", en: "This week's coffee chats" }), week.startDate, week.endDate, now, now);
+  week.id, JSON.stringify({ zh: "每周 Coffee Chat", en: "Weekly coffee chats" }), week.startDate, week.endDate, now, now);
 const futureSlots = C.slotIds(week).filter((s) => !C.isClosed(week, s, now));
 
 let created = 0;

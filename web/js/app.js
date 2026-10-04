@@ -24,7 +24,7 @@
         <div class="topbar__actions">
           <button type="button" class="lang-toggle" id="lang-toggle" lang="${lang === "zh" ? "en" : "zh-CN"}" aria-label="${esc(lang === "zh" ? "Switch to English" : "切换到中文")}">${lang === "zh" ? "EN" : "中文"}</button>
           ${me
-            ? `<a class="topbar__me" href="#/me" aria-label="${esc(t("nav.me"))}">${avatar(YL.auth.displayName(), "sm")}<span class="topbar__name">${esc(YL.auth.displayName())}</span></a>`
+            ? `<a class="topbar__me" href="#/profile" aria-label="${esc(t("nav.me"))}">${avatar(YL.auth.displayName(), "sm")}<span class="topbar__name">${esc(YL.auth.displayName())}</span></a>`
             : `<a class="btn btn--primary btn--sm" href="#/login">${esc(t("nav.login"))}</a>`}
         </div>
       </div>`;

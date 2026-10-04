@@ -13,5 +13,7 @@ window.YL_CONFIG = {
 
   defaultLang: "zh",               // "zh" | "en"
   github: "https://github.com/YuchenZhu2335/YaleLink-connection-is-all-you-need",
-  acssy: "https://acssy.org"
+  acssy: "https://acssy.org",
+  // 对外联系邮箱（隐私说明、关于页、意见箱会显示）。上线前填学联的公共邮箱；留空就只显示学联网站
+  contactEmail: ""
 };

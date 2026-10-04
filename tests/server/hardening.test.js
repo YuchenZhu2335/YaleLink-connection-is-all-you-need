@@ -213,3 +213,27 @@ test("生产环境的配置检查：必须 https、发信要有密钥", () => {
   assert.throws(() => load({ NODE_ENV: "production", APP_SECRET: "x".repeat(40), MAIL_DRIVER: "resend", RESEND_API_KEY: "k", PUBLIC_URL: "http://localhost:8787" }), /https/);
   assert.throws(() => load({ NODE_ENV: "production", APP_SECRET: "x".repeat(40), MAIL_DRIVER: "resend", RESEND_API_KEY: "", PUBLIC_URL: "https://coffee.example.org" }), /RESEND_API_KEY/);
 });
+
+test("上一封验证码发到了联系邮箱时，可以马上改发到耶鲁邮箱（不用等 60 秒）", async () => {
+  const srv = await start();
+  try {
+    const a = await signUp(srv, "w1@yale.edu");
+    await a.post("/me/contact-email/verify", { code: lastCode(srv, "w1@example.com") });
+    rewindCodes(srv);
+    const c = client(srv);
+    await c.post("/auth/request-code", { email: "w1@yale.edu" });
+    assert.equal(srv.ctx.mailer.outbox[0].to, "w1@example.com");
+    assert.equal((await c.post("/auth/request-code", { email: "w1@yale.edu" })).error.reason, "resend_too_soon");
+    assert.equal((await c.post("/auth/request-code", { email: "w1@yale.edu", via: "yale" })).ok, true);
+    assert.equal(srv.ctx.mailer.outbox[0].to, "w1@yale.edu");
+  } finally { await srv.close(); }
+});
+
+test("公开的轮次详情只给活动轮", async () => {
+  const srv = await start();
+  try {
+    const a = await signUp(srv, "w2@yale.edu");
+    const id = (await a.get("/coffee/state")).data.round.id;
+    assert.equal((await client(srv).get("/rounds/" + id)).status, 404);
+  } finally { await srv.close(); }
+});

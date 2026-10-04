@@ -3,7 +3,7 @@
 
    进入模块前的三道门（顺序固定）：
      requiresAuth  没登录 → #/login?next=…
-     requiresReady 登录了但还没完成首次填写 → #/me/setup?next=…
+     requiresReady 登录了但还没完成首次填写 → #/profile/setup?next=…
      adminOnly     不是管理员 → 显示"没有权限"（后端同样会拒绝） */
 window.YL = window.YL || {};
 YL.router = (function () {
@@ -40,7 +40,7 @@ YL.router = (function () {
       return;
     }
     if (mod.requiresAuth && !YL.auth.isLoggedIn()) return navigate("login?next=" + here, { replace: true });
-    if (mod.requiresReady && !YL.auth.isReady()) return navigate("me/setup?next=" + here, { replace: true });
+    if (mod.requiresReady && !YL.auth.isReady()) return navigate("profile/setup?next=" + here, { replace: true });
     if (mod.adminOnly && !YL.auth.isAdmin()) {
       current = ctx;
       root.innerHTML = YL.ui.emptyState("lock", YL.i18n.t("router.forbidden"), `<a class="btn btn--primary" href="#/home">${YL.ui.esc(YL.i18n.t("router.goHome"))}</a>`);
@@ -50,6 +50,7 @@ YL.router = (function () {
     // 异步渲染（await YL.api.*）之后先检查 ctx.isActive()：用户可能已经切到别的页面
     // Async renders must check ctx.isActive() after each await — the user may have navigated away.
     ctx.isActive = () => current === ctx;
+    YL.ui.closeModal(); // 换页时关掉上一页留下的弹窗
     root.innerHTML = "";
     window.scrollTo({ top: 0 });
     window.dispatchEvent(new CustomEvent("yl:route", { detail: ctx }));

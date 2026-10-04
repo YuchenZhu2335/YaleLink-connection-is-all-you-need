@@ -19,6 +19,26 @@
   let contactStepOpen = null;
   let timer = null;
   let prefSeq = 0;
+  // 用耶鲁邮箱重新登录回来后（#/profile?change=contact）自动打开"更换联系邮箱"：只用一次
+  let openChangeOnce = false;
+
+  /* 切换语言时路由会在同一个地址上重绘：正在填的内容先记在 draft 里，重绘后填回去。
+     draft = { user, path, profile（collectProfile 的结果）, adds（自定义标签输入框里没加进去的字）, contactOpen, contactEmail }
+     去了别的页面（路由地址变了）、保存成功、取消时丢掉。 */
+  let draft = null;
+  let lastPath = null;
+  window.addEventListener("yl:route", (e) => {
+    const path = e.detail && e.detail.path;
+    if (path !== lastPath) { draft = null; lastPath = path; }
+  });
+  function getDraft() { const me = YL.auth.user(); return draft && me && draft.user === me.id && draft.path === lastPath ? draft : null; }
+  function setDraft(patch) {
+    const me = YL.auth.user();
+    if (!me) return;
+    if (!getDraft()) draft = { user: me.id, path: lastPath };
+    Object.assign(draft, patch);
+  }
+  function clearDraft(keys) { if (!draft) return; if (!keys) draft = null; else keys.forEach((k) => delete draft[k]); }
 
   /* ---------- 小工具 ---------- */
   // 翻译句子先转义，再把 {占位符} 换成已转义的 HTML 片段
@@ -54,8 +74,34 @@
     return "";
   }
 
+  /* ---------- 退出登录 ----------
+     退出请求没成功（断网、服务器出错）时，后端的会话 Cookie 还有效：不能假装已经退出，恢复本地状态并提示。
+     401 说明会话本来就没了，按已退出处理。返回 true = 已退出 */
+  async function signOut(btn, ctx) {
+    const prev = YL.auth.user();
+    YL.ui.busy(btn, true);
+    const r = await YL.auth.logout();
+    if (!r.ok && !(r.error && r.error.code === "unauthorized")) {
+      YL.auth.set(prev);
+      if (ctx.isActive() && document.body.contains(btn)) { YL.ui.busy(btn, false); btn.focus(); }
+      YL.ui.toast(t("profile.logoutFailed"), "error");
+      return false;
+    }
+    pending = null;
+    contactStepOpen = null;
+    draft = null;
+    return true;
+  }
+  // 换联系邮箱、进管理后台都要求这次是用耶鲁邮箱登录的：退出后去登录页，并指定验证码发到耶鲁邮箱
+  async function reloginWithYale(btn, ctx, next) {
+    if (!(await signOut(btn, ctx))) return;
+    YL.router.navigate("login?next=" + encodeURIComponent(next) + "&via=yale");
+  }
+  // 后端规则（server/auth.js /me/contact-email）：已经有联系邮箱、这次又不是用耶鲁邮箱登录的，不能换
+  const changeNeedsYale = (u) => !!u && !!u.contactEmail && u.via !== "yale";
+
   /* ---------- 联系邮箱：填邮箱 → 发验证码 → 输验证码（首次填写与"我的"共用）----------
-     opts = { mode: "enter" | "code", email, autoSend, onDone(me), onLater(), onCancel() } */
+     opts = { mode: "enter" | "code", email, autoSend, reloginNext, onDone(me), onLater(), onCancel() } */
   function contactWidget(host, ctx, opts) {
     host.innerHTML = `<div class="stack" data-cw-root></div>`;
     const w = host.firstElementChild;
@@ -146,7 +192,7 @@
       }
       const sentTo = r.data.sentTo;
       YL.auth.set(withoutSentTo(r.data));
-      if (!sentTo) { pending = null; opts.onDone(YL.auth.user()); return; } // 已经验证过的同一个邮箱
+      if (!sentTo) { pending = null; clearDraft(["contactOpen", "contactEmail"]); opts.onDone(YL.auth.user()); return; } // 已经验证过的同一个邮箱
       const again = !!pending && pending.email === r.data.contactEmail;
       pending = { userId: r.data.id, email: r.data.contactEmail, sentTo, sentAt: Date.now() };
       code(true, again ? t("profile.contact.resent") : "");
@@ -170,6 +216,7 @@
       if (r.ok) {
         pending = null;
         clearInterval(timer);
+        clearDraft(["contactOpen", "contactEmail"]);
         YL.auth.set(r.data);
         YL.ui.toast(t("profile.contact.verified"), "success");
         opts.onDone(r.data);
@@ -194,6 +241,7 @@
     });
     w.addEventListener("input", (e) => {
       clearOnEdit(e);
+      if (e.target.id === "cw-email") setDraft({ contactOpen: true, contactEmail: e.target.value });
       if (e.target.id !== "cw-code") return;
       const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
       if (digits !== e.target.value) e.target.value = digits;
@@ -205,14 +253,9 @@
       const act = b.dataset.cw;
       if (act === "resend" && pending) send(pending.email, b);
       else if (act === "change") { const keep = pending ? pending.email : ""; pending = null; enter(true, keep); w.querySelector("#cw-email").select(); }
-      else if (act === "later") { pending = null; clearInterval(timer); opts.onLater(); }
-      else if (act === "cancel") { pending = null; clearInterval(timer); opts.onCancel(); }
-      else if (act === "relogin") {
-        YL.ui.busy(b, true);
-        await YL.auth.logout();
-        pending = null;
-        YL.router.navigate("login?next=profile");
-      }
+      else if (act === "later") { pending = null; clearInterval(timer); clearDraft(["contactOpen", "contactEmail"]); opts.onLater(); }
+      else if (act === "cancel") { pending = null; clearInterval(timer); clearDraft(["contactOpen", "contactEmail"]); opts.onCancel(); }
+      else if (act === "relogin") reloginWithYale(b, ctx, opts.reloginNext || "profile?change=contact");
     });
 
     if (opts.mode === "code" && pending) code(false);
@@ -372,9 +415,23 @@
     if (updateTags(field)) field.querySelector("[data-tag-count]").focus(); else input.focus();
   }
 
+  // 资料表单的草稿：u 是后端给的资料，有草稿就以草稿为准
+  function withDraft(u) { const d = getDraft(); return d && d.profile ? Object.assign({}, u, d.profile) : u; }
+  function rememberForm(form) {
+    const adds = {};
+    YL.ui.$$("[data-tags]", form).forEach((f) => { const i = f.querySelector("[data-add-input]"); if (i && i.value) adds[f.dataset.tags] = i.value; });
+    setDraft({ profile: collectProfile(form), adds });
+  }
+  function restoreAdds(form) {
+    const d = getDraft();
+    if (!d || !d.adds) return;
+    YL.ui.$$("[data-tags]", form).forEach((f) => { const i = f.querySelector("[data-add-input]"); if (i && !i.disabled && d.adds[f.dataset.tags]) i.value = d.adds[f.dataset.tags]; });
+  }
+
   // onSaved(me) 在保存成功后调用
   function bindProfileForm(form, ctx, onSaved) {
     YL.ui.$$("[data-tags]", form).forEach(updateTags);
+    restoreAdds(form);
     let saving = false;
     form.addEventListener("change", (e) => {
       const x = e.target;
@@ -383,6 +440,7 @@
       if (tagsField && x.type === "checkbox") updateTags(tagsField);
       const field = x.closest("[data-field]");
       if (field && field.classList.contains("is-invalid") && x.type !== "text") clearOne(field);
+      rememberForm(form);
     });
     form.addEventListener("input", (e) => {
       const x = e.target;
@@ -391,22 +449,25 @@
         const c = form.querySelector(`[data-count-for="${CSS.escape(x.name)}"]`);
         if (c) c.textContent = `${x.value.length} / ${c.dataset.max}`;
       }
+      rememberForm(form);
     });
     form.addEventListener("keydown", (e) => {
       // 自定义标签输入框里回车 = 添加（输入法选词时的回车不算）
       if (e.key === "Enter" && e.target.matches("[data-add-input]") && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         addTag(form, e.target.closest("[data-tags]"));
+        rememberForm(form);
       }
     });
     form.addEventListener("click", (e) => {
       const add = e.target.closest("[data-add-tag]");
-      if (add) { addTag(form, add.closest("[data-tags]")); return; }
+      if (add) { addTag(form, add.closest("[data-tags]")); rememberForm(form); return; }
       const chip = e.target.closest("[data-custom-for]");
       if (chip) {
         const field = chip.closest("[data-tags]");
         chip.remove();
         updateTags(field);
+        rememberForm(form);
         const input = field.querySelector("[data-add-input]");
         if (input) input.focus();
       }
@@ -432,6 +493,7 @@
         else setMsg(form, YL.ui.errorText(er, "profile"));
         return;
       }
+      clearDraft();
       YL.auth.set(r.data);
       onSaved(r.data);
     });
@@ -460,7 +522,7 @@
   /* ---------- #/profile/setup 首次填写 ---------- */
   function renderSetup(root, ctx) {
     const next = YL.router.safeNext(ctx.query.next, "coffee");
-    if (YL.auth.isReady()) { YL.router.navigate("profile", { replace: true }); return; }
+    if (YL.auth.isReady()) { YL.router.navigate(ctx.query.next ? next : "profile", { replace: true }); return; }
     root.innerHTML = `
       <section class="page page--narrow" data-setup>
         <header class="page-head"><div class="page-head__text">
@@ -557,9 +619,11 @@
           <div data-cw-host></div>
         </section>`;
       const done = () => { contactStepOpen = null; draw(true); };
+      const d = getDraft();
       contactWidget(body.querySelector("[data-cw-host]"), ctx, {
         mode: pendingFor(u) ? "code" : "enter",
-        email: u.contactEmail || "",
+        email: d && d.contactEmail != null ? d.contactEmail : u.contactEmail || "",
+        reloginNext: "profile/setup?next=" + encodeURIComponent(next),
         focus: false,
         onDone: done,
         onLater: done
@@ -579,7 +643,7 @@
             <p class="small muted">${esc(t("profile.setup.profileSub"))}</p>
           </div>
           ${u.contactVerified ? "" : notice("warn", "mail", esc(t("profile.setup.contactUnverified")))}
-          ${profileFormHtml(u, t("profile.setup.finish"), "")}
+          ${profileFormHtml(withDraft(u), t("profile.setup.finish"), "")}
         </section>`;
       bindProfileForm(body.querySelector("[data-profile-form]"), ctx, () => draw(true));
     }
@@ -629,6 +693,8 @@
     `<a class="list__item list__link" href="${href}">${icon(ic)}<span class="list__main"><span class="list__title">${esc(title)}</span><span class="list__sub">${esc(sub)}</span></span>${icon("chevronRight")}</a>`;
 
   async function renderMe(root, ctx) {
+    // 从登录页回来时带着 ?change=contact：去掉参数（以后重绘不会再自动打开），这次打开"更换联系邮箱"
+    if (ctx.query.change === "contact") { openChangeOnce = true; YL.router.navigate("profile", { replace: true }); return; }
     const u = await loadMe(root, ctx, meHead());
     if (u) drawMe(root, ctx, "");
   }
@@ -694,9 +760,10 @@
           </div>
 
           <aside class="stack stack--l">
+            ${u.adminNeedsYale ? notice("warn", "lock", `<span>${esc(t("profile.links.adminNeedsYale"))}</span><span><button type="button" class="btn btn--secondary" data-act="admin-relogin">${esc(t("profile.links.adminRelogin"))}</button></span>`) : ""}
             <nav class="card card--tight" aria-label="${esc(t("profile.links.title"))}">
               <div class="list">
-                ${YL.auth.isAdmin() ? linkRow("#/admin", "chart", t("profile.links.admin"), t("profile.links.adminSub")) : ""}
+                ${u.isAdmin ? linkRow("#/admin", "chart", t("profile.links.admin"), t("profile.links.adminSub")) : ""}
                 ${linkRow("#/about/privacy", "shield", t("profile.links.privacy"), t("profile.links.privacySub"))}
                 ${linkRow("#/about/feedback", "message", t("profile.links.feedback"), t("profile.links.feedbackSub"))}
               </div>
@@ -720,20 +787,38 @@
       clearInterval(timer);
       panel.innerHTML = `<div class="stack stack--s">
           ${u.contactVerified ? "" : notice("warn", "info", esc(t("profile.account.unverifiedBody")))}
-          <div class="cluster cluster--between">
+          <div class="cluster">
             ${u.contactVerified ? "" : `<button type="button" class="btn btn--primary" data-act="verify-contact">${icon("mail")}${esc(t("profile.account.verifyNow"))}</button>`}
-            <button type="button" class="link-btn" data-act="change-contact">${esc(t("profile.account.change"))}</button>
+            <button type="button" class="btn btn--secondary" data-act="change-contact">${icon("edit")}${esc(t("profile.account.change"))}</button>
           </div>
         </div>`;
     }
-    function openPanel(mode, email, autoSend) {
+    const backToClosed = () => { clearDraft(["contactOpen", "contactEmail"]); closedPanel(); const b = panel.querySelector('[data-act="change-contact"]'); if (b) b.focus(); };
+    function openPanel(mode, email, autoSend, focus) {
       contactWidget(panel, ctx, {
-        mode, email, autoSend, focus: true,
+        mode, email, autoSend, focus: focus !== false,
         onDone: () => drawMe(root, ctx, "#me-account"),
-        onCancel: () => { closedPanel(); const b = panel.querySelector("[data-act]"); if (b) b.focus(); }
+        onCancel: backToClosed
       });
     }
-    if (pendingFor(u)) openPanel("code", u.contactEmail, false); else closedPanel();
+    // 换联系邮箱：这次是用联系邮箱登录的就换不了（后端会拒绝），直接说明并给出"用耶鲁邮箱重新登录"
+    function openChange(email, focus) {
+      setDraft({ contactOpen: true, contactEmail: email || "" });
+      if (!changeNeedsYale(u)) { openPanel("enter", email || "", false, focus); return; }
+      panel.innerHTML = `<div class="stack stack--s">
+          ${notice("warn", "lock", `<span>${esc(t("profile.err.reverify_yale"))}</span>`)}
+          <div class="cluster">
+            <button type="button" class="btn btn--primary" data-act="relogin">${icon("logout")}${esc(t("profile.contact.relogin"))}</button>
+            <button type="button" class="btn btn--ghost" data-act="close-change">${esc(t("common.cancel"))}</button>
+          </div>
+        </div>`;
+      if (focus !== false) panel.querySelector('[data-act="relogin"]').focus();
+    }
+    const d = getDraft();
+    if (pendingFor(u)) openPanel("code", u.contactEmail, false, false);
+    else if (openChangeOnce) { openChangeOnce = false; openChange("", true); }
+    else if (d && d.contactOpen) openChange(d.contactEmail || "", false);
+    else closedPanel();
 
     async function savePrefs(changed) {
       const next = {};
@@ -763,11 +848,12 @@
       if (!b || !el.contains(b)) return;
       const act = b.dataset.act;
       if (act === "verify-contact") openPanel("enter", u.contactEmail, true);
-      else if (act === "change-contact") openPanel("enter", "", false);
+      else if (act === "change-contact") openChange("", true);
+      else if (act === "close-change") backToClosed();
+      else if (act === "relogin") reloginWithYale(b, ctx, "profile?change=contact");
+      else if (act === "admin-relogin") reloginWithYale(b, ctx, "admin");
       else if (act === "logout") {
-        YL.ui.busy(b, true);
-        await YL.auth.logout();
-        pending = null;
+        if (!(await signOut(b, ctx))) return;
         YL.ui.toast(t("profile.loggedOut"));
         YL.router.navigate("home");
       } else if (act === "delete") openDelete(ctx);
@@ -830,7 +916,7 @@
       <header class="page-head"><div class="page-head__text"><h1 class="page-title">${esc(t("profile.edit.title"))}</h1><p class="page-sub">${esc(t("profile.edit.sub"))}</p></div></header>`;
     const u = await loadMe(root, ctx, head);
     if (!u) return;
-    root.innerHTML = `<section class="page page--medium" data-edit>${head}<div class="card">${profileFormHtml(u, t("common.save"), "#/profile")}</div></section>`;
+    root.innerHTML = `<section class="page page--medium" data-edit>${head}<div class="card">${profileFormHtml(withDraft(u), t("common.save"), "#/profile")}</div></section>`;
     bindProfileForm(root.querySelector("[data-profile-form]"), ctx, () => {
       YL.ui.toast(t("common.saved"), "success");
       YL.router.navigate("profile");

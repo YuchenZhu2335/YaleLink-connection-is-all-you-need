@@ -50,7 +50,7 @@
           ${meta ? `<span>${icon(r.open ? "people" : "clock")}${esc(meta)}</span>` : ""}
         </div>
         <div class="banner__actions">
-          <a class="btn btn--primary" href="#/events/${esc(encodeURIComponent(r.id))}">${esc(t("home.event.view"))}${icon("arrowRight")}</a>
+          <a class="btn btn--accent" href="#/events/${esc(encodeURIComponent(r.id))}">${esc(t("home.event.view"))}${icon("arrowRight")}</a>
         </div>
       </section>`;
   }
@@ -83,8 +83,8 @@
             </div>
           </div>
           <ul class="person__reasons">
-            <li class="reason">${icon("sparkle")}<span>${esc(t("home.sample.reason1"))}</span></li>
-            <li class="reason">${icon("sparkle")}<span>${esc(t("home.sample.reason2"))}</span></li>
+            <li class="reason"><span>${esc(t("home.sample.reason1"))}</span></li>
+            <li class="reason"><span>${esc(t("home.sample.reason2"))}</span></li>
           </ul>
           <div class="tags">${tag(t("home.sample.tagGoal"), "tag--goal")}${tag(t("home.sample.tag1"), "tag--shared")}${tag(t("home.sample.tag2"), "tag--shared")}${tag(t("home.sample.tag3"))}</div>
           <div class="person__foot">
@@ -105,7 +105,7 @@
       </section>`;
   }
   function principlesHtml() {
-    const items = [["light", "clock"], ["respect", "heart"], ["privacy", "lock"]].map(([id, ic]) => `
+    const items = [["light", "clock"], ["respect", "people"], ["privacy", "lock"]].map(([id, ic]) => `
       <article class="card stack stack--s">
         <div class="tags"><span class="tag tag--theme">${icon(ic, { size: 14 })}${esc(t("home.p." + id + ".tag"))}</span></div>
         <h3>${esc(t("home.p." + id + ".title"))}</h3>
@@ -124,7 +124,7 @@
         <h2 class="banner__title" id="home-cta">${esc(t("home.cta.title"))}</h2>
         <p>${esc(t("home.cta.text"))}</p>
         <div class="banner__actions">
-          <a class="btn btn--accent btn--lg" href="#/login">${esc(t("home.hero.login"))}</a>
+          <a class="btn btn--primary btn--lg" href="#/login">${esc(t("home.hero.login"))}</a>
           <a class="btn btn--secondary btn--lg" href="#/about">${esc(t("home.cta.about"))}</a>
         </div>
       </section>`;
@@ -137,7 +137,7 @@
           ${heroHtml()}
           ${sampleHtml()}
         </div>
-        <div data-event aria-live="polite" hidden></div>
+        <div data-event hidden></div>
         ${howHtml()}
         ${principlesHtml()}
         ${closingHtml()}

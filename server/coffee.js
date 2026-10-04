@@ -36,7 +36,7 @@ function install(app, ctx) {
     const week = C.signupWeek(t);
     if (!db.get("SELECT id FROM rounds WHERE id = ?", week.id)) {
       db.run("INSERT OR IGNORE INTO rounds (id, kind, status, title, theme_tags, config, start_date, end_date, post, created_at, updated_at) VALUES (?, 'weekly', 'published', ?, '[]', '{}', ?, ?, '{}', ?, ?)",
-        week.id, JSON.stringify({ zh: "本周 Coffee Chat", en: "This week's coffee chats" }), week.startDate, week.endDate, t, t);
+        week.id, JSON.stringify({ zh: "每周 Coffee Chat", en: "Weekly coffee chats" }), week.startDate, week.endDate, t, t);
     }
     return C.currentRound(recentRounds(t), t);
   }
@@ -314,7 +314,7 @@ function install(app, ctx) {
   }, { auth: "none" });
   app.route("GET", "/rounds/:id", (req) => {
     const r = roundById(req.params.id);
-    if (!r || r.status !== "published") throw fail("not_found");
+    if (!r || r.status !== "published" || r.kind !== "event") throw fail("not_found");
     return publicRound(r, now());
   }, { auth: "none" });
 

@@ -46,7 +46,7 @@ function createMailer(ctx) {
     invite_digest: (d) => ({ subject: `👋 有 ${d.n} 位同学想认识你 / ${d.n} people want to meet you`, text: `${d.names} 想和你喝杯咖啡。点"想认识"就匹配成功，点"跳过"对方不会收到通知：\n${link("coffee/inbox")}\n\n${d.n} people would like to meet you. Accept to match; skipping is silent:\n${link("coffee/inbox")}` }),
     reminder: (d) => ({ subject: `⏰ 提醒：和 ${d.name} 的 coffee chat / Reminder`, text: `别忘了：${d.when.zh}，和 ${d.name} 的 coffee chat。\n${link("coffee/matches")}\n\nReminder: coffee chat with ${d.name} — ${d.when.en}.` }),
     weekly: () => ({ subject: "☕ 新一周的 coffee chat 开始了 / A new week of coffee chats", text: `勾几个这周有空的时间，看看系统给你推荐了谁：\n${link("coffee")}\n\nPick a few free times this week and see who we suggest:\n${link("coffee")}` }),
-    event: (d) => ({ subject: `🎉 ${d.title.zh} / ${d.title.en}`, text: `${d.title.zh} 开始了！\n${link("coffee")}\n\n${d.title.en} has started!\n${link("coffee")}` })
+    event: (d) => { const zh = d.title.zh || d.title.en, en = d.title.en || d.title.zh; return { subject: zh === en ? `🎉 ${zh}` : `🎉 ${zh} / ${en}`, text: `${zh} 开始了！\n${link("coffee")}\n\n${en} has started!\n${link("coffee")}` }; }
   };
 
   // 发一封：检查偏好 → 渲染 → 发送 → 记录。发送失败不抛错，只记录并返回 false（调用方决定要不要重试）
@@ -63,7 +63,7 @@ function createMailer(ctx) {
     const text = tpl.text + `\n\n——\nYalelux · Where Yale's light connects resources and ideas\n${ctx.cfg.publicUrl}` + (unsubscribe ? `\n不想再收这类邮件 / Unsubscribe: ${unsubscribe}` : "");
     let status = "sent", error = null;
     try { await drivers[ctx.cfg.mailDriver]({ kind, to, subject: tpl.subject, text, unsubscribe }); }
-    catch (e) { status = "failed"; error = String(e.message || e).slice(0, 300); console.error("mail failed:", error); }
+    catch (e) { status = "failed"; error = String(e.message || e).replace(/[^\s<>()"',;:@]+@[^\s<>()"',;:@]+/g, "***@***").slice(0, 300); console.error("mail failed:", error); } // 记录里不留邮箱地址
     // 记录里不存标题（标题里有对方名字或验证码），只存类型
     ctx.db.run("INSERT INTO emails (user_id, to_addr, kind, subject, status, error, ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", user && user.id, to, kind, kind, status, error, ref || null, new Date().toISOString());
     return status === "sent";

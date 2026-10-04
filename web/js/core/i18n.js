@@ -25,7 +25,9 @@ YL.i18n = (function () {
   function L(field) {
     if (field == null) return "";
     if (typeof field !== "object") return String(field);
-    return field[lang] != null ? field[lang] : field.zh != null ? field.zh : field.en || "";
+    // 当前语言没填（或是空字符串）就用另一种语言
+    const pick = (v) => (v != null && String(v).trim() !== "" ? v : null);
+    return pick(field[lang]) || pick(field.zh) || pick(field.en) || "";
   }
   function setLang(l) {
     if (!LANGS.includes(l) || l === lang) return;
