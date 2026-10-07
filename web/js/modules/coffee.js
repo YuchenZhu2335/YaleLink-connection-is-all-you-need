@@ -3,7 +3,7 @@
 
    路由 / routes
      #/coffee                                   本轮横幅 + 我的进度 + 为你推荐
-     #/coffee/browse?identity&goal&interest&field   找人（按标签筛选池子）
+     #/coffee/browse?identity&goal&interest&field&mentor   找人（按标签筛选池子；mentor=1 只看导师）
      #/coffee/p/:id                             个人详情（公开答案 + 共同空闲时间）
      #/coffee/times                             选空闲时间（纽约时间，旁边显示北京时间）
      #/coffee/inbox?tab=sent                    收件箱：想认识你的人 / 我发出的（分段控件）
@@ -11,7 +11,9 @@
 
    数据只走 YL.api（契约见 docs/api.md）；时间表与截止判断用 YL.domain.coffee（只做显示）。
    界面不自己判断权限：按钮由接口返回的 relation / canSchedule / canReport 决定。
-   样式见 docs/design/components.md（关系状态四级阶梯、时段格、横幅、匹配页头），模块里不写样式。 */
+   样式见 docs/design/components.md（关系状态四级阶梯、时段格、横幅、匹配页头），模块里不写样式。
+   RFC 0003：卡片上有英文名、项目、导师标记、见面方式；个人页和收件箱的邀请卡显示"还有什么想说的"和"查看简历"
+   （接口只在能看时给 hasResume）；匹配页写明"地点以被邀请的一方为准"，并给出双方的地点和简历入口。 */
 (function () {
   "use strict";
   const { t, L, esc, icon, avatar } = YL.ui;
@@ -95,19 +97,35 @@
   const myInterests = () => { const me = YL.auth.user(); return list(me && me.answers && me.answers.interests); };
 
   /* ---------- 人物卡 ---------- */
-  function whoLine(p) {
+  const MEET_MODES = () => D.MEET_MODES || ["online", "newhaven", "either"];
+  // 身份行的各段（CSS 在段与段之间画"·"）：在读 = 学段 · 届别 · 项目；校友、嘉宾 = 工作 · 城市
+  function whoParts(p) {
     if (p.identity === "student") {
       const parts = [];
       if (D.STAGES.indexOf(p.stage) >= 0) parts.push(t("coffee.stage." + p.stage));
       if (p.gradYear) parts.push(t("coffee.person.class", { year: p.gradYear }));
-      return parts.join(" · ") || t("coffee.identity.student");
+      if (p.program) parts.push(p.program);
+      return parts.length ? parts : [t("coffee.identity.student")];
     }
-    return [p.job, p.city].filter(Boolean).join(" · ") || t("coffee.identity.alumni");
+    const parts = [p.job, p.city].filter(Boolean);
+    return parts.length ? parts : [p.identity === "guest" ? t("coffee.identity.guest") : t("coffee.identity.alumni")];
   }
   function metaHtml(p) {
     const field = list(p.answers && p.answers.field)[0];
-    return `<p class="person__meta"><span>${esc(whoLine(p))}</span>${field ? `<span>${esc(optLabel("field", field))}</span>` : ""}</p>`;
+    return `<p class="person__meta">${whoParts(p).map((x) => `<span>${esc(x)}</span>`).join("")}${field ? `<span>${esc(optLabel("field", field))}</span>` : ""}</p>`;
   }
+  // 名字 · 英文名（"王五 · Wu"）；导师标记放在名字同一行
+  const aliasHtml = (p) => (p.preferredName ? ` <span class="person__alias">· ${esc(p.preferredName)}</span>` : "");
+  const nameText = (p) => esc(p.name) + aliasHtml(p);
+  const mentorPill = (p) => (p.role === "mentor" ? `<span class="pill pill--mentor">${icon("cap")}${esc(t("coffee.person.mentor"))}</span>` : "");
+  const meetTag = (mode) => (MEET_MODES().indexOf(mode) >= 0 ? `<span class="tag tag--meet">${icon("mapPin")}${esc(t("coffee.meet." + mode))}</span>` : "");
+  // 简历：接口只在能看的时候给 hasResume；链接是后端的下载地址（新标签页打开，PDF 由浏览器显示）
+  const resumeUrl = (id) => esc(YL.api.url("/coffee/people/" + encodeURIComponent(id) + "/resume"));
+  const myResumeUrl = () => esc(YL.api.url("/me/resume"));
+  const resumeLink = (p, cls) => (p.hasResume ? `<a class="${cls || "link-btn"}" href="${resumeUrl(p.id)}" target="_blank" rel="noopener">${icon("external")}${esc(t("coffee.person.resume"))}</a>` : "");
+  // 还有什么想说的（保留换行；只在个人页和收件箱的邀请卡上显示，推荐卡和池子卡片上太长不放）
+  const freeTextHtml = (p) => (typeof p.freeText === "string" && p.freeText.trim()
+    ? `<div class="stack stack--s"><span class="xsmall faint">${esc(t("coffee.person.freeText"))}</span><p class="person__text">${esc(p.freeText.trim())}</p></div>` : "");
   // 共同兴趣：灯点由 CSS 画（tag--shared），不放图标
   const sharedTag = (label) => `<span class="tag tag--shared">${esc(label)}<span class="sr-only">${esc(t("coffee.person.sharedSr"))}</span></span>`;
   function interestTags(values) {
@@ -117,7 +135,7 @@
   }
   function tagsHtml(p) {
     const a = p.answers || {};
-    const all = list(a.goals).map((g) => `<span class="tag tag--goal">${esc(optLabel("goals", g))}</span>`).concat(interestTags(a.interests));
+    const all = [meetTag(p.meetMode)].filter(Boolean).concat(list(a.goals).map((g) => `<span class="tag tag--goal">${esc(optLabel("goals", g))}</span>`), interestTags(a.interests));
     return all.length ? `<div class="tags">${all.join("")}</div>` : "";
   }
   function overlapHtml(n) {
@@ -138,13 +156,15 @@
     if (limitHit) return `<button type="button" class="btn btn--primary btn--sm" data-act="limit" data-id="${id}" aria-disabled="true" aria-describedby="coffee-limit">${icon("info")}${esc(t("coffee.rel.limit", { n: maxOpen }))}</button>`;
     return `<button type="button" class="btn btn--primary btn--sm" data-act="invite" data-id="${id}">${icon("plus")}${esc(t("coffee.rel.invite"))}</button>`;
   }
-  /* o = { rec, reasons, overlap（数字）, foot（左下角 html）, note, link（名字是否链到详情）, actions（覆盖右下角）, dismiss, after（卡片底部再加一行） } */
+  /* o = { rec, reasons, overlap（数字）, foot（左下角 html）, note, link（名字是否链到详情）, actions（覆盖右下角）, dismiss, after（卡片底部再加一行），
+         free（显示"还有什么想说的"和"查看简历"：收件箱的邀请卡） } */
   function personHtml(p, o) {
     o = o || {};
     const intro = typeof (p.answers && p.answers.intro) === "string" ? p.answers.intro.trim() : "";
     const name = o.link === false
-      ? `<p class="person__name">${esc(p.name)}</p>`
-      : `<a class="person__name" href="#/coffee/p/${esc(encodeURIComponent(p.id))}">${esc(p.name)}</a>`;
+      ? `<p class="person__name">${nameText(p)}</p>`
+      : `<a class="person__name" href="#/coffee/p/${esc(encodeURIComponent(p.id))}">${nameText(p)}</a>`;
+    const resume = o.free ? resumeLink(p) : "";
     // 推荐理由前的灯点由 CSS 画（.reason::before），不放图标
     const reasons = (o.reasons || []).length
       ? `<ul class="person__reasons">${o.reasons.map((r) => `<li class="reason"><span>${esc(L(r))}</span></li>`).join("")}</ul>` : "";
@@ -152,10 +172,12 @@
     const dismiss = o.dismiss && (!p.relation || p.relation.state === "none")
       ? `<button type="button" class="icon-btn" data-act="dismiss" data-id="${esc(p.id)}" aria-label="${esc(t("coffee.rec.dismissLabel", { name: p.name }))}">${icon("x")}</button>` : "";
     return `<article class="person${o.rec ? " person--rec" : ""}" data-person="${esc(p.id)}">
-      <div class="person__head">${avatar(p.name)}<div class="person__who">${name}${metaHtml(p)}</div>${dismiss}</div>
+      <div class="person__head">${avatar(p.name)}<div class="person__who"><div class="person__title">${name}${mentorPill(p)}</div>${metaHtml(p)}</div>${dismiss}</div>
       ${reasons}${tagsHtml(p)}
       ${intro ? `<p class="person__intro">${esc(intro)}</p>` : ""}
+      ${o.free ? freeTextHtml(p) : ""}
       ${o.note ? `<p class="person__note">${esc(o.note)}</p>` : ""}
+      ${resume ? `<div>${resume}</div>` : ""}
       <div class="person__foot">${o.overlap != null ? overlapHtml(o.overlap) : o.foot || ""}<div class="person__actions">${o.actions != null ? o.actions : relationHtml(p)}</div></div>
       ${o.after || ""}
     </article>`;
@@ -549,20 +571,22 @@
   const FILTER_Q = { goal: "goals", interest: "interests", field: "field" };
   function filterItems(key) {
     const all = [{ id: "", label: t("coffee.filter.all") }];
-    if (key === "identity") return all.concat([{ id: "student", label: t("coffee.identity.student") }, { id: "alumni", label: t("coffee.identity.alumni") }]);
+    if (key === "identity") return all.concat([{ id: "student", label: t("coffee.identity.student") }, { id: "alumni", label: t("coffee.identity.alumni") }, { id: "guest", label: t("coffee.identity.guest") }]);
     const q = question(FILTER_Q[key]);
     return all.concat(((q && q.options) || []).map((o) => ({ id: o.id, label: o.label })));
   }
+  // mentor=1：只看导师（单独一个开关，不在下面的筛选行里）
   function browsePath(f) {
     const p = new URLSearchParams();
-    FILTERS.forEach((k) => { if (f[k]) p.set(k, f[k]); });
+    FILTERS.concat(["mentor"]).forEach((k) => { if (f[k]) p.set(k, f[k]); });
     const s = p.toString();
     return "coffee/browse" + (s ? "?" + s : "");
   }
   async function viewBrowse(root, ctx) {
     const f = {};
     FILTERS.forEach((k) => (f[k] = String(ctx.query[k] || "")));
-    const active = FILTERS.filter((k) => f[k]).length;
+    f.mentor = ctx.query.mentor === "1" ? "1" : "";
+    const active = FILTERS.filter((k) => f[k]).length + (f.mentor ? 1 : 0);
     backPath = browsePath(f);
     const open = filtersOpen != null ? filtersOpen : active > 0 || window.matchMedia("(min-width: 900px)").matches;
     const page = mount(root);
@@ -577,6 +601,7 @@
           <p class="small muted" data-role="count" aria-live="polite"></p>
           <div class="cluster">
             ${active ? `<button type="button" class="btn btn--ghost btn--sm" data-act="clear">${esc(t("coffee.browse.clear"))}</button>` : ""}
+            <button type="button" class="chip${f.mentor ? " is-active" : ""}" data-act="mentor" aria-pressed="${!!f.mentor}">${esc(t("coffee.browse.mentorOnly"))}</button>
             <button type="button" class="btn btn--secondary btn--sm" data-act="toggle" aria-expanded="${open}" aria-controls="coffee-filters">${icon("sliders")}${esc(t("coffee.browse.filters"))}${active ? `<span class="count">${active}</span>` : ""}</button>
           </div>
         </div>
@@ -590,7 +615,7 @@
       ${limitSlot()}
       <div data-role="results">${YL.ui.spinner()}</div>`;
 
-    // 让每行选中的标签滚到看得见的位置；刚点过的标签拿回焦点
+    // 让每行选中的标签滚到看得见的位置；刚点过的标签（或"只看导师"）拿回焦点
     if (open) page.querySelectorAll(".filter-row .chip.is-active").forEach((c) => {
       const sc = c.parentElement;
       sc.scrollLeft = Math.max(0, c.offsetLeft - sc.offsetLeft - (sc.clientWidth - c.offsetWidth) / 2);
@@ -598,7 +623,7 @@
     if (pendingFocus) {
       const pf = pendingFocus;
       pendingFocus = null;
-      const el = page.querySelector(`[data-filter="${pf.k}"] [data-${pf.k}="${CSS.escape(pf.v)}"]`);
+      const el = pf.k === "mentor" ? page.querySelector('[data-act="mentor"]') : page.querySelector(`[data-filter="${pf.k}"] [data-${pf.k}="${CSS.escape(pf.v)}"]`);
       if (el) el.focus({ preventScroll: true });
     }
 
@@ -612,6 +637,7 @@
         return true;
       }
       if (act === "clear") { pendingFocus = null; YL.router.navigate("coffee/browse"); return true; }
+      if (act === "mentor") { pendingFocus = { k: "mentor" }; YL.router.navigate(browsePath(Object.assign({}, f, { mentor: f.mentor ? "" : "1" }))); return true; }
       return false;
     });
     page.addEventListener("click", (e) => {
@@ -642,7 +668,7 @@
     box.innerHTML = items.length
       ? `<div class="grid-cards">${items.map(env.draw).join("")}</div>`
       : active
-        ? emptyBlock("search", t("coffee.browse.emptyFiltered"), t("coffee.browse.emptyFilteredBody"), `<button type="button" class="btn btn--primary" data-act="clear">${esc(t("coffee.browse.clear"))}</button>`)
+        ? emptyBlock("search", f.mentor && active === 1 ? t("coffee.browse.noMentors") : t("coffee.browse.emptyFiltered"), f.mentor && active === 1 ? t("coffee.browse.noMentorsBody") : t("coffee.browse.emptyFilteredBody"), `<button type="button" class="btn btn--primary" data-act="clear">${esc(t("coffee.browse.clear"))}</button>`)
         : emptyBlock("people", t("coffee.browse.empty"), t("coffee.browse.emptyBody"), "");
   }
 
@@ -680,9 +706,13 @@
       return `<div class="stack stack--s"><h2 class="field__label">${esc(shortLabel(q))}</h2>${body}</div>`;
     }).join("");
     const overlap = list(p.overlap);
+    const meet = meetTag(p.meetMode);
     return `<article class="person" data-person="${esc(p.id)}">
-      <div class="person__head">${avatar(p.name, "lg")}<div class="person__who"><h1 class="person__name" tabindex="-1" data-focus>${esc(p.name)}</h1>${metaHtml(p)}</div></div>
+      <div class="person__head">${avatar(p.name, "lg")}<div class="person__who"><div class="person__title"><h1 class="person__name" tabindex="-1" data-focus>${nameText(p)}</h1>${mentorPill(p)}</div>${metaHtml(p)}</div></div>
       ${blocks}
+      ${typeof p.freeText === "string" && p.freeText.trim() ? `<div class="stack stack--s"><h2 class="field__label">${esc(t("coffee.person.freeText"))}</h2><p class="person__text">${esc(p.freeText.trim())}</p></div>` : ""}
+      ${meet ? `<div class="stack stack--s"><h2 class="field__label">${esc(t("coffee.person.meetTitle"))}</h2><div class="tags">${meet}</div><p class="small faint">${esc(t("coffee.person.meetHint"))}</p></div>` : ""}
+      ${p.hasResume ? `<div class="stack stack--s"><h2 class="field__label">${esc(t("coffee.person.resumeTitle"))}</h2><div>${resumeLink(p, "btn btn--secondary btn--sm")}</div></div>` : ""}
       <div class="stack stack--s">
         <h2 class="field__label">${esc(t("coffee.person.timesTitle"))}</h2>
         ${overlap.length
@@ -902,7 +932,7 @@
     const env = {
       ctx, page, people: new Map(), source: "browse",
       draw: (p) => personHtml(p, {
-        link: linkable(p), note: p.note, foot: sentAt(p),
+        link: linkable(p), note: p.note, foot: sentAt(p), free: true,
         actions: `<button type="button" class="btn btn--primary btn--sm" data-act="accept" data-id="${esc(p.id)}">${icon("plus")}${esc(t("coffee.inbox.accept"))}</button>
           <button type="button" class="btn btn--secondary btn--sm" data-act="skip" data-id="${esc(p.id)}">${esc(t("coffee.inbox.skip"))}</button>`,
         after: `<p class="xsmall faint">${esc(t("coffee.inbox.ruleSkip"))}</p>`
@@ -1000,6 +1030,7 @@
       const m = items.find((x) => x.matchId === id);
       if (!m) return;
       if (act === "copy") { YL.ui.copy(m.contactMethod || ""); return; }
+      if (act === "copy-place") { YL.ui.copy((btn.dataset.which === "me" ? m.myMeetPlace : m.meetPlace) || ""); return; }
       if (act === "change") {
         const panel = card.querySelector('[data-role="change"]');
         panel.hidden = !panel.hidden;
@@ -1052,6 +1083,27 @@
       <h2 class="match-hero__title">${esc(t("coffee.matches.heroTitle"))}</h2>
       <p class="match-hero__sub">${esc(total > 1 ? t("coffee.matches.heroSubMore", { name: m.name, n: total }) : t("coffee.matches.heroSub", { name: m.name }))}</p>
     </header>`;
+  }
+  /* 在哪儿见（RFC 0003）：地点以被邀请的一方为准（invitee = 这次匹配那条邀请的接收人）。
+     被邀请一方的地点放在上面（和联系方式一样醒目），另一方的放在下面（小一号）；没填的说一句怎么办 */
+  function placeHtml(m, me) {
+    const mineMain = m.invitee === "me";
+    const them = { who: "them", value: m.meetPlace, mode: m.meetMode, label: mineMain ? t("coffee.matches.placeThem", { name: m.name }) : t("coffee.matches.placeThemInvitee", { name: m.name }) };
+    const mine = { who: "me", value: m.myMeetPlace, mode: me.meetMode, label: mineMain ? t("coffee.matches.placeMeInvitee") : t("coffee.matches.placeMe") };
+    const row = (x, minor) => {
+      const mode = MEET_MODES().indexOf(x.mode) >= 0 ? " · " + t("coffee.meet." + x.mode) : "";
+      const value = String(x.value || "").trim();
+      return `<div class="contact${minor ? " contact--minor" : ""}">
+          <div><p class="contact__label">${esc(x.label + mode)}</p>
+            ${value ? `<p class="contact__value">${esc(value)}</p>` : `<p class="contact__value contact__value--none">${esc(x.who === "me" ? t("coffee.matches.placeNoneMe") : t("coffee.matches.placeNoneThem"))}</p>`}</div>
+          ${value ? `<button type="button" class="btn btn--secondary btn--sm" data-act="copy-place" data-which="${x.who}" aria-label="${esc(t("coffee.matches.copyPlace", { label: x.label }))}">${icon("copy")}${esc(t("common.copy"))}</button>` : ""}
+        </div>`;
+    };
+    return `<div class="stack stack--s">
+        <h3 class="field__label">${esc(t("coffee.matches.placeTitle"))}</h3>
+        <p class="small muted">${esc(t("coffee.matches.placeRule"))}</p>
+        ${mineMain ? row(mine) + row(them, true) : row(them) + row(mine, true)}
+      </div>`;
   }
   // 每周轮的 id 是 "week-<周一日期>"（见 domain 的 weekStarting）：用日期称呼，不用后端写死的"本周…"
   function matchRound(m) {
@@ -1114,13 +1166,18 @@
       outcome = `<div class="person__foot"><span class="small faint">${esc(t("coffee.outcome.askEarly"))}</span>
         <div class="person__actions"><button type="button" class="btn btn--ghost btn--sm" data-act="outcome" data-met="1">${icon("check")}${esc(t("coffee.outcome.already"))}</button></div></div>`;
     }
+    const me = YL.auth.user() || {};
+    const resumes = (m.hasResume ? `<a class="btn btn--secondary btn--sm" href="${resumeUrl(m.id)}" target="_blank" rel="noopener">${icon("external")}${esc(t("coffee.matches.theirResume", { name: m.name }))}</a>` : "")
+      + (me.resume ? `<a class="btn btn--ghost btn--sm" href="${myResumeUrl()}" target="_blank" rel="noopener">${icon("external")}${esc(t("coffee.matches.myResume"))}</a>` : "");
     return `<article class="person" data-match="${mid}">
-      <div class="person__head">${avatar(m.name)}<div class="person__who"><h2 class="person__name" tabindex="-1" data-role="title">${esc(m.name)}</h2>${metaHtml(m)}</div></div>
+      <div class="person__head">${avatar(m.name)}<div class="person__who"><div class="person__title"><h2 class="person__name" tabindex="-1" data-role="title">${nameText(m)}</h2>${mentorPill(m)}</div>${metaHtml(m)}</div></div>
       <p class="small muted">${esc(t("coffee.matches.both", { round: matchRound(m) }))}</p>
       <div class="contact">
         <div><p class="contact__label">${esc(t("coffee.matches.contact"))}</p><p class="contact__value">${esc(m.contactMethod || "—")}</p></div>
         ${m.contactMethod ? `<button type="button" class="btn btn--secondary btn--sm" data-act="copy">${icon("copy")}${esc(t("common.copy"))}</button>` : ""}
       </div>
+      ${placeHtml(m, me)}
+      ${resumes ? `<div class="stack stack--s"><h3 class="field__label">${esc(t("coffee.matches.resumeTitle"))}</h3><div class="cluster">${resumes}</div></div>` : ""}
       ${when ? `<div class="stack stack--s">
         <h3 class="field__label">${esc(t("coffee.matches.timeTitle"))}</h3>
         ${when}

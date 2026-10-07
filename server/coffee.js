@@ -3,7 +3,8 @@
    - 列表与详情只返回公开字段；联系方式只在匹配成功后给双方；
    - 被跳过的邀请对发起人显示为"等待回复"，也不提前释放名额；轮次结束后统一显示"未回应"；
    - 给第三方看的"共同空闲时间"只扣掉查看者自己已约定的时段（扣掉对方的会暴露对方和谁约了什么时候）；
-   - 只有同意了当前版本隐私说明的人才会出现在池子、推荐和大模型请求里。
+   - 只有同意了当前版本隐私说明的人才会出现在池子、推荐和大模型请求里；
+   - 见面的具体地点（meetPlace）和联系方式一样，匹配后才给对方；简历按 canViewResume（RFC 0003 §4）判断，能看时卡片上才有 hasResume。
    周末时上一周（还能回复邀请、约时间）和下一周（正在报名）同时有效，所以"已约定的时段""两人之间的邀请""邀请名额"都跨轮次计算。 */
 const crypto = require("node:crypto");
 const { fail } = require("./http");
@@ -68,9 +69,31 @@ function install(app, ctx) {
     invites.filter((i) => i.status === "accepted" && i.slot).forEach((i) => { (out[i.fromId] = out[i.fromId] || []).push(i.slot); (out[i.toId] = out[i.toId] || []).push(i.slot); });
     return out;
   }
-  // 公开资料卡（不含邮箱、联系方式）
-  function card(u) {
-    return { id: u.id, name: u.name, identity: u.identity, stage: u.stage, gradYear: u.grad_year, job: u.job, city: u.city, answers: C.publicAnswers(ctx.questions, J(u.answers, {})) };
+  // 简历可见性要用的事实（给一整张列表一次查好）：viewer 和谁匹配过（任意一轮）、谁在还没结束的轮里邀请过 viewer
+  function viewOf(viewerId, invites) {
+    return { viewerId, matched: everMatched(viewerId), invitedBy: new Set(invites.filter((i) => i.toId === viewerId).map((i) => i.fromId)) };
+  }
+  const resumeOwner = (u) => ({ id: u.id, hasResume: !!u.resume_file, resumeVisibility: u.resume_visibility });
+  // 公开资料卡（不含邮箱、联系方式、见面的具体地点）。view = viewOf(...)；sameRound = 两人都在当前这一轮里。
+  // 能看简历时才带 hasResume: true；看不了就不带这个字段（不透露有没有简历）
+  function card(u, view, sameRound) {
+    const c = {
+      id: u.id, name: u.name, preferredName: u.preferred_name || "", identity: u.identity, stage: u.stage, gradYear: u.grad_year, program: u.program || "",
+      job: u.job, city: u.city, meetMode: u.meet_mode || "", role: u.role === "mentor" ? "mentor" : "member", freeText: u.free_text || "",
+      answers: C.publicAnswers(ctx.questions, J(u.answers, {}))
+    };
+    if (view && C.canViewResume({ owner: resumeOwner(u), viewerId: view.viewerId, matched: !!view.matched[C.pairKey(view.viewerId, u.id)], invitedByOwner: view.invitedBy.has(u.id), sameRound: !!sameRound })) c.hasResume = true;
+    return c;
+  }
+  // 下载简历时的判断：和卡片上的 hasResume 同一套事实
+  function canSeeResume(viewerId, owner, at) {
+    if (!owner || !owner.resume_file) return false;
+    const t = at || now();
+    const matched = !!db.get("SELECT 1 AS x FROM invites WHERE status = 'accepted' AND ((from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)) LIMIT 1", owner.id, viewerId, viewerId, owner.id);
+    const invitedByOwner = activeInvites(t).some((i) => i.fromId === owner.id && i.toId === viewerId);
+    const cur = currentRound(t);
+    const sameRound = !!cur && owner.id !== viewerId && db.get("SELECT COUNT(*) n FROM participations p JOIN users u ON u.id = p.user_id WHERE p.round_id = ? AND p.user_id IN (?, ?) AND u.profile_done_at IS NOT NULL AND u.consent_version = ?", cur.id, owner.id, viewerId, ctx.cfg.consentVersion).n === 2;
+    return C.canViewResume({ owner: resumeOwner(owner), viewerId, matched, invitedByOwner, sameRound });
   }
   const roundDTO = (r) => r && { id: r.id, kind: r.kind, title: r.title, themeTags: r.themeTags, startDate: r.startDate, endDate: r.endDate, timezone: r.timezone, dayStart: r.dayStart, dayEnd: r.dayEnd, slotMinutes: r.slotMinutes, gapMinutes: r.gapMinutes, cutoffHours: r.cutoffHours, recCount: r.recCount, maxOpenInvites: r.maxOpenInvites, openBrowse: r.openBrowse, poolThreshold: r.poolThreshold, post: r.post };
   // 两人之间的关系（跨所有还没结束的轮），给界面决定显示哪个按钮
@@ -145,9 +168,10 @@ function install(app, ctx) {
     const byId = Object.fromEntries(people.map((p) => [p.id, p]));
     const me = byId[meId];
     if (!me) return { enabled: true, engine: rec.engine, items: [] };
+    const view = viewOf(meId, all);
     const items = rec.items
       .filter((x) => byId[x.id] && rec.dismissed.indexOf(x.id) < 0)
-      .map((x) => Object.assign(card(byId[x.id].row), { reasons: x.reasons, overlap: overlapForViewer(round, me, byId[x.id], busy, t), relation: relation(all, meId, x.id, t) }));
+      .map((x) => Object.assign(card(byId[x.id].row, view, true), { reasons: x.reasons, overlap: overlapForViewer(round, me, byId[x.id], busy, t), relation: relation(all, meId, x.id, t) }));
     return { enabled: true, engine: rec.engine, items };
   }, { auth: "ready" });
 
@@ -170,16 +194,17 @@ function install(app, ctx) {
     requireJoined(round, req.user.id);
     if (!round.openBrowse) throw fail("forbidden", { reason: "browse_closed" });
     const q = (k) => (typeof req.query[k] === "string" ? req.query[k].slice(0, 40) : "");
-    const identity = q("identity"), goal = q("goal"), interest = q("interest"), field = q("field");
+    const identity = q("identity"), goal = q("goal"), interest = q("interest"), field = q("field"), mentor = q("mentor") === "1";
     const all = activeInvites(t), busy = busyMap(all);
     const people = participants(round), me = people.find((p) => p.id === req.user.id);
     if (!me) throw fail("forbidden", { reason: "not_joined" });
+    const view = viewOf(me.id, all);
     // 只能按公开的题目筛选
     const pub = (k) => (ctx.questions.find((x) => x.id === k) || {}).public;
     const has = (a, k, v) => !v || (pub(k) && [].concat(a[k] || []).indexOf(v) >= 0);
     return people
-      .filter((p) => p.id !== me.id && (!identity || p.identity === identity) && has(p.answers, "goals", goal) && has(p.answers, "interests", interest) && has(p.answers, "field", field))
-      .map((p) => Object.assign(card(p.row), { overlapCount: overlapForViewer(round, me, p, busy, t).length, relation: relation(all, me.id, p.id, t) }))
+      .filter((p) => p.id !== me.id && (!identity || p.identity === identity) && (!mentor || p.row.role === "mentor") && has(p.answers, "goals", goal) && has(p.answers, "interests", interest) && has(p.answers, "field", field))
+      .map((p) => Object.assign(card(p.row, view, true), { overlapCount: overlapForViewer(round, me, p, busy, t).length, relation: relation(all, me.id, p.id, t) }))
       .sort((a, b) => b.overlapCount - a.overlapCount);
   }, { auth: "ready" });
 
@@ -190,7 +215,7 @@ function install(app, ctx) {
     const other = people.find((p) => p.id === req.params.id), me = people.find((p) => p.id === req.user.id);
     if (!other || !me || other.id === me.id) throw fail("not_found");
     const all = activeInvites(t), busy = busyMap(all);
-    return Object.assign(card(other.row), { overlap: overlapForViewer(round, me, other, busy, t), relation: relation(all, me.id, other.id, t) });
+    return Object.assign(card(other.row, viewOf(me.id, all), true), { overlap: overlapForViewer(round, me, other, busy, t), relation: relation(all, me.id, other.id, t) });
   }, { auth: "ready" });
 
   app.route("POST", "/coffee/invites", async (req) => {
@@ -225,10 +250,11 @@ function install(app, ctx) {
     // 邀请本身在轮次结束前一直有效（对方清空了时间也还能回应），只是对方不在这一轮时看不了详情
     const cur = currentRound(t), inCur = new Set(cur ? participants(cur).map((p) => p.id) : []);
     const inRound = (otherId) => inCur.has(me) && inCur.has(otherId);
+    const view = viewOf(me, invites);
     return {
-      incoming: inc.filter((i) => u[i.fromId]).map((i) => Object.assign(card(u[i.fromId]), { inviteId: i.id, note: i.note, createdAt: i.createdAt, roundId: i.roundId, inRound: inRound(i.fromId) })),
+      incoming: inc.filter((i) => u[i.fromId]).map((i) => Object.assign(card(u[i.fromId], view, inRound(i.fromId)), { inviteId: i.id, note: i.note, createdAt: i.createdAt, roundId: i.roundId, inRound: inRound(i.fromId) })),
       // 被跳过的邀请对发起人不可见：轮次结束前一律显示"等待回复"
-      outgoing: out.filter((i) => u[i.toId]).map((i) => Object.assign(card(u[i.toId]), { inviteId: i.id, createdAt: i.createdAt, roundId: i.roundId, inRound: inRound(i.toId), state: "waiting" }))
+      outgoing: out.filter((i) => u[i.toId]).map((i) => Object.assign(card(u[i.toId], view, inRound(i.toId)), { inviteId: i.id, createdAt: i.createdAt, roundId: i.roundId, inRound: inRound(i.toId), state: "waiting" }))
     };
   }, { auth: "ready" });
 
@@ -248,7 +274,7 @@ function install(app, ctx) {
   app.route("GET", "/coffee/matches", (req) => {
     const t = now(), me = req.user.id;
     const rows = db.all("SELECT * FROM invites WHERE status = 'accepted' AND (from_id = ? OR to_id = ?) ORDER BY responded_at DESC LIMIT 100", me, me).map(toInvite);
-    const busy = busyMap(activeInvites(t)), rounds = {};
+    const active = activeInvites(t), busy = busyMap(active), rounds = {}, view = viewOf(me, active);
     return rows.map((m) => {
       const round = rounds[m.roundId] || (rounds[m.roundId] = roundById(m.roundId));
       const otherId = m.fromId === me ? m.toId : m.fromId, other = db.get("SELECT * FROM users WHERE id = ?", otherId);
@@ -259,9 +285,11 @@ function install(app, ctx) {
         const mine = participation(round.id, me), theirs = participation(round.id, otherId);
         available = C.overlap(round, J(mine && mine.slots, []), J(theirs && theirs.slots, []), (busy[me] || []).concat(busy[otherId] || []), t);
       }
-      return Object.assign(card(other), {
+      return Object.assign(card(other, view, false), {
         matchId: m.id, roundId: m.roundId, roundTitle: round.title, timezone: round.timezone,
         contactMethod: other.contact_method, // 匹配后才给
+        // 见面地点以被邀请的一方为准（RFC 0003 §2 第 9 条）：invitee = 这次匹配那条邀请的接收人
+        meetPlace: other.meet_place || "", myMeetPlace: req.user.meet_place || "", invitee: m.toId === me ? "me" : "them",
         slot: m.slot, scheduledBy: m.scheduledBy === me ? "me" : m.scheduledBy ? "them" : null, available,
         canSchedule: open && (!m.slot || Date.parse(t) < C.slotStart(round, m.slot)),
         myOutcome: m.outcomes[me] || null, canReport: !m.slot || Date.parse(t) >= C.slotStart(round, m.slot)
@@ -323,7 +351,7 @@ function install(app, ctx) {
     return publicRound(r, now());
   }, { auth: "none" });
 
-  return { currentRound, activeRounds, activeInvites, toRound, roundInvites, participants, participantCount, busyMap, roundById };
+  return { currentRound, activeRounds, activeInvites, toRound, roundInvites, participants, participantCount, busyMap, roundById, canSeeResume };
 }
 
 module.exports = { install };

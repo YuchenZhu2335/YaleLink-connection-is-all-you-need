@@ -27,8 +27,13 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const IDENTITIES = Object.freeze(["student", "alumni"]);
-  const STAGES = Object.freeze(["undergrad", "master", "phd"]);
+  // 身份：在读 / 校友 / 嘉宾（嘉宾 = 访问学者等，只有组织者登记过的嘉宾邮箱能选，见 RFC 0003）
+  const IDENTITIES = Object.freeze(["student", "alumni", "guest"]);
+  const STAGES = Object.freeze(["undergrad", "master", "phd", "postdoc", "other"]);
+  const STAGES_WITH_GRAD_YEAR = Object.freeze(["undergrad", "master", "phd"]); // 博士后、其他（如访问学生）不要求毕业年份
+  const MEET_MODES = Object.freeze(["online", "newhaven", "either"]);          // 线上 / 纽黑文线下 / 都可以
+  const RESUME_VISIBILITY = Object.freeze(["invited", "all"]);                 // 只给我邀请的人 / 所有能看到我资料的人
+  const ROLES = Object.freeze(["member", "mentor"]);
   const QUESTION_TYPES = Object.freeze(["single", "multi", "tags", "text"]);
   const INVITE_STATUSES = Object.freeze(["pending", "accepted", "skipped", "expired"]);
   const EMAIL_KINDS = Object.freeze(["match", "invite_digest", "reminder", "weekly", "event"]);
@@ -38,7 +43,8 @@
     cutoffHours: 12, recCount: 3, maxOpenInvites: 5, poolThreshold: 20, openBrowse: true
   });
   const LIMITS = Object.freeze({
-    name: 40, job: 80, city: 60, contactMethod: 80, note: 200, tagCustom: 12, feedbackMin: 5, feedbackMax: 1000, gradYearsAhead: 7
+    name: 40, job: 80, city: 60, contactMethod: 80, note: 200, tagCustom: 12, feedbackMin: 5, feedbackMax: 1000, gradYearsAhead: 7,
+    preferredName: 40, program: 80, meetPlace: 200, freeText: 500, resumeBytes: 5 * 1024 * 1024
   });
   const DAY = 86400000, HOUR = 3600000;
 
@@ -48,6 +54,12 @@
   // 单行字段（姓名、职位、城市、联系方式）：控制字符（换行、NUL…）和双向文字控制符换成空格，连续空白并成一个，再去掉首尾空白。
   // 防止名字里的换行混进邮件标题 / 正文，或用 RLO 之类把页面上整句话倒过来
   const line = (v) => (typeof v === "string" ? v.replace(/[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim() : "");
+  // 多行字段（自由留言）：保留换行（\r\n、\r、U+2028/2029 统一成 \n），制表符换成空格，其他控制字符和双向文字控制符直接去掉；
+  // 每行去掉行尾空白，连续 3 个以上换行并成 2 个（最多空一行），再去掉首尾空白
+  const para = (v) => (typeof v === "string" ? v
+    .replace(/\r\n?|[\u2028\u2029]/g, "\n").replace(/\t/g, " ")
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "")
+    .replace(/[ \u00A0\u3000]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() : "");
   const list = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]);
   const uniq = (a) => a.filter((x, i) => a.indexOf(x) === i);
   const deny = (code, reason, fields) => Object.assign({ ok: false, code }, reason ? { reason } : {}, fields ? { fields } : {});
@@ -182,32 +194,57 @@
     return out;
   }
   // year = 当前年份（在校生的毕业年份须在 year … year + gradYearsAhead）
-  function validateProfile(p, questions, year) {
+  // opts.isGuest：登录邮箱是组织者登记过的嘉宾邮箱（或不是耶鲁邮箱）——只有这时才能选身份"嘉宾"
+  function validateProfile(p, questions, year, opts) {
     p = p || {};
-    const f = {};
+    const f = {}, o = opts || {};
     const need = (key, max) => { const v = line(p[key]); if (!v) f[key] = "required"; else if (v.length > max) f[key] = "too_long"; };
+    const optional = (key, max, clean) => { if ((clean || line)(p[key]).length > max) f[key] = "too_long"; };
     need("name", LIMITS.name);
-    if (IDENTITIES.indexOf(p.identity) < 0) f.identity = "invalid";
-    if (p.identity === "student") {
+    optional("preferredName", LIMITS.preferredName);
+    if (IDENTITIES.indexOf(p.identity) < 0 || (p.identity === "guest" && !o.isGuest)) f.identity = "invalid";
+    else if (p.identity === "student") {
       if (STAGES.indexOf(p.stage) < 0) f.stage = "invalid";
-      const gy = Number(p.gradYear);
-      if (!Number.isInteger(gy) || gy < year || gy > year + LIMITS.gradYearsAhead) f.gradYear = "invalid";
-    }
-    if (p.identity === "alumni") { need("job", LIMITS.job); need("city", LIMITS.city); }
+      need("program", LIMITS.program);
+      // 本科 / 硕士 / 博士必填毕业年份；博士后、其他可以不填，填了也要合法
+      const gyMissing = p.gradYear == null || p.gradYear === "";
+      if (STAGES_WITH_GRAD_YEAR.indexOf(p.stage) >= 0 || !gyMissing) {
+        const gy = Number(p.gradYear);
+        if (gyMissing || !Number.isInteger(gy) || gy < year || gy > year + LIMITS.gradYearsAhead) f.gradYear = "invalid";
+      }
+    } else { need("job", LIMITS.job); need("city", LIMITS.city); } // 校友和嘉宾
+    if (p.meetMode == null || p.meetMode === "") f.meetMode = "required";
+    else if (MEET_MODES.indexOf(p.meetMode) < 0) f.meetMode = "invalid";
+    optional("meetPlace", LIMITS.meetPlace);
+    optional("freeText", LIMITS.freeText, para);
     need("contactMethod", LIMITS.contactMethod);
     Object.assign(f, validateAnswers(questions, p.answers));
     return { ok: !Object.keys(f).length, fields: f };
   }
-  // 只保留规定字段；另一身份的字段清空
+  // 只保留规定字段；另一身份的字段清空（在读才有学段、毕业年份、项目；校友和嘉宾才有工作、所在地区）
   function cleanProfile(p, questions) {
     const student = p.identity === "student";
+    const gy = student && p.gradYear != null && p.gradYear !== "" ? Number(p.gradYear) : null;
     return {
-      name: line(p.name), identity: p.identity,
-      stage: student ? p.stage : "", gradYear: student ? Number(p.gradYear) : null,
+      name: line(p.name), preferredName: line(p.preferredName), identity: p.identity,
+      stage: student ? p.stage : "", gradYear: Number.isInteger(gy) ? gy : null, program: student ? line(p.program) : "",
       job: student ? "" : line(p.job), city: student ? "" : line(p.city),
+      meetMode: MEET_MODES.indexOf(p.meetMode) >= 0 ? p.meetMode : "", meetPlace: line(p.meetPlace), freeText: para(p.freeText),
       contactMethod: line(p.contactMethod),
       answers: cleanAnswers(questions, p.answers)
     };
+  }
+  /* 简历谁能看（RFC 0003 §4）。纯判断，事实由调用方查好传入：
+     c = { owner: { id, hasResume, resumeVisibility }, viewerId,
+           matched（两人任意一轮匹配过）, invitedByOwner（owner 在还没结束的轮里邀请过 viewer，不管回没回）,
+           sameRound（两人都在当前这一轮的参与者里） }
+     没有简历 → 不能看；本人 → 能看；匹配过或 owner 邀请过 viewer → 能看；owner 设为 all 且同一轮 → 能看；其他 → 不能看 */
+  function canViewResume(c) {
+    const owner = c && c.owner;
+    if (!owner || !(owner.hasResume || owner.resumeFile)) return false;
+    if (c.viewerId && c.viewerId === owner.id) return true;
+    if (c.matched || c.invitedByOwner) return true;
+    return owner.resumeVisibility === "all" && !!c.sameRound;
   }
   // 资料卡上公开的答案（public: true 的题目）
   function publicAnswers(questions, answers) {
@@ -415,9 +452,9 @@
   }
 
   return {
-    IDENTITIES, STAGES, QUESTION_TYPES, INVITE_STATUSES, EMAIL_KINDS, REQUIRED_EMAILS, DEFAULT_ROUND, LIMITS,
+    IDENTITIES, STAGES, STAGES_WITH_GRAD_YEAR, MEET_MODES, RESUME_VISIBILITY, ROLES, QUESTION_TYPES, INVITE_STATUSES, EMAIL_KINDS, REQUIRED_EMAILS, DEFAULT_ROUND, LIMITS,
     slotTimes, roundDates, slotIds, isValidSlot, slotStart, localDate, addDays, isRoundOpen, isRoundOver, roundEndMs, weeklyRound, signupWeek, currentRound, validateRound,
-    validateQuestions, validateAnswers, cleanAnswers, validateProfile, cleanProfile, publicAnswers,
+    validateQuestions, validateAnswers, cleanAnswers, validateProfile, cleanProfile, publicAnswers, canViewResume, cleanLine: line,
     isClosed, validateSlots, overlap,
     inviteStatus, checkInvite, createInvite, validateInviteInput, roleOf, respond, canSeeContact, schedule, recordOutcome, pairKey,
     scorePair, recommend, recsEnabled, buildRerankMessages, parseRerank, anonymize,

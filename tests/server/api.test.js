@@ -57,7 +57,7 @@ test("资料：按问卷配置校验，另一身份的字段不保存", async ()
     await c.post("/auth/verify", { email: "d@yale.edu", code: lastCode(srv) });
     await c.post("/me/consent", { version: srv.cfg.consentVersion }); // 填资料之前要先同意隐私说明
     const bad = await c.post("/me/profile", { identity: "alumni", answers: { goals: ["x"] } });
-    assert.deepEqual(Object.keys(bad.error.fields).sort(), ["city", "contactMethod", "job", "name", "q_field", "q_goals", "q_interests"].sort());
+    assert.deepEqual(Object.keys(bad.error.fields).sort(), ["city", "contactMethod", "job", "meetMode", "name", "q_field", "q_goals", "q_interests"].sort());
     const ok = await c.post("/me/profile", Object.assign({}, PROFILE, { identity: "alumni", job: "PM", city: "NYC" }));
     assert.deepEqual([ok.data.identity, ok.data.stage, ok.data.gradYear], ["alumni", "", null]);
   } finally { await srv.close(); }

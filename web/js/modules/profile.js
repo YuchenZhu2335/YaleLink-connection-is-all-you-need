@@ -5,11 +5,20 @@
    #/profile/setup[?next=…]  首次填写；完成后回到 next（默认 coffee）。已完成则去 #/profile
    #/profile/setup?only=consent&next=…  只同意隐私说明（意见箱用），同意后回到 next
    #/profile                  我的
-   #/profile/edit             修改资料 */
+   #/profile/edit[?focus=resume]  修改资料（focus=resume：打开后滚到简历那一块）
+
+   资料字段与可见范围见 RFC 0003（docs/rfcs/0003-profile-fields-resume-mentors.md）：英文名、项目、学段（含博士后 / 其他）、
+   嘉宾身份（只有组织者登记过的嘉宾邮箱能选）、见面方式和具体地点、还有什么想说的、简历（选好文件就上传，不跟表单一起提交）。 */
 (function () {
   const { t, esc, L, icon, avatar } = YL.ui;
+  const D = YL.domain.coffee;
   const PREF_KEYS = ["invite_digest", "reminder", "weekly", "event"];
-  const STAGES = ["undergrad", "master", "phd"];
+  // 常量以共用规则（web/js/domain/coffee.js）为准；规则层还没更新到 RFC 0003 时用契约里的默认值
+  const STAGES = () => D.STAGES;
+  const GRAD_STAGES = () => D.STAGES_WITH_GRAD_YEAR || ["undergrad", "master", "phd"];
+  const MEET_MODES = () => D.MEET_MODES || ["online", "newhaven", "either"];
+  const RESUME_VIS = () => D.RESUME_VISIBILITY || ["invited", "all"];
+  const IDENTITIES = (me) => ["student", "alumni"].concat(me && me.isGuest ? ["guest"] : []);
   const RESEND_SECONDS = 60;
   const CODE_TTL_MS = 10 * 60000;
 
@@ -26,6 +35,10 @@
   let prefSeq = 0;
   // 用耶鲁邮箱重新登录回来后（#/profile?change=contact）自动打开"更换联系邮箱"：只用一次
   let openChangeOnce = false;
+  // 简历正在上传：{ user, pct }。模块级，切换语言重绘后接着显示进度；传完更新页面上现在的那一块
+  let uploading = null;
+  // 上一次上传的错误 { user, field?, error? }：切换语言重绘后照样显示（再选文件、传成功、换页时清掉）
+  let resumeErr = null;
 
   /* 切换语言时路由会在同一个地址上重绘：正在填的内容先记在 draft 里，重绘后填回去。
      draft = { user, path, profile（collectProfile 的结果）, adds（自定义标签输入框里没加进去的字）, contactOpen, contactEmail }
@@ -44,6 +57,7 @@
       if (YL.auth.isLoggedIn()) YL.ui.toast(t("profile.draftKept")); // 登录过期被带去登录页时不盖掉"登录已过期"的提示
     }
     draft = null;
+    resumeErr = null;
     lastPath = path;
     if (kept && kept.path === path) { draft = kept; kept = null; }
   });
@@ -93,11 +107,21 @@
   function clearOnEdit(e) { const f = e.target.closest && e.target.closest(".field.is-invalid"); if (f) clearOne(f); }
   function focusHeading(scope) { const h = scope.querySelector("[data-focus]"); if (h) h.focus(); }
   function optionLabel(q, v) { const o = (q.options || []).find((x) => x.id === v); return o ? L(o.label) : String(v); }
-  function identityLine(u) {
-    if (u.identity === "student") return [u.stage ? t("profile.stage." + u.stage) : "", u.gradYear ? t("profile.classOf", { year: u.gradYear }) : ""].filter(Boolean).join(" · ");
-    if (u.identity === "alumni") return [u.job, u.city].filter(Boolean).join(" · ");
-    return "";
+  // 身份行的各段（资料卡上用"·"隔开）：在读 = 学段 · 届别 · 项目；校友和嘉宾 = 工作 · 城市
+  function identityParts(u) {
+    if (u.identity === "student") {
+      const grad = GRAD_STAGES().indexOf(u.stage) >= 0;
+      return [u.stage ? t("profile.stage." + u.stage) : "", grad && u.gradYear ? t("profile.classOf", { year: u.gradYear }) : "", u.program || ""].filter(Boolean);
+    }
+    if (u.identity === "alumni" || u.identity === "guest") return [u.job, u.city].filter(Boolean);
+    return [];
   }
+  const sizeText = (bytes) => { const b = Number(bytes) || 0; return b >= 1048576 ? t("profile.resume.mb", { n: (b / 1048576).toFixed(1) }) : t("profile.resume.kb", { n: Math.max(1, Math.round(b / 1024)) }); };
+  const resumeMeta = (r) => t("profile.resume.meta", { size: sizeText(r.size), date: YL.ui.formatDate(r.uploadedAt) || "—" });
+  // 本人下载自己的简历（GET /me/resume），新标签页打开
+  const myResumeUrl = () => esc(YL.api.url("/me/resume"));
+  const mentorPill = () => `<span class="pill pill--mentor">${icon("cap")}${esc(t("profile.mentor"))}</span>`;
+  const aliasHtml = (u) => (u.preferredName ? ` <span class="person__alias">· ${esc(u.preferredName)}</span>` : "");
 
   /* ---------- 退出登录 ----------
      退出请求没成功（断网、服务器出错）时，后端的会话 Cookie 还有效：不能假装已经退出，恢复本地状态并提示。
@@ -373,49 +397,75 @@
 
   // lockedContact = true：这次是用联系邮箱登录的，联系方式旁边说明"改它需要用耶鲁邮箱登录"（contactMethodNeedsYale，按保存过的资料算，不按草稿）
   function profileFormHtml(u, submitLabel, cancelHref, lockedContact) {
+    const me = YL.auth.user() || {};
     const qs = YL.auth.questions();
     const a = u.answers || {};
     const id = u.identity || "";
     const lim = limits();
     const years = [];
     for (let y = thisYear(); y <= thisYear() + lim.gradYearsAhead; y++) years.push(y);
-    const input = (name, max, auto, hintKey, phKey) => `<div class="field" data-field="${name}">
-        <label class="field__label" for="pf-${name}">${esc(t("profile.form." + name))}${req}</label>
-        <input class="input" id="pf-${name}" name="${name}" maxlength="${max}"${auto ? ` autocomplete="${auto}"` : ""} value="${esc(u[name] || "")}"${phKey ? ` placeholder="${esc(t(phKey))}"` : ""}${hintKey ? ` aria-describedby="pf-${name}-hint"` : ""}>
-        ${hintKey ? `<p class="field__hint" id="pf-${name}-hint">${esc(t(hintKey))}</p>` : ""}
+    const optional = ` <span class="faint">${esc(t("common.optional"))}</span>`;
+    // o = { auto, hint（文案 key）, ph（占位符 key）, optional }
+    const input = (name, max, o) => `<div class="field" data-field="${name}">
+        <label class="field__label" for="pf-${name}">${esc(t("profile.form." + name))}${o.optional ? optional : req}</label>
+        <input class="input" id="pf-${name}" name="${name}" maxlength="${max}"${o.auto ? ` autocomplete="${o.auto}"` : ""} value="${esc(u[name] || "")}"${o.ph ? ` placeholder="${esc(t(o.ph))}"` : ""}${o.hint ? ` aria-describedby="pf-${name}-hint"` : ""}>
+        ${o.hint ? `<p class="field__hint" id="pf-${name}-hint">${esc(t(o.hint))}</p>` : ""}
       </div>`;
+    const shows = (when) => when.split(" ").indexOf(id) >= 0;
+    // 博士后、其他（如访问学生）不要求毕业年份；还没选学段时先显示
+    const showGrad = !u.stage || GRAD_STAGES().indexOf(u.stage) >= 0;
+    const free = typeof u.freeText === "string" ? u.freeText : "";
+    const freeMax = lim.freeText || 500;
     return `
       <form class="form" data-profile-form novalidate>
         ${YL.ui.sectionTitle(t("profile.form.aboutTitle"))}
-        ${input("name", lim.name, "name", "profile.form.nameHint", "")}
+        ${input("name", lim.name, { auto: "name", hint: "profile.form.nameHint" })}
+        ${input("preferredName", lim.preferredName || 40, { auto: "nickname", hint: "profile.form.preferredNameHint", ph: "profile.form.preferredNamePlaceholder", optional: true })}
         <div class="field" data-field="identity">
           <span class="field__label" id="pf-identity-l">${esc(t("profile.form.identity"))}${req}</span>
           <div class="radio-cards" role="radiogroup" aria-labelledby="pf-identity-l">
-            ${["student", "alumni"].map((v) => `<label class="radio-card"><input type="radio" name="identity" value="${v}"${id === v ? " checked" : ""}><span class="radio-card__box"><strong>${esc(t("profile.identity." + v))}</strong><span>${esc(t("profile.identity." + v + "Sub"))}</span></span></label>`).join("")}
+            ${IDENTITIES(me).map((v) => `<label class="radio-card"><input type="radio" name="identity" value="${v}"${id === v ? " checked" : ""}><span class="radio-card__box"><strong>${esc(t("profile.identity." + v))}</strong><span>${esc(t("profile.identity." + v + "Sub"))}</span></span></label>`).join("")}
           </div>
         </div>
-        <div class="stack" data-when="student"${id === "student" ? "" : " hidden"}>
+        <div class="stack" data-when="student"${shows("student") ? "" : " hidden"}>
           <div class="field" data-field="stage">
             <span class="field__label" id="pf-stage-l">${esc(t("profile.form.stage"))}${req}</span>
             <div class="chips" role="radiogroup" aria-labelledby="pf-stage-l">
-              ${STAGES.map((s) => `<label class="choice"><input type="radio" class="sr-only" name="stage" value="${s}"${u.stage === s ? " checked" : ""}><span class="chip">${esc(t("profile.stage." + s))}</span></label>`).join("")}
+              ${STAGES().map((s) => `<label class="choice"><input type="radio" class="sr-only" name="stage" value="${esc(s)}"${u.stage === s ? " checked" : ""}><span class="chip">${esc(t("profile.stage." + s))}</span></label>`).join("")}
             </div>
           </div>
-          <div class="field" data-field="gradYear">
+          <div class="field" data-field="gradYear" data-grad${showGrad ? "" : " hidden"}>
             <label class="field__label" for="pf-gradYear">${esc(t("profile.form.gradYear"))}${req}</label>
             <select class="select" id="pf-gradYear" name="gradYear">
               <option value="">${esc(t("profile.form.choose"))}</option>
               ${years.map((y) => `<option value="${y}"${Number(u.gradYear) === y ? " selected" : ""}>${esc(t("profile.classOf", { year: y }))}</option>`).join("")}
             </select>
           </div>
+          ${input("program", lim.program || 80, { auto: "off", hint: "profile.form.programHint", ph: "profile.form.programPlaceholder" })}
         </div>
-        <div class="stack" data-when="alumni"${id === "alumni" ? "" : " hidden"}>
-          ${input("job", lim.job, "organization-title", "", "profile.form.jobPlaceholder")}
-          ${input("city", lim.city, "address-level2", "", "profile.form.cityPlaceholder")}
+        <div class="stack" data-when="alumni guest"${shows("alumni guest") ? "" : " hidden"}>
+          ${input("job", lim.job, { auto: "organization-title", ph: "profile.form.jobPlaceholder" })}
+          ${input("city", lim.city, { auto: "address-level2", ph: "profile.form.cityPlaceholder" })}
         </div>
 
         ${YL.ui.sectionTitle(t("profile.form.chatTitle"), "", t("profile.form.chatSub"))}
         ${qs.map((q) => questionHtml(q, a)).join("")}
+        <div class="field" data-field="freeText">
+          <label class="field__label" for="pf-freeText">${esc(t("profile.form.freeText"))}${optional}</label>
+          <textarea class="textarea" id="pf-freeText" name="freeText" maxlength="${freeMax}" rows="4" placeholder="${esc(t("profile.form.freeTextPlaceholder"))}" aria-describedby="pf-freeText-hint pf-freeText-count">${esc(free)}</textarea>
+          <p class="field__hint" id="pf-freeText-hint">${esc(t("profile.form.freeTextHint"))}</p>
+          <p class="field__count" id="pf-freeText-count" data-count-for="freeText" data-max="${freeMax}">${free.length} / ${freeMax}</p>
+        </div>
+
+        ${YL.ui.sectionTitle(t("profile.form.meetTitle"), "", t("profile.form.meetSub"))}
+        <div class="field" data-field="meetMode">
+          <span class="field__label" id="pf-meetMode-l">${esc(t("profile.form.meetMode"))}${req}</span>
+          <div class="chips" role="radiogroup" aria-labelledby="pf-meetMode-l" aria-describedby="pf-meetMode-hint">
+            ${MEET_MODES().map((m) => `<label class="choice"><input type="radio" class="sr-only" name="meetMode" value="${esc(m)}"${u.meetMode === m ? " checked" : ""}><span class="chip">${esc(t("profile.meet." + m))}</span></label>`).join("")}
+          </div>
+          <p class="field__hint" id="pf-meetMode-hint">${esc(t("profile.form.meetModeHint"))}</p>
+        </div>
+        ${input("meetPlace", lim.meetPlace || 200, { auto: "off", hint: "profile.form.meetPlaceHint", ph: "profile.form.meetPlacePlaceholder", optional: true })}
 
         ${YL.ui.sectionTitle(t("profile.form.contactTitle"))}
         <div class="field" data-field="contactMethod">
@@ -424,6 +474,11 @@
           <p class="field__hint" id="pf-contactMethod-hint">${esc(t("profile.form.contactMethodHint"))}</p>
           ${lockedContact ? `<p class="field__hint" id="pf-contactMethod-yale">${esc(t("profile.form.contactMethodNeedsYale"))}</p>` : ""}
         </div>
+
+        <section class="stack" id="pf-resume-section" aria-labelledby="pf-resume-title" tabindex="-1">
+          <div class="section-head"><div><h2 class="section-title" id="pf-resume-title">${esc(t("profile.resume.title"))}</h2><p class="section-sub">${esc(t("profile.resume.sub"))}</p></div></div>
+          <div class="stack" data-resume></div>
+        </section>
 
         <div data-msg hidden></div>
         <div class="stack stack--s">
@@ -437,9 +492,18 @@
     const val = (n) => { const x = form.querySelector(`[name="${CSS.escape(n)}"]:not([type="radio"]):not([type="checkbox"])`); return x ? x.value.trim() : ""; };
     const checked = (n) => YL.ui.$$(`input[name="${CSS.escape(n)}"]:checked`, form).map((x) => x.value);
     const identity = checked("identity")[0] || "";
-    const body = { name: val("name"), identity, contactMethod: val("contactMethod"), answers: {} };
-    if (identity === "student") { body.stage = checked("stage")[0] || ""; body.gradYear = Number(val("gradYear")) || null; }
-    if (identity === "alumni") { body.job = val("job"); body.city = val("city"); }
+    const body = {
+      name: val("name"), preferredName: val("preferredName"), identity,
+      meetMode: checked("meetMode")[0] || "", meetPlace: val("meetPlace"), freeText: val("freeText"),
+      contactMethod: val("contactMethod"), answers: {}
+    };
+    if (identity === "student") {
+      body.stage = checked("stage")[0] || "";
+      body.program = val("program");
+      // 博士后、其他不填毕业年份（选择框藏起来了，里面的旧值不提交）
+      body.gradYear = GRAD_STAGES().indexOf(body.stage) >= 0 || !body.stage ? Number(val("gradYear")) || null : null;
+    }
+    if (identity === "alumni" || identity === "guest") { body.job = val("job"); body.city = val("city"); }
     YL.auth.questions().forEach((q) => {
       const n = "q_" + q.id;
       if (q.type === "text") body.answers[q.id] = val(n);
@@ -499,13 +563,20 @@
   }
 
   // onSaved(me) 在保存成功后调用
+  // 简历那一块（[data-resume]）有自己的事件（bindResume），不算进资料草稿，也不随表单提交
+  const inResume = (e) => !!(e.target.closest && e.target.closest("[data-resume]"));
   function bindProfileForm(form, ctx, onSaved) {
     YL.ui.$$("[data-tags]", form).forEach(updateTags);
     restoreAdds(form);
+    const resumeBox = form.querySelector("[data-resume]");
+    if (resumeBox) bindResume(resumeBox, ctx);
     let saving = false;
     form.addEventListener("change", (e) => {
+      if (inResume(e)) return;
       const x = e.target;
-      if (x.name === "identity") YL.ui.$$("[data-when]", form).forEach((s) => { s.hidden = s.dataset.when !== x.value; });
+      if (x.name === "identity") YL.ui.$$("[data-when]", form).forEach((s) => { s.hidden = s.dataset.when.split(" ").indexOf(x.value) < 0; });
+      // 博士后、其他：不要求毕业年份，藏起来
+      if (x.name === "stage") { const g = form.querySelector("[data-grad]"); if (g) { g.hidden = GRAD_STAGES().indexOf(x.value) < 0; if (g.hidden) clearOne(g); } }
       const tagsField = x.closest("[data-tags]");
       if (tagsField && x.type === "checkbox") updateTags(tagsField);
       const field = x.closest("[data-field]");
@@ -513,6 +584,7 @@
       rememberForm(form);
     });
     form.addEventListener("input", (e) => {
+      if (inResume(e)) return;
       const x = e.target;
       if (!x.matches("[data-add-input]")) clearOnEdit(e);
       if (x.tagName === "TEXTAREA") {
@@ -530,6 +602,7 @@
       }
     });
     form.addEventListener("click", (e) => {
+      if (inResume(e)) return;
       if (e.target.closest("[data-discard]")) { clearDraft(); return; } // 取消 = 不要这些修改了（不再留草稿）
       // 改联系方式被拒（reverify_yale）：用耶鲁邮箱重新登录后回到这一页，没保存的修改还在
       const relogin = e.target.closest('[data-act="relogin"]');
@@ -551,7 +624,7 @@
       if (saving) return;
       setMsg(form, "");
       const body = collectProfile(form);
-      const check = YL.domain.coffee.validateProfile(body, YL.auth.questions(), thisYear());
+      const check = D.validateProfile(body, YL.auth.questions(), thisYear(), { isGuest: !!(YL.auth.user() || {}).isGuest });
       if (!check.ok) { YL.ui.showFieldErrors(form, check.fields, "profile"); return; }
       YL.ui.clearFieldErrors(form);
       const btn = form.querySelector('button[type="submit"]');
@@ -572,6 +645,172 @@
       clearDraft();
       YL.auth.set(r.data);
       onSaved(r.data);
+    });
+  }
+
+  /* ---------- 简历（RFC 0003 §4）：选好文件就上传（POST /me/resume，请求体就是 PDF），不跟资料表单一起提交 ----------
+     状态（uploading、resumeErr）在文件开头 */
+  const resumeMax = () => limits().resumeBytes || 5 * 1024 * 1024;
+  const resumeBox = () => document.querySelector("[data-resume]");
+  function resumeHtml() {
+    const me = YL.auth.user() || {};
+    const r = me.resume;
+    const busy = uploading && uploading.user === me.id;
+    const fileInput = `<input type="file" class="sr-only" id="pf-resume-file" accept="application/pdf,.pdf" tabindex="-1" aria-hidden="true" data-resume-file>`;
+    if (busy) {
+      return `<div class="field" data-field="resume">
+          <div class="filebox" aria-live="polite">
+            <span class="filebox__icon">${icon("refresh")}</span>
+            <div class="filebox__main">
+              <p class="filebox__name">${esc(t("profile.resume.uploading", { pct: uploading.pct }))}</p>
+              <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${esc(uploading.pct)}" aria-label="${esc(t("profile.resume.progress"))}"><span data-pct="${esc(uploading.pct)}"></span></div>
+            </div>
+          </div>
+        </div>`;
+    }
+    if (!r) {
+      return `<div class="field" data-field="resume">
+          <div class="filebox filebox--empty">
+            <span class="filebox__icon">${icon("plus")}</span>
+            <div class="filebox__main"><p class="filebox__name">${esc(t("profile.resume.none"))}</p><p class="filebox__meta">${esc(t("profile.resume.rules"))}</p></div>
+            <button type="button" class="btn btn--secondary btn--sm" data-resume-act="pick">${esc(t("profile.resume.upload"))}</button>
+          </div>
+          ${fileInput}
+        </div>`;
+    }
+    const vis = RESUME_VIS().indexOf(r.visibility) >= 0 ? r.visibility : "invited";
+    return `<div class="field" data-field="resume">
+        <div class="filebox">
+          <span class="filebox__icon">${icon("check")}</span>
+          <div class="filebox__main"><p class="filebox__name">resume.pdf</p><p class="filebox__meta">${esc(resumeMeta(r))}</p></div>
+        </div>
+        <div class="cluster">
+          <a class="btn btn--secondary btn--sm" href="${myResumeUrl()}" target="_blank" rel="noopener">${icon("external")}${esc(t("profile.resume.view"))}</a>
+          <button type="button" class="btn btn--secondary btn--sm" data-resume-act="pick">${icon("refresh")}${esc(t("profile.resume.replace"))}</button>
+          <button type="button" class="btn btn--danger-ghost btn--sm" data-resume-act="delete">${icon("trash")}${esc(t("profile.resume.delete"))}</button>
+        </div>
+        ${fileInput}
+      </div>
+      <div class="field" data-field="resumeVisibility">
+        <span class="field__label" id="pf-rv-l">${esc(t("profile.resume.visTitle"))}</span>
+        <div class="radio-cards" role="radiogroup" aria-labelledby="pf-rv-l">
+          ${RESUME_VIS().map((v) => `<label class="radio-card"><input type="radio" name="resumeVisibility" value="${esc(v)}"${vis === v ? " checked" : ""}><span class="radio-card__box"><strong>${esc(t("profile.resume.vis." + v))}</strong><span>${esc(t("profile.resume.vis." + v + "Sub"))}</span></span></label>`).join("")}
+        </div>
+      </div>`;
+  }
+  // 重画页面上现在的简历区；progress 只更新进度条（上传中不整块重画，读屏不会一直重念）
+  function paintResume(box, focusSel) {
+    if (!box || !box.isConnected) return;
+    const me = YL.auth.user();
+    box.innerHTML = resumeHtml();
+    // 进度条宽度是动态值：渲染后用 CSSOM 设置（HTML 里不写 style 属性）
+    YL.ui.$$(".progress > [data-pct]", box).forEach((el) => { el.style.width = el.dataset.pct + "%"; });
+    const field = box.querySelector('[data-field="resume"]');
+    if (field && resumeErr && me && resumeErr.user === me.id) {
+      field.classList.add("is-invalid");
+      field.insertAdjacentHTML("beforeend", `<p class="field__error" role="alert">${esc(resumeErrorText(resumeErr))}</p>`);
+    }
+    if (focusSel) { const f = box.querySelector(focusSel); if (f) f.focus(); }
+  }
+  // 字段错误（not_pdf / too_large / empty）用 profile.field.resume.<码>；其他（每天上传次数、网络……）用通用错误文案
+  function resumeErrorText(err) {
+    if (err.field) { const k = "profile.field.resume." + err.field; return t(k) !== k ? t(k) : t("profile.field.invalid"); }
+    const e = err.error || {};
+    if (e.code === "rate_limited") return t("profile.resume.err.rate_limited");
+    if (e.code === "too_large") return t("profile.field.resume.too_large");
+    return YL.ui.errorText(e, "profile");
+  }
+  function paintProgress() {
+    const box = resumeBox();
+    if (!box || !uploading) return;
+    const bar = box.querySelector(".progress"), fill = box.querySelector(".progress > [data-pct]"), label = box.querySelector(".filebox__name");
+    if (!bar || !fill) { paintResume(box); return; }
+    bar.setAttribute("aria-valuenow", String(uploading.pct));
+    fill.style.width = uploading.pct + "%";
+    if (label) label.textContent = t("profile.resume.uploading", { pct: uploading.pct });
+  }
+  // 先在浏览器里查一遍（类型、大小、空文件、文件开头是不是 %PDF-），省得传了 5 MB 才被拒；最终以后端为准
+  async function checkPdf(file) {
+    if (!file.size) return "empty";
+    if (file.size > resumeMax()) return "too_large";
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")) return "not_pdf";
+    try {
+      const head = file.slice(0, 5);
+      if (typeof head.text === "function" && (await head.text()) !== "%PDF-") return "not_pdf";
+    } catch (e) { /* 读不了就交给后端判断 */ }
+    return "";
+  }
+  async function startUpload(file, ctx) {
+    const me = YL.auth.user();
+    if (!me || uploading) return;
+    resumeErr = null;
+    const bad = await checkPdf(file);
+    if (bad) { resumeErr = { user: me.id, field: bad }; paintResume(resumeBox(), "[data-resume-act=pick]"); return; }
+    uploading = { user: me.id, pct: 0 };
+    paintResume(resumeBox());
+    const r = await YL.api.upload("/me/resume", file, "application/pdf", (f) => { if (uploading) { uploading.pct = Math.round(f * 100); paintProgress(); } });
+    uploading = null;
+    const now = YL.auth.user();
+    if (!now || now.id !== me.id) return; // 中途退出登录了
+    if (r.ok) {
+      YL.auth.set(r.data);
+      paintResume(resumeBox(), "[data-resume-act=pick]");
+      YL.ui.toast(t("profile.resume.uploaded"), "success");
+      return;
+    }
+    const e = r.error || {};
+    if (isNeedsConsent(e)) { if (ctx.isActive()) reconsent(ctx); else YL.ui.toast(t("profile.err.needs_consent"), "error"); return; }
+    resumeErr = e.fields && e.fields.resume ? { user: me.id, field: e.fields.resume } : { user: me.id, error: e };
+    paintResume(resumeBox(), "[data-resume-act=pick]");
+  }
+  // 简历区的事件（只绑一次；里面的内容每次重画）
+  function bindResume(box, ctx) {
+    paintResume(box);
+    let saving = false;
+    box.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-resume-act]");
+      if (!b || b.disabled || uploading) return;
+      const act = b.dataset.resumeAct;
+      if (act === "pick") { const input = box.querySelector("[data-resume-file]"); if (input) input.click(); return; }
+      if (act === "delete") {
+        if (!(await YL.ui.confirm(t("profile.resume.deleteConfirm"), { danger: true, ok: t("profile.resume.delete") })) || !ctx.isActive()) { if (b.isConnected) b.focus(); return; }
+        YL.ui.busy(b, true);
+        const r = await YL.api.post("/me/resume/delete");
+        if (!ctx.isActive()) return;
+        YL.ui.busy(b, false);
+        if (!r.ok) {
+          if (isNeedsConsent(r.error)) { reconsent(ctx); return; }
+          YL.ui.toast(YL.ui.errorText(r.error, "profile"), "error");
+          return;
+        }
+        resumeErr = null;
+        YL.auth.set(r.data);
+        paintResume(box, "[data-resume-act=pick]");
+        YL.ui.toast(t("profile.resume.deleted"));
+      }
+    });
+    box.addEventListener("change", async (e) => {
+      const x = e.target;
+      if (x.matches("[data-resume-file]")) {
+        const file = x.files && x.files[0];
+        x.value = ""; // 同一个文件改过之后可以再选一次
+        if (file) startUpload(file, ctx);
+        return;
+      }
+      if (x.name !== "resumeVisibility" || saving) return;
+      saving = true;
+      const r = await YL.api.post("/me/resume/settings", { visibility: x.value });
+      saving = false;
+      if (!ctx.isActive()) return;
+      if (!r.ok) {
+        const me = YL.auth.user() || {};
+        YL.ui.$$('input[name="resumeVisibility"]', box).forEach((i) => { i.checked = !!me.resume && i.value === me.resume.visibility; });
+        if (isNeedsConsent(r.error)) { reconsent(ctx); return; }
+        YL.ui.toast(YL.ui.errorText(r.error, "profile"), "error");
+        return;
+      }
+      YL.auth.set(r.data);
+      YL.ui.toast(t("profile.resume.visSaved." + (r.data.resume && r.data.resume.visibility === "all" ? "all" : "invited")), "success");
     });
   }
 
@@ -704,7 +943,8 @@
       const d = getDraft();
       contactWidget(body.querySelector("[data-cw-host]"), ctx, {
         mode: pendingFor(u) ? "code" : "enter",
-        email: d && d.contactEmail != null ? d.contactEmail : u.contactEmail || "",
+        // 嘉宾的登录邮箱通常就是常用邮箱：先填上（和登录邮箱相同时后端直接算已验证，不再发验证码）
+        email: d && d.contactEmail != null ? d.contactEmail : u.contactEmail || (u.isGuest ? u.loginEmail || "" : ""),
         reloginNext: "profile/setup?next=" + encodeURIComponent(next),
         focus: false,
         onDone: done,
@@ -736,11 +976,12 @@
   /* ---------- #/profile 我的 ---------- */
   const meHead = () => `<header class="page-head"><div class="page-head__text"><h1 class="page-title">${esc(t("profile.me.title"))}</h1><p class="page-sub">${esc(t("profile.me.sub"))}</p></div></header>`;
 
+  const meetTag = (mode) => (MEET_MODES().indexOf(mode) >= 0 ? `<span class="tag tag--meet">${icon("mapPin")}${esc(t("profile.meet." + mode))}</span>` : "");
   function personCard(u) {
     const qs = YL.auth.questions().filter((q) => q.public);
     const a = u.answers || {};
-    const meta = [identityLine(u)];
-    const tagHtml = [];
+    const meta = identityParts(u);
+    const tagHtml = [meetTag(u.meetMode)].filter(Boolean);
     const intros = [];
     qs.forEach((q) => {
       const v = a[q.id];
@@ -748,25 +989,53 @@
       if (q.type === "single") { if (v) meta.push(optionLabel(q, v)); return; }
       (Array.isArray(v) ? v : []).forEach((x) => tagHtml.push(YL.ui.tag(optionLabel(q, x), q.type === "multi" ? "tag--goal" : "")));
     });
+    const name = u.name || YL.auth.displayName();
+    // 只有匹配的人能看到的两项：联系方式、具体地点
+    const privateRow = (label, value) => `<div class="stack stack--s">
+            <span class="xsmall faint">${esc(label)}</span>
+            <span class="person__overlap">${icon("lock")}<span>${esc(value)}</span></span>
+          </div>`;
     return `
       <article class="person" aria-labelledby="me-name">
         <div class="person__head">
-          ${avatar(u.name || YL.auth.displayName(), "lg")}
+          ${avatar(name, "lg")}
           <div class="person__who">
-            <p class="person__name" id="me-name">${esc(u.name || YL.auth.displayName())}</p>
+            <div class="person__title"><p class="person__name" id="me-name">${esc(name)}${aliasHtml(u)}</p>${u.role === "mentor" ? mentorPill() : ""}</div>
             <p class="person__meta">${meta.filter(Boolean).map((m) => `<span>${esc(m)}</span>`).join("")}</p>
           </div>
         </div>
         ${tagHtml.length ? `<div class="tags">${tagHtml.join("")}</div>` : ""}
         ${intros.length ? intros.map((x) => `<p class="person__intro">${esc(x)}</p>`).join("") : `<p class="person__intro faint">${esc(t("profile.me.noIntro"))}</p>`}
+        ${u.freeText ? `<div class="stack stack--s"><span class="xsmall faint">${esc(t("profile.form.freeText"))}</span><p class="person__text">${esc(u.freeText)}</p></div>` : ""}
         <div class="person__foot">
-          <div class="stack stack--s">
-            <span class="xsmall faint">${esc(t("profile.me.contactMethodLabel"))}</span>
-            <span class="person__overlap">${icon("lock")}<span>${esc(u.contactMethod || "")}</span></span>
+          <div class="stack">
+            ${privateRow(t("profile.me.contactMethodLabel"), u.contactMethod || "")}
+            ${u.meetPlace ? privateRow(t("profile.me.meetPlaceLabel"), u.meetPlace) : ""}
           </div>
           <div class="person__actions"><a class="btn btn--secondary" href="#/profile/edit">${icon("edit")}${esc(t("profile.me.edit"))}</a></div>
         </div>
       </article>`;
+  }
+  // "我的"里的简历状态：有没有、多大、谁能看；上传 / 替换 / 删除在修改资料页（#/profile/edit?focus=resume）
+  function resumeCard(u) {
+    const r = u.resume;
+    const vis = r && r.visibility === "all" ? "all" : "invited";
+    return `<section class="card stack" aria-labelledby="me-resume">
+        <div class="cluster cluster--between">
+          <h2 class="card__title" id="me-resume">${esc(t("profile.resume.cardTitle"))}</h2>
+          ${r ? `<span class="pill pill--success">${icon("check")}${esc(t("profile.resume.has"))}</span>` : `<span class="pill">${esc(t("profile.resume.hasNot"))}</span>`}
+        </div>
+        ${r ? `<ul class="list">
+            <li class="list__item"><span class="muted">${icon("check")}</span><div class="list__main"><span class="list__title">resume.pdf</span><span class="list__sub">${esc(resumeMeta(r))}</span></div></li>
+            <li class="list__item"><span class="muted">${icon("lock")}</span><div class="list__main"><span class="list__title">${esc(t("profile.resume.vis." + vis))}</span><span class="list__sub">${esc(t("profile.resume.vis." + vis + "Sub"))}</span></div></li>
+          </ul>
+          <div class="cluster">
+            <a class="btn btn--secondary btn--sm" href="${myResumeUrl()}" target="_blank" rel="noopener">${icon("external")}${esc(t("profile.resume.view"))}</a>
+            <a class="btn btn--ghost btn--sm" href="#/profile/edit?focus=resume">${icon("edit")}${esc(t("profile.resume.manage"))}</a>
+          </div>`
+        : `<p class="small muted">${esc(t("profile.resume.cardNone"))}</p>
+          <div><a class="btn btn--secondary btn--sm" href="#/profile/edit?focus=resume">${icon("plus")}${esc(t("profile.resume.upload"))}</a></div>`}
+      </section>`;
   }
 
   const switchHtml = (attrs, title, sub, checked, disabled) =>
@@ -799,6 +1068,8 @@
               ${personCard(u)}
             </section>
 
+            ${resumeCard(u)}
+
             <section class="card stack" aria-labelledby="me-account">
               <h2 class="card__title" id="me-account" tabindex="-1">${esc(t("profile.account.title"))}</h2>
               <ul class="list">
@@ -807,7 +1078,7 @@
                   <div class="list__main">
                     <span class="list__sub">${esc(t("profile.account.loginEmail"))}</span>
                     <span class="list__title">${emailHtml(u.loginEmail)}</span>
-                    <span class="xsmall faint">${esc(t("profile.account.loginEmailHint"))}</span>
+                    <span class="xsmall faint">${esc(u.isGuest ? t("profile.account.loginEmailGuest") : t("profile.account.loginEmailHint"))}</span>
                   </div>
                 </li>
                 <li class="list__item">
@@ -1026,6 +1297,11 @@
       YL.ui.toast(t("common.saved"), "success");
       YL.router.navigate("profile");
     });
+    // 从"我的"里的简历卡片过来：直接滚到简历那一块
+    if (ctx.query.focus === "resume") {
+      const sec = root.querySelector("#pf-resume-section");
+      if (sec) { sec.scrollIntoView({ block: "start" }); sec.focus({ preventScroll: true }); }
+    }
   }
 
   registerModule({

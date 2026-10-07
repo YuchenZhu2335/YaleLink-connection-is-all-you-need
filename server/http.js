@@ -18,6 +18,10 @@ const PARAM = /^[A-Za-z0-9_-]{1,64}$/; // 路径里的 id / 动作：只收这�
 const MAX_BODY = 100 * 1024;
 const SESSION_DAYS = 30;
 
+// 不走 JSON 信封的响应（如下载简历）：处理函数返回 reply(buffer, headers)，headers 覆盖默认的安全头
+class RawReply { constructor(body, headers) { this.body = body; this.headers = headers || {}; } }
+const reply = (body, headers) => new RawReply(body, headers);
+
 class ApiError extends Error {
   constructor(code, extra) { super(code); this.code = STATUS[code] ? code : "internal"; this.extra = extra || null; }
 }
@@ -40,7 +44,9 @@ function createApp(ctx) {
     const hops = String(req.headers["x-forwarded-for"] || "").split(",").map((s) => s.trim()).filter(Boolean);
     return hops.length ? hops[hops.length - 1] : direct;
   }
-  // meta: { auth, audit, html(data) 返回网页, form: 允许表单提交（只用于签名链接）, localOnly: 只允许本机访问 }
+  // meta: { auth, audit, html(data) 返回网页, form: 允许表单提交（只用于签名链接）, localOnly: 只允许本机访问,
+  //         raw: { type, max, field, badType }：请求体就是一个文件（如简历 PDF）——只收这一种 Content-Type、单独的大小上限，
+  //              处理函数拿到的 body 是 Buffer；类型不对 → invalid + fields[field] = badType，超过上限 → too_large + fields[field] = "too_large" }
   // auth: "user"（默认，登录即可）| "none" | "consented"（还要同意当前版本的隐私说明：会写入个人信息的接口）
   //       | "ready"（还要填好联系邮箱和资料：约咖啡）| "admin"
   function route(method, pattern, handler, meta) {
@@ -94,15 +100,18 @@ function createApp(ctx) {
   function send(res, status, body, headers) {
     if (res.headersSent) return;
     res.writeHead(status, Object.assign({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, SECURITY_HEADERS, headers));
-    res.end(typeof body === "string" ? body : JSON.stringify(body));
+    res.end(typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body));
   }
-  // 读请求体：超过 100KB 停止收集并返回 413；JSON 必须是对象；form = 允许 application/x-www-form-urlencoded
-  function readBody(req, form) {
+  // 读请求体：超过 100KB 停止收集并返回 413；JSON 必须是对象；form = 允许 application/x-www-form-urlencoded；
+  // rawCfg = 文件上传路由的 meta.raw：按它的上限收集，原样返回 Buffer
+  function readBody(req, form, rawCfg) {
+    const max = rawCfg ? rawCfg.max : MAX_BODY;
     return new Promise((resolve, reject) => {
       let size = 0, over = false; const chunks = [];
-      req.on("data", (c) => { size += c.length; if (size > MAX_BODY) over = true; else chunks.push(c); });
+      req.on("data", (c) => { size += c.length; if (size > max) { over = true; chunks.length = 0; } else chunks.push(c); });
       req.on("end", () => {
-        if (over) return reject(fail("too_large"));
+        if (over) return reject(fail("too_large", rawCfg ? { fields: { [rawCfg.field]: "too_large" } } : null));
+        if (rawCfg) return resolve(Buffer.concat(chunks));
         const raw = Buffer.concat(chunks).toString("utf8");
         if (form) return resolve(Object.fromEntries(new URLSearchParams(raw)));
         if (!raw) return resolve({});
@@ -157,9 +166,12 @@ function createApp(ctx) {
       if (r.localOnly && !LOOPBACK.test(req.socket.remoteAddress || "")) throw fail("not_found");
       who = sessionFrom(req);
       user = who && who.user; actor = user && user.id;
-      // 防跨站提交：写请求必须是 JSON，且来源（如有）必须是本站。签名链接（如退订）例外，它们不依赖登录状态
+      // 防跨站提交：写请求必须是 JSON，且来源（如有）必须是本站。签名链接（如退订）例外，它们不依赖登录状态。
+      // 文件上传路由只收它声明的那一种类型（如 application/pdf）：和 JSON 一样不是"简单请求"的类型，跨站页面发不出来（浏览器要先预检）
       if (req.method !== "GET" && !r.form) {
-        if (!/^application\/json/.test(req.headers["content-type"] || "")) throw fail("invalid", { reason: "json_required" });
+        const ctype = String(req.headers["content-type"] || "");
+        if (r.raw) { if (ctype.split(";")[0].trim().toLowerCase() !== r.raw.type) throw fail("invalid", { fields: { [r.raw.field]: r.raw.badType } }); }
+        else if (!/^application\/json/.test(ctype)) throw fail("invalid", { reason: "json_required" });
         const origin = req.headers.origin;
         if (origin && origin !== ctx.cfg.publicUrl && origin !== "http://" + req.headers.host && origin !== "https://" + req.headers.host) throw fail("forbidden", { reason: "bad_origin" });
       }
@@ -168,11 +180,12 @@ function createApp(ctx) {
       if (r.auth === "admin" && !ctx.isAdmin(user, who.session)) throw fail("forbidden");
       if (r.auth === "consented" && !ctx.isConsented(user)) throw fail("forbidden", { reason: "needs_consent" });
       if (r.auth === "ready" && !ctx.isReady(user)) throw fail("forbidden", { reason: "profile_incomplete" });
-      const body = req.method === "GET" ? {} : await readBody(req, r.form);
+      const body = req.method === "GET" ? {} : await readBody(req, r.form, r.raw);
       const query = Object.fromEntries(url.searchParams.entries());
       const setActor = (id) => (actor = id); // 登录接口在请求开始时还没有用户，登录成功后记下是谁
       const data = await r.handler({ params, query, body, user, session: who && who.session, req, res, ip: clientIp(req), startSession, endSession, setActor });
-      result = { status: 200, body: { ok: true, data: data === undefined ? null : data } };
+      if (data instanceof RawReply) result = { status: 200, body: { ok: true, data: null }, raw: data };
+      else result = { status: 200, body: { ok: true, data: data === undefined ? null : data } };
     } catch (e) {
       if (!(e instanceof ApiError)) { console.error(e); e = fail("internal"); }
       result = { status: STATUS[e.code], body: { ok: false, error: Object.assign({}, e.extra, { code: e.code }) } };
@@ -186,10 +199,11 @@ function createApp(ctx) {
       const [status, page] = htmlPage(result.status, result.body.ok ? r.html(result.body.data, { query: Object.fromEntries(url.searchParams.entries()), escHtml }) : "<p>链接无效或已过期。<br>This link is invalid or has expired.</p>");
       return send(res, status, page, { "Content-Type": "text/html; charset=utf-8" });
     }
+    if (result.raw) return send(res, 200, result.raw.body, result.raw.headers);
     send(res, result.status, result.body, result.body.error && result.body.error.code === "too_large" ? { Connection: "close" } : null);
   }
 
   return { route, handle, routes: () => routes.map((r) => ({ method: r.method, pattern: r.pattern, auth: r.auth })) };
 }
 
-module.exports = { createApp, fail, ApiError, sha256, escHtml, LOOPBACK };
+module.exports = { createApp, fail, reply, ApiError, sha256, escHtml, LOOPBACK };

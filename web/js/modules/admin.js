@@ -6,6 +6,7 @@
      #/admin/rounds                 轮次列表（每周轮 + 活动轮）
      #/admin/rounds/new             新建活动轮
      #/admin/rounds/:id             编辑活动轮（每周轮自动生成，不能改）
+     #/admin/members                成员：嘉宾邮箱登记、导师标记（RFC 0003 §5）
      #/admin/feedback               意见箱
      #/admin/emails                 发信记录
      #/admin/audit                  审计日志
@@ -22,6 +23,7 @@
   const TABS = [
     { id: "overview", labelKey: "admin.tab.overview" },
     { id: "rounds", labelKey: "admin.tab.rounds" },
+    { id: "members", labelKey: "admin.tab.members" },
     { id: "feedback", labelKey: "admin.tab.feedback" },
     { id: "emails", labelKey: "admin.tab.emails" },
     { id: "audit", labelKey: "admin.tab.audit" }
@@ -106,7 +108,7 @@
   // 给 HTML 片段的第一个元素加上 data-list（列表区，筛选时整块替换）
   const asList = (html) => String(html).replace(/^\s*<([a-z]+)/, "<$1 data-list");
 
-  // 每个管理页的页头：标题、标签页、"只看汇总"的说明
+  // 每个管理页的页头：标题、标签页、"只看汇总"的说明（opts.note 换成这一页自己的说明）
   function head(active, opts) {
     const o = opts || {};
     return `<header class="page-head">
@@ -117,7 +119,7 @@
         ${o.refresh ? `<button type="button" class="btn btn--secondary btn--sm" data-act="refresh">${icon("refresh")}<span>${esc(t("admin.refresh"))}</span></button>` : ""}
       </header>
       ${YL.ui.tabs(TABS, active, "#/admin")}
-      ${noticeHtml("notice--info", "", `<p>${esc(t("admin.privacy"))}</p>`)}`;
+      ${noticeHtml("notice--info", "", `<p>${esc(o.note || t("admin.privacy"))}</p>`)}`;
   }
   // 页面内容直接接在页头后面、作为 .page 的子元素：.table-wrap 必须是网格的直接子元素，
   // 手机上表格才会在框里横向滚动，而不是把整页撑宽（中间多一层网格就会被表格的最小宽度撑开）。
@@ -321,6 +323,148 @@
     },
     empty: () => empty("shield", t("admin.audit.empty"))
   };
+
+  /* ---------- 成员：嘉宾邮箱、导师（RFC 0003 §5）----------
+     嘉宾邮箱：登记一个非耶鲁邮箱（可带备注），这个邮箱就能收验证码登录；删除登记后不能再登录新会话（已有账号和数据保留）。
+     导师：按登录邮箱标记或取消，资料卡上显示"导师"，找人可以只看导师；没有其他特权。 */
+  const GUEST_NOTE_MAX = 60;
+  function membersHtml(d) {
+    const guests = Array.isArray(d.guests) ? d.guests : [];
+    const mentors = Array.isArray(d.mentors) ? d.mentors : [];
+    const faintDash = `<span class="faint">${DASH}</span>`;
+    const guestRows = guests.map((g) => `<tr>
+        <td><span class="break-all">${esc(g.email)}</span></td>
+        <td>${g.note ? esc(g.note) : faintDash}</td>
+        <td><div class="cluster">${g.registered ? pill(t("admin.members.registered"), "pill--success", "check") + (g.name ? `<span class="small muted">${esc(g.name)}</span>` : "") : pill(t("admin.members.notRegistered"))}</div></td>
+        <td class="nowrap">${esc(when(g.createdAt))}</td>
+        <td><button type="button" class="btn btn--danger-ghost btn--sm" data-act="guest-del" data-email="${esc(g.email)}" aria-label="${esc(t("admin.members.removeGuestLabel", { email: g.email }))}">${icon("trash")}<span>${esc(t("admin.members.remove"))}</span></button></td>
+      </tr>`);
+    const mentorRows = mentors.map((x) => `<tr>
+        <td><div class="cluster"><strong>${esc(x.name || DASH)}</strong>${pill(t("admin.members.mentor"), "pill--mentor", "cap")}</div></td>
+        <td><span class="break-all">${esc(x.loginEmail || "")}</span></td>
+        <td><button type="button" class="btn btn--secondary btn--sm" data-act="mentor-off" data-email="${esc(x.loginEmail || "")}" aria-label="${esc(t("admin.members.unmarkLabel", { name: x.name || x.loginEmail || "" }))}"><span>${esc(t("admin.members.unmark"))}</span></button></td>
+      </tr>`);
+    const emailInput = (id, label, ph) => `<div class="field" data-field="email">
+        <label class="field__label" for="${id}">${esc(label)}<span class="req" aria-hidden="true">*</span></label>
+        <input class="input" type="email" id="${id}" name="email" maxlength="120" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(ph)}">
+      </div>`;
+    const formError = `<div class="notice notice--danger" role="alert" data-form-error hidden>${icon("alertCircle")}<div class="notice__body"><p data-form-error-text></p></div></div>`;
+    return `<section class="stack" aria-labelledby="am-guests">
+        <div class="section-head"><div><h2 class="section-title" id="am-guests" tabindex="-1">${esc(t("admin.members.guestsTitle"))}</h2><p class="section-sub">${esc(t("admin.members.guestsSub"))}</p></div></div>
+        <form class="card" data-members-form="guest" novalidate><div class="stack">
+          <div class="grid-cards">
+            ${emailInput("am-guest-email", t("admin.members.guestEmail"), "name@example.com")}
+            <div class="field" data-field="note">
+              <label class="field__label" for="am-guest-note">${esc(t("admin.members.note"))} <span class="faint">${esc(t("common.optional"))}</span></label>
+              <input class="input" id="am-guest-note" name="note" maxlength="${GUEST_NOTE_MAX}" autocomplete="off" placeholder="${esc(t("admin.members.notePh"))}">
+            </div>
+          </div>
+          ${formError}
+          <div class="cluster cluster--end"><button type="submit" class="btn btn--primary btn--sm">${icon("plus")}<span>${esc(t("admin.members.addGuest"))}</span></button></div>
+        </div></form>
+        ${guests.length
+          ? table(t("admin.members.guestsTitle"), [esc(t("admin.col.email")), esc(t("admin.col.note")), esc(t("admin.col.account")), esc(t("admin.col.added")), esc(t("admin.col.actions"))], guestRows)
+          : `<div class="card card--quiet">${empty("mail", t("admin.members.noGuests"), t("admin.members.noGuestsBody"))}</div>`}
+      </section>
+      <section class="stack" aria-labelledby="am-mentors">
+        <div class="section-head"><div><h2 class="section-title" id="am-mentors" tabindex="-1">${esc(t("admin.members.mentorsTitle"))}</h2><p class="section-sub">${esc(t("admin.members.mentorsSub"))}</p></div></div>
+        <form class="card" data-members-form="mentor" novalidate><div class="stack">
+          ${emailInput("am-mentor-email", t("admin.members.mentorEmail"), "name@yale.edu")}
+          ${formError}
+          <div class="cluster cluster--end"><button type="submit" class="btn btn--primary btn--sm">${icon("cap")}<span>${esc(t("admin.members.markMentor"))}</span></button></div>
+        </div></form>
+        ${mentors.length
+          ? table(t("admin.members.mentorsTitle"), [esc(t("admin.col.name")), esc(t("admin.col.loginEmail")), esc(t("admin.col.actions"))], mentorRows)
+          : `<div class="card card--quiet">${empty("user", t("admin.members.noMentors"), t("admin.members.noMentorsBody"))}</div>`}
+      </section>`;
+  }
+  function renderMembers(root, ctx) {
+    const m = mount(root, "members", { refresh: true, note: t("admin.members.privacy") });
+    const refreshBtn = () => m.page.querySelector('[data-act="refresh"]');
+    let seq = 0, loaded = false;
+    // 重新加载列表时，表单里还没提交的内容留着（keep = false：刚提交成功，清空）
+    function formValues() {
+      const v = {};
+      m.page.querySelectorAll("[data-members-form] input").forEach((i) => { v[i.id] = i.value; });
+      return v;
+    }
+    async function load(opts) {
+      const o = opts || {};
+      const mine = ++seq;
+      const keep = o.keep === false ? {} : formValues();
+      const hadFocus = document.activeElement === refreshBtn();
+      if (!loaded) m.paint(YL.ui.spinner());
+      m.busy(true);
+      YL.ui.busy(refreshBtn(), true);
+      const r = await YL.api.get("/admin/members");
+      if (!ctx.isActive() || mine !== seq) return;
+      loaded = !!r.ok;
+      m.paint(r.ok ? membersHtml(r.data || {}) : errorBox(r.error));
+      Object.keys(keep).forEach((id) => { const i = m.page.querySelector("#" + CSS.escape(id)); if (i) i.value = keep[id]; });
+      if (hadFocus) refreshBtn().focus();
+      else if (o.focus === "page") m.page.focus();
+      else if (o.focus) { const f = m.page.querySelector(o.focus); if (f) f.focus(); }
+    }
+    function showFormError(form, text) {
+      const box = form.querySelector("[data-form-error]");
+      box.querySelector("[data-form-error-text]").textContent = text;
+      box.hidden = false;
+    }
+    m.page.addEventListener("submit", async (e) => {
+      const form = e.target.closest("[data-members-form]");
+      if (!form) return;
+      e.preventDefault();
+      const kind = form.dataset.membersForm;
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn.disabled) return;
+      YL.ui.clearFieldErrors(form);
+      form.querySelector("[data-form-error]").hidden = true;
+      const email = form.elements.email.value.trim();
+      if (!email) { YL.ui.showFieldErrors(form, { email: "required" }, "admin"); return; }
+      YL.ui.busy(btn, true);
+      const r = kind === "guest"
+        ? await YL.api.post("/admin/guests", { email, note: form.elements.note.value.trim() })
+        : await YL.api.post("/admin/mentors", { email, mentor: true });
+      if (!ctx.isActive()) return;
+      YL.ui.busy(btn, false);
+      if (!r.ok) {
+        const er = r.error || {};
+        if (er.fields && Object.keys(er.fields).length) YL.ui.showFieldErrors(form, er.fields, "admin");
+        else if (er.code === "not_found") YL.ui.showFieldErrors(form, { email: "not_found" }, "admin");
+        else showFormError(form, YL.ui.errorText(er, "admin"));
+        return;
+      }
+      YL.ui.toast(kind === "guest" ? t("admin.members.guestAdded", { email }) : t("admin.members.mentorMarked", { email }), "success");
+      load({ keep: false, focus: kind === "guest" ? "#am-guest-email" : "#am-mentor-email" });
+    });
+    m.page.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b || b.disabled) return;
+      const act = b.dataset.act;
+      if (act === "refresh") { load(); return; }
+      if (act === "retry") { load({ focus: "page" }); return; }
+      if (act !== "guest-del" && act !== "mentor-off") return;
+      const email = b.dataset.email;
+      if (act === "guest-del") {
+        const ok = await YL.ui.confirm(t("admin.members.removeGuestConfirm", { email }), { danger: true, ok: t("admin.members.remove") });
+        if (!ctx.isActive()) return;
+        if (!ok) { if (b.isConnected) b.focus(); return; }
+      }
+      YL.ui.busy(b, true);
+      const r = act === "guest-del"
+        ? await YL.api.post("/admin/guests/delete", { email })
+        : await YL.api.post("/admin/mentors", { email, mentor: false });
+      if (!ctx.isActive()) return;
+      if (!r.ok) {
+        if (b.isConnected) { YL.ui.busy(b, false); b.focus(); }
+        YL.ui.toast(YL.ui.errorText(r.error, "admin"), "error");
+        return;
+      }
+      YL.ui.toast(act === "guest-del" ? t("admin.members.guestRemoved", { email }) : t("admin.members.mentorUnmarked", { email }));
+      load({ focus: act === "guest-del" ? "#am-guests" : "#am-mentors" });
+    });
+    return load();
+  }
 
   const VIEWS = {
     overview: { path: "/admin/overview", overview: true },
@@ -770,6 +914,7 @@
       if (!YL.auth.isAdmin()) return renderGate(root, ctx);
       const sub = ctx.sub || "overview";
       if (sub === "rounds" && ctx.id) return renderForm(root, ctx, ctx.id === "new" ? null : ctx.id);
+      if (sub === "members") return renderMembers(root, ctx);
       const view = VIEWS[sub];
       if (!view) {
         mount(root, null).paint(empty("info", t("admin.notFound"), "", `<a class="btn btn--primary" href="#/admin">${esc(t("admin.backToOverview"))}</a>`));

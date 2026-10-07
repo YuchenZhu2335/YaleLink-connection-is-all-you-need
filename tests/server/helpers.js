@@ -8,11 +8,12 @@ const { build } = require("../../server/app");
 
 function start(extra) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yl-"));
-  const app = build(Object.assign({ DB_FILE: path.join(dir, "t.sqlite"), QUIET: "1", DISABLE_JOBS: "1", ADMIN_EMAILS: "admin@yale.edu", MAIL_DRIVER: "console", NODE_ENV: "test" }, extra));
+  // DATA_DIR 也放在临时目录：简历文件（DATA_DIR/resumes/）不会写进仓库里的 server/data
+  const app = build(Object.assign({ DB_FILE: path.join(dir, "t.sqlite"), DATA_DIR: dir, QUIET: "1", DISABLE_JOBS: "1", ADMIN_EMAILS: "admin@yale.edu", MAIL_DRIVER: "console", NODE_ENV: "test" }, extra));
   const server = http.createServer((req, res) => app.app.handle(req, res));
   return new Promise((resolve) => server.listen(0, () => {
     const base = `http://127.0.0.1:${server.address().port}/api`;
-    resolve(Object.assign(app, { base, close: () => new Promise((r) => server.close(() => { app.db.close(); r(); })) }));
+    resolve(Object.assign(app, { base, dir, close: () => new Promise((r) => server.close(() => { app.db.close(); r(); })) }));
   }));
 }
 // 一个"浏览器"：自己保存 Cookie
@@ -24,10 +25,17 @@ function client(srv) {
     if (set) cookie = set.split(";")[0];
     return Object.assign(await r.json(), { status: r.status });
   }
-  return { get: (p) => call("GET", p), post: (p, b) => call("POST", p, b) };
+  // 原样的请求（上传文件、下载文件）：返回 fetch 的 Response，带上这个"浏览器"的 Cookie
+  const raw = (method, p, body, headers) => fetch(srv.base + p, { method, headers: Object.assign({ cookie }, headers), body });
+  // 上传：请求体就是文件本身（默认 application/pdf）
+  async function upload(p, buf, type, headers) {
+    const r = await raw("POST", p, buf, Object.assign({ "Content-Type": type || "application/pdf" }, headers));
+    return Object.assign(await r.json(), { status: r.status });
+  }
+  return { get: (p) => call("GET", p), post: (p, b) => call("POST", p, b), raw, upload };
 }
 const lastCode = (srv, to) => { const m = srv.ctx.mailer.outbox.find((x) => !to || x.to === to); return m && /(\d{6})/.exec(m.subject)[1]; };
-const PROFILE = { name: "测试同学", identity: "student", stage: "master", gradYear: new Date().getFullYear() + 1, contactMethod: "微信 test", answers: { goals: ["industry"], interests: ["hiking", "coffee"], field: "tech" } };
+const PROFILE = { name: "测试同学", identity: "student", stage: "master", gradYear: new Date().getFullYear() + 1, program: "Statistics and Data Science", meetMode: "either", contactMethod: "微信 test", answers: { goals: ["industry"], interests: ["hiking", "coffee"], field: "tech" } };
 async function signUp(srv, email, profile) {
   const c = client(srv);
   await c.post("/auth/request-code", { email });

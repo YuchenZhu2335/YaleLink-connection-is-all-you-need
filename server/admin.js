@@ -1,5 +1,5 @@
 /* 管理员接口（管理员名单 = 环境变量 ADMIN_EMAILS）。查看本身也记审计。
-   能看：汇总统计、活动轮、意见箱、发信记录、审计日志；看不到：任何人的联系方式。 */
+   能看：汇总统计、活动轮、意见箱、发信记录、审计日志、成员（嘉宾邮箱登记、导师名单）；看不到：任何人的联系方式和简历。 */
 const crypto = require("node:crypto");
 const { fail } = require("./http");
 
@@ -76,6 +76,52 @@ function install(app, ctx, coffee) {
     if (existing) db.run("UPDATE rounds SET status = ?, title = ?, theme_tags = ?, config = ?, start_date = ?, end_date = ?, post = ?, updated_at = ? WHERE id = ?", status, JSON.stringify(title), JSON.stringify(themeTags), JSON.stringify(config), b.startDate, b.endDate, JSON.stringify(post), t, id);
     else db.run("INSERT INTO rounds (id, kind, status, title, theme_tags, config, start_date, end_date, post, created_at, updated_at) VALUES (?, 'event', ?, ?, ?, ?, ?, ?, ?, ?, ?)", id, status, JSON.stringify(title), JSON.stringify(themeTags), JSON.stringify(config), b.startDate, b.endDate, JSON.stringify(post), t, t);
     return coffee.roundById(id);
+  }, { auth: "admin" });
+
+  /* ---------- 成员：嘉宾邮箱、导师（RFC 0003 §5） ---------- */
+  // 嘉宾：登记过的邮箱，registered = 已经用它注册了账号（name 是账号上的名字）；导师：role = mentor 的账号
+  function members() {
+    return {
+      guests: db.all("SELECT g.email, g.note, g.created_at, u.id AS uid, u.name FROM guest_emails g LEFT JOIN users u ON u.login_email = g.email ORDER BY g.created_at DESC, g.email LIMIT 500")
+        .map((r) => ({ email: r.email, note: r.note || "", createdAt: r.created_at, registered: !!r.uid, name: r.name || null })),
+      mentors: db.all("SELECT id, name, login_email FROM users WHERE role = 'mentor' ORDER BY name, login_email LIMIT 500")
+        .map((r) => ({ id: r.id, name: r.name, loginEmail: r.login_email }))
+    };
+  }
+  // 后台表单里的邮箱：和登录同一套规则（去空格、小写、严格格式）
+  function emailField(v) {
+    const email = ctx.normEmail(v);
+    if (!ctx.validEmail(email)) throw fail("invalid", { fields: { email: "invalid" } });
+    return email;
+  }
+  const GUEST_NOTE_MAX = 60;
+
+  app.route("GET", "/admin/members", () => members(), { auth: "admin", audit: true });
+
+  // 登记嘉宾邮箱（已登记的就更新备注）。登记之后这个邮箱就能收验证码登录，身份可以选"嘉宾"
+  app.route("POST", "/admin/guests", (req) => {
+    const email = emailField(req.body.email);
+    const note = C.cleanLine(req.body.note);
+    if (note.length > GUEST_NOTE_MAX) throw fail("invalid", { fields: { note: "too_long" } });
+    db.run("INSERT INTO guest_emails (email, note, added_by, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (email) DO UPDATE SET note = excluded.note", email, note, req.user.id, now());
+    return members();
+  }, { auth: "admin" });
+
+  // 删除登记：之后不能再建立新会话；已有账号和数据保留（需要的话本人再注销）
+  app.route("POST", "/admin/guests/delete", (req) => {
+    const email = emailField(req.body.email);
+    if (!db.run("DELETE FROM guest_emails WHERE email = ?", email).changes) throw fail("not_found");
+    return members();
+  }, { auth: "admin" });
+
+  // 按登录邮箱标记 / 取消导师。导师照常自己注册、选时间、收发邀请，只是卡片上有标记、"找人"可以只看导师
+  app.route("POST", "/admin/mentors", (req) => {
+    const email = emailField(req.body.email);
+    if (typeof req.body.mentor !== "boolean") throw fail("invalid", { fields: { mentor: "invalid" } });
+    const u = db.get("SELECT id FROM users WHERE login_email = ?", email);
+    if (!u) throw fail("not_found");
+    db.run("UPDATE users SET role = ?, updated_at = ? WHERE id = ?", req.body.mentor ? "mentor" : "member", now(), u.id);
+    return Object.assign(members(), { id: u.id }); // id：审计记下标记的是谁
   }, { auth: "admin" });
 
   app.route("GET", "/admin/feedback", () => db.all("SELECT f.id, f.kind, f.text, f.created_at, u.name FROM feedback f LEFT JOIN users u ON u.id = f.user_id ORDER BY f.id DESC LIMIT 200"), { auth: "admin", audit: true });

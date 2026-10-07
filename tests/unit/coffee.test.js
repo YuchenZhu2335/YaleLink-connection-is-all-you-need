@@ -59,11 +59,11 @@ test("重叠时间：两人都有空、没被别的约占用、离开始超过 1
 });
 
 test("资料：身份决定必填项；联系方式必填；问卷答案按配置校验", () => {
-  const base = { name: "王同学", contactMethod: "微信 abc", answers: answers() };
-  assert.deepEqual(R.validateProfile(Object.assign({ identity: "student", stage: "master", gradYear: "2027" }, base), QUESTIONS, 2026), { ok: true, fields: {} });
+  const base = { name: "王同学", meetMode: "online", contactMethod: "微信 abc", answers: answers() };
+  assert.deepEqual(R.validateProfile(Object.assign({ identity: "student", stage: "master", gradYear: "2027", program: "Economics" }, base), QUESTIONS, 2026), { ok: true, fields: {} });
   assert.deepEqual(R.validateProfile(Object.assign({ identity: "alumni", job: "PM", city: "NYC" }, base), QUESTIONS, 2026).ok, true);
-  const bad = R.validateProfile({ identity: "student", stage: "postdoc", gradYear: 2040, answers: { goals: ["gossip"], interests: ["a", "b", "c", "d", "e", "f"], field: ["tech", "law"] } }, QUESTIONS, 2026).fields;
-  assert.deepEqual(bad, { name: "required", stage: "invalid", gradYear: "invalid", contactMethod: "required", q_goals: "invalid", q_interests: "too_many", q_field: "invalid" });
+  const bad = R.validateProfile({ identity: "student", stage: "gossip", gradYear: 2040, answers: { goals: ["gossip"], interests: ["a", "b", "c", "d", "e", "f"], field: ["tech", "law"] } }, QUESTIONS, 2026).fields;
+  assert.deepEqual(bad, { name: "required", stage: "invalid", program: "required", gradYear: "invalid", meetMode: "required", contactMethod: "required", q_goals: "invalid", q_interests: "too_many", q_field: "invalid" });
   assert.equal(R.validateAnswers(QUESTIONS, answers({ interests: ["自定义标签"] })).q_interests, undefined, "允许自定义标签");
   assert.equal(R.validateAnswers(QUESTIONS, answers({ interests: ["这是一个超过十二个字的自定义标签"] })).q_interests, "invalid");
 });
@@ -80,9 +80,111 @@ test("单行字段：换行、控制字符、双向文字控制符换成空格�
     contactMethod: "  微信\tabc⁦x⁩ ", answers: answers()
   }, QUESTIONS);
   assert.deepEqual([p.name, p.job, p.city, p.contactMethod], ["Amy 账号异常 Bcc: x@example.com", "evil.exe مرحبا", "Zed", "微信 abc x"]);
-  const base = { identity: "student", stage: "master", gradYear: 2027, contactMethod: "x", answers: answers() };
+  const base = { identity: "student", stage: "master", gradYear: 2027, program: "Economics", meetMode: "online", contactMethod: "x", answers: answers() };
   assert.equal(R.validateProfile(Object.assign({}, base, { name: "‮\n\u0000 " }), QUESTIONS, 2026).fields.name, "required", "只有控制字符的名字算没填");
   assert.equal(R.validateProfile(Object.assign({}, base, { name: "A" + "\n".repeat(60) + "B" }), QUESTIONS, 2026).ok, true, "换行合并后不超长");
+});
+
+/* ---------- RFC 0003：原始报名表字段、自由留言、简历、导师与嘉宾 ---------- */
+const prof = (o) => Object.assign({ name: "王五", meetMode: "either", contactMethod: "微信 abc", answers: answers() }, o);
+const student = (o) => prof(Object.assign({ identity: "student", stage: "master", gradYear: 2027, program: "Statistics and Data Science" }, o));
+
+test("资料常量：身份多了「嘉宾」，学段多了「博士后」「其他」，见面方式三选一，简历两种可见范围，角色分成员和导师", () => {
+  assert.deepEqual(R.IDENTITIES, ["student", "alumni", "guest"]);
+  assert.deepEqual(R.STAGES, ["undergrad", "master", "phd", "postdoc", "other"]);
+  assert.deepEqual(R.STAGES_WITH_GRAD_YEAR, ["undergrad", "master", "phd"]);
+  assert.deepEqual(R.MEET_MODES, ["online", "newhaven", "either"]);
+  assert.deepEqual(R.RESUME_VISIBILITY, ["invited", "all"]);
+  assert.deepEqual(R.ROLES, ["member", "mentor"]);
+  assert.deepEqual([R.LIMITS.preferredName, R.LIMITS.program, R.LIMITS.meetPlace, R.LIMITS.freeText, R.LIMITS.resumeBytes], [40, 80, 200, 500, 5 * 1024 * 1024]);
+});
+
+test("身份「嘉宾」只有嘉宾邮箱能选（opts.isGuest）；嘉宾和校友一样要填工作和所在地区", () => {
+  const guest = prof({ identity: "guest", job: "Visiting Scholar", city: "New Haven" });
+  assert.deepEqual(R.validateProfile(guest, QUESTIONS, 2026).fields, { identity: "invalid" }, "不传 opts 就不是嘉宾");
+  assert.deepEqual(R.validateProfile(guest, QUESTIONS, 2026, { isGuest: false }).fields, { identity: "invalid" });
+  assert.deepEqual(R.validateProfile(guest, QUESTIONS, 2026, { isGuest: true }), { ok: true, fields: {} });
+  assert.deepEqual(R.validateProfile(prof({ identity: "guest" }), QUESTIONS, 2026, { isGuest: true }).fields, { job: "required", city: "required" });
+  assert.equal(R.validateProfile(student(), QUESTIONS, 2026, { isGuest: true }).ok, true, "嘉宾也可以选在读 / 校友");
+  assert.equal(R.validateProfile(prof({ identity: "admin" }), QUESTIONS, 2026, { isGuest: true }).fields.identity, "invalid");
+});
+
+test("在读：学段和项目必填；本科、硕士、博士要毕业年份，博士后和「其他」不要求（填了也要合法）", () => {
+  assert.deepEqual(R.validateProfile(student({ program: " " }), QUESTIONS, 2026).fields, { program: "required" });
+  assert.deepEqual(R.validateProfile(student({ program: "x".repeat(81) }), QUESTIONS, 2026).fields, { program: "too_long" });
+  for (const stage of ["undergrad", "master", "phd"]) assert.deepEqual(R.validateProfile(student({ stage, gradYear: "" }), QUESTIONS, 2026).fields, { gradYear: "invalid" }, stage);
+  for (const stage of ["postdoc", "other"]) {
+    assert.equal(R.validateProfile(student({ stage, gradYear: null }), QUESTIONS, 2026).ok, true, stage + " 不填毕业年份");
+    assert.equal(R.validateProfile(student({ stage, gradYear: "" }), QUESTIONS, 2026).ok, true, stage + " 空字符串也算没填");
+    assert.deepEqual(R.validateProfile(student({ stage, gradYear: 1990 }), QUESTIONS, 2026).fields, { gradYear: "invalid" }, stage + " 填了就要合法");
+  }
+  assert.deepEqual(R.validateProfile(student({ stage: "postdoc", gradYear: "" }), QUESTIONS, 2026).fields, {});
+});
+
+test("见面方式必填，只能是线上 / 纽黑文线下 / 都可以", () => {
+  assert.deepEqual(R.validateProfile(student({ meetMode: "" }), QUESTIONS, 2026).fields, { meetMode: "required" });
+  assert.deepEqual(R.validateProfile(student({ meetMode: undefined }), QUESTIONS, 2026).fields, { meetMode: "required" });
+  assert.deepEqual(R.validateProfile(student({ meetMode: "moon" }), QUESTIONS, 2026).fields, { meetMode: "invalid" });
+  for (const meetMode of R.MEET_MODES) assert.equal(R.validateProfile(student({ meetMode }), QUESTIONS, 2026).ok, true, meetMode);
+});
+
+test("英文名、具体地点、自由留言选填，超长报 too_long（长度按清洗后的值算）", () => {
+  assert.equal(R.validateProfile(student({ preferredName: "", meetPlace: "", freeText: "" }), QUESTIONS, 2026).ok, true);
+  const long = R.validateProfile(student({ preferredName: "W".repeat(41), meetPlace: "z".repeat(201), freeText: "字".repeat(501) }), QUESTIONS, 2026).fields;
+  assert.deepEqual(long, { preferredName: "too_long", meetPlace: "too_long", freeText: "too_long" });
+  assert.equal(R.validateProfile(student({ freeText: "a" + "\n".repeat(600) + "b" }), QUESTIONS, 2026).ok, true, "连续换行合并后不超长");
+  assert.equal(R.validateProfile(student({ freeText: "字".repeat(500) }), QUESTIONS, 2026).ok, true, "正好 500 字可以");
+});
+
+test("清洗资料：新字段单行的用 line()；在读才有学段、毕业年份、项目，校友和嘉宾才有工作、所在地区", () => {
+  const s = R.cleanProfile(student({ preferredName: " Wu\n", meetPlace: "Zoom\r\nhttps://example.com/j/1", job: "PM", city: "NYC" }), QUESTIONS);
+  assert.deepEqual([s.preferredName, s.meetPlace, s.program, s.stage, s.gradYear, s.job, s.city], ["Wu", "Zoom https://example.com/j/1", "Statistics and Data Science", "master", 2027, "", ""]);
+  const g = R.cleanProfile(prof({ identity: "guest", stage: "phd", gradYear: 2027, program: "CS", job: " Visiting Scholar ", city: "New Haven" }), QUESTIONS);
+  assert.deepEqual([g.stage, g.gradYear, g.program, g.job, g.city], ["", null, "", "Visiting Scholar", "New Haven"]);
+  const pd = R.cleanProfile(student({ stage: "postdoc", gradYear: "" }), QUESTIONS);
+  assert.deepEqual([pd.stage, pd.gradYear], ["postdoc", null], "博士后没填毕业年份存 null");
+  assert.equal(R.cleanProfile(student({ meetMode: "moon" }), QUESTIONS).meetMode, "", "不认识的见面方式不保存");
+  assert.deepEqual(Object.keys(R.cleanProfile(student({ role: "mentor", resumeFile: "../../x" }), QUESTIONS)).sort(),
+    ["answers", "city", "contactMethod", "freeText", "gradYear", "identity", "job", "meetMode", "meetPlace", "name", "preferredName", "program", "stage"], "角色、简历之类的字段不能通过资料改");
+});
+
+test("自由留言：保留换行；去掉控制字符和改变文字方向的字符；连续 3 个以上换行并成 2 个；去掉首尾空白", () => {
+  const f = (freeText) => R.cleanProfile(student({ freeText }), QUESTIONS).freeText;
+  assert.equal(f("第一行\n第二行"), "第一行\n第二行");
+  assert.equal(f("a\r\nb\rc\u2028d"), "a\nb\nc\nd", "各种换行统一成 \\n");
+  assert.equal(f("a\n\n\n\n\nb"), "a\n\nb");
+  assert.equal(f("a\n  \n \u3000\n\nb"), "a\n\nb", "只有空白的行也算空行");
+  assert.equal(f("\u202Eevil\u2066x\u2069\u0000\u0007ok\u200F"), "evilxok");
+  assert.equal(f("a\tb"), "a b", "制表符换成空格");
+  assert.equal(f("  \n\n 你好 \n\n "), "你好");
+  assert.equal(f(42), "", "不是字符串就当没填");
+});
+
+test("简历谁能看：没有简历谁都看不了；本人能看；匹配过或 TA 邀请过我能看；设为「所有人」时同一轮的人也能看；其他人看不了", () => {
+  const owner = (o) => Object.assign({ id: "o", hasResume: true, resumeVisibility: "invited" }, o);
+  const can = (o, c) => R.canViewResume(Object.assign({ owner: owner(o), viewerId: "v", matched: false, invitedByOwner: false, sameRound: false }, c));
+  assert.equal(can({ hasResume: false }, { viewerId: "o", matched: true, invitedByOwner: true, sameRound: true }), false, "没有简历");
+  assert.equal(can({}, { viewerId: "o" }), true, "本人");
+  assert.equal(can({}, { matched: true }), true, "匹配过");
+  assert.equal(can({}, { invitedByOwner: true }), true, "TA 邀请过我（不管我回没回）");
+  assert.equal(can({}, { sameRound: true }), false, "invited：同一轮的陌生人看不了");
+  assert.equal(can({ resumeVisibility: "all" }, { sameRound: true }), true, "all：同一轮的人能看");
+  assert.equal(can({ resumeVisibility: "all" }, {}), false, "all 也不给不在同一轮、没有往来的人");
+  assert.equal(can({ resumeVisibility: "all" }, { matched: true }), true);
+  assert.equal(can({}, { viewerId: null }), false, "没有查看者");
+  assert.equal(R.canViewResume({ viewerId: "v" }), false);
+  assert.equal(R.canViewResume({ owner: { id: "o", resumeFile: "abc.pdf", resumeVisibility: "invited" }, viewerId: "o" }), true, "也认 resumeFile");
+});
+
+test("大模型请求里没有自由留言、英文名、项目、见面地点", () => {
+  const me = { id: "me", identity: "student", preferredName: "Secret-Wu", program: "Secret Program", meetPlace: "Secret Café", freeText: "secret-free-text", answers: answers() };
+  const msg = JSON.stringify(R.buildRerankMessages(me, [Object.assign({}, me, { id: "u1" })], QUESTIONS, 1, "zh"));
+  for (const secret of ["Secret-Wu", "Secret Program", "Secret Café", "secret-free-text"]) assert.ok(!msg.includes(secret), "不应包含 " + secret);
+});
+
+test("单行清洗函数 cleanLine 和资料里的单行字段同一个规则（后台登记嘉宾的备注用）", () => {
+  assert.equal(R.cleanLine(" 创新\n学者\u202E "), "创新 学者");
+  assert.equal(R.cleanLine(null), "");
 });
 
 test("邀请：必须参加本轮、不能邀请自己、同一人本轮只能邀请一次", () => {

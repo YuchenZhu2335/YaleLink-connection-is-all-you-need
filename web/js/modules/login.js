@@ -6,6 +6,7 @@
    - 老用户验证过联系邮箱时，验证码默认发到联系邮箱。发码接口对任何邮箱都只回 { sent: true }（不透露发到了哪里），
      所以第二步总是说明两种情况，并一直提供"改发到耶鲁邮箱"（via = "yale"）
    - via=yale：这次直接发到耶鲁邮箱（"我的"里换联系邮箱、进管理后台需要用耶鲁邮箱登录的会话）
+   - 受邀嘉宾（RFC 0003）：组织者在后台登记过的非耶鲁邮箱也能登录。界面不在前端拦非耶鲁邮箱，由后端判断（没登记的回 not_yale）
    - 重发有 60 秒倒计时（后端同一邮箱 60 秒内只发一次，不论发到哪里）；切换语言时路由会重绘，进行中的步骤保存在模块内的 flow 里 */
 (function () {
   const { t, esc, icon } = YL.ui;
@@ -21,6 +22,8 @@
   // 把翻译好的句子转义后，再把 {占位符} 换成已转义的 HTML 片段
   const fill = (text, parts) => esc(text).replace(/\{(\w+)\}/g, (m, k) => (parts[k] != null ? parts[k] : m));
   const secondsLeft = () => (flow ? Math.max(0, RESEND_SECONDS - Math.floor((Date.now() - flow.sentAt) / 1000)) : 0);
+  // 只决定文案：耶鲁邮箱说"耶鲁邮箱"，嘉宾邮箱（组织者登记的非耶鲁邮箱）说"登录邮箱"。能不能登录由后端判断
+  const isYaleAddr = (email) => /@(aya\.)?yale\.edu$/i.test(String(email || "").trim());
 
   function goOn(next) {
     // next 本身就是首次填写页（带着自己的 next）：不要再套一层
@@ -80,8 +83,9 @@
           <div class="field" data-field="email">
             <label class="field__label" for="login-email">${esc(t("login.emailLabel"))}</label>
             <input class="input" id="login-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" required
-              placeholder="${esc(t("login.emailPlaceholder"))}" aria-describedby="login-email-hint" value="${esc(flow ? flow.email : "")}">
+              placeholder="${esc(t("login.emailPlaceholder"))}" aria-describedby="login-email-hint login-email-guest" value="${esc(flow ? flow.email : "")}">
             <p class="field__hint" id="login-email-hint">${esc(t("login.emailHint"))}</p>
+            <p class="field__hint" id="login-email-guest">${esc(t("login.guestHint"))}</p>
           </div>
           <div data-msg hidden></div>
           <button class="btn btn--primary btn--block btn--lg" type="submit">${esc(t("login.send"))}</button>
@@ -101,7 +105,7 @@
       if (r.ok) {
         const resend = !!flow && flow.email === email;
         flow = { email, forceYale: !!forceYale, yale: !!forceYale, already: false, sentAt: Date.now(), dead: "" };
-        showCode(true, !resend ? "" : forceYale ? t("login.resentYale") : t("login.resent"));
+        showCode(true, !resend ? "" : forceYale ? (isYaleAddr(email) ? t("login.resentYale") : t("login.resentYaleGuest")) : t("login.resent"));
         return;
       }
       const e = r.error || {};
@@ -118,7 +122,7 @@
     /* ---------- 第二步：验证码 ---------- */
     function showCode(focus, notice) {
       const who = { email: `<strong>${esc(flow.email)}</strong>` };
-      const sent = fill(flow.already ? t("login.alreadySent") : flow.yale ? t("login.sentYale") : t("login.sentGeneric"), who);
+      const sent = fill(flow.already ? t("login.alreadySent") : flow.yale ? (isYaleAddr(flow.email) ? t("login.sentYale") : t("login.sentYaleGuest")) : t("login.sentGeneric"), who);
       const dead = !!flow.dead;
       card.innerHTML = `
         <form class="form" data-form="code" novalidate>
@@ -126,7 +130,7 @@
             <h2 class="card__title" tabindex="-1" data-focus>${esc(t("login.codeTitle"))}</h2>
             <p class="muted" aria-live="polite">${sent}</p>
           </div>
-          ${flow.yale ? "" : `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(t("login.whereCode"))}</p><p><button type="button" class="btn btn--secondary btn--sm" data-act="use-yale">${esc(t("login.useYale"))}</button></p></div></div>`}
+          ${flow.yale ? "" : `<div class="notice notice--info">${icon("info")}<div class="notice__body"><p>${esc(isYaleAddr(flow.email) ? t("login.whereCode") : t("login.whereCodeGuest"))}</p><p><button type="button" class="btn btn--secondary btn--sm" data-act="use-yale">${esc(isYaleAddr(flow.email) ? t("login.useYale") : t("login.useYaleGuest"))}</button></p></div></div>`}
           <div class="field" data-field="code">
             <label class="field__label" for="login-code">${esc(t("login.codeLabel"))}</label>
             <input class="input input--code" id="login-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required aria-describedby="login-code-hint"${dead ? " disabled" : ""}>
@@ -160,7 +164,11 @@
       resend.textContent = s > 0 ? t("login.resendIn", { s }) : t("login.resend");
       const yale = card.querySelector('[data-act="use-yale"]');
       const wait = flow && flow.already ? s : 0;
-      if (yale) { yale.disabled = wait > 0; yale.textContent = wait > 0 ? t("login.useYaleWait", { s: wait }) : t("login.useYale"); }
+      if (yale) {
+        const y = isYaleAddr(flow.email);
+        yale.disabled = wait > 0;
+        yale.textContent = wait > 0 ? (y ? t("login.useYaleWait", { s: wait }) : t("login.useYaleWaitGuest", { s: wait })) : y ? t("login.useYale") : t("login.useYaleGuest");
+      }
       if (!s) {
         clearInterval(timer);
         // 验证码已经作废、焦点又没地方放（输入框被禁用了）：倒计时结束时把焦点放到"重新发送"上

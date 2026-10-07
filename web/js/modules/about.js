@@ -122,7 +122,9 @@
   }
 
   /* ---------- #/about/privacy ---------- */
-  const COLLECT = ["loginEmail", "contactEmail", "profile", "slots", "invites", "settings", "feedback", "logs"];
+  const COLLECT = ["loginEmail", "contactEmail", "profile", "resume", "slots", "invites", "settings", "feedback", "logs"];
+  // RFC 0003：简历、"还有什么想说的"、见面地点、导师与嘉宾——存在哪里、谁能看、怎么删
+  const EXTRA = ["resume", "who", "delete", "free", "place", "mentor", "guest"];
   const SEE = ["others", "invited", "mutual", "admin", "server", "nobody"];
   const EMAILS = ["code", "match", "scheduled", "digest", "reminder", "weekly", "event"];
   const LEFT = ["audit", "firstCode", "recs", "backup", "sent"];   // 注销后还会留下的（对照 server/auth.js 的 POST /me/delete）
@@ -150,6 +152,7 @@
         ${notice("info", "info", `<p><strong>${esc(t("about.privacy.summaryTitle"))}</strong></p><p>${esc(t("about.privacy.summary"))}</p>${manage}`)}
         ${section("pv-collect", t("about.privacy.collect.title"), `<p class="muted">${esc(t("about.privacy.collect.intro"))}</p>${rows(COLLECT.map((id) => [t("about.privacy.collect." + id + ".title"), t("about.privacy.collect." + id + ".sub")]))}`)}
         ${section("pv-see", t("about.privacy.see.title"), `<p class="muted">${esc(t("about.privacy.see.intro"))}</p>${table}`)}
+        ${section("pv-extra", t("about.privacy.extra.title"), EXTRA.map((id) => `<p>${esc(t("about.privacy.extra." + id))}</p>`).join(""))}
         ${section("pv-email", t("about.privacy.email.title"), `<p class="muted">${esc(t("about.privacy.email.intro"))}</p>${rows(EMAILS.map((id) => [t("about.privacy.email." + id + ".title"), t("about.privacy.email." + id + ".sub")]))}<p>${esc(t("about.privacy.email.unsub"))}</p>`)}
         ${section("pv-ai", t("about.privacy.ai.title"), `<p>${esc(t("about.privacy.ai.p1"))}</p><p>${esc(t("about.privacy.ai.p2"))}</p><p>${esc(t("about.privacy.ai.p3"))}</p>${notice("info", "info", `<p>${esc(aiNow())}</p>`)}`)}
         ${section("pv-delete", t("about.privacy.delete.title"), `<p>${esc(t("about.privacy.delete.keep"))}</p><p>${esc(t("about.privacy.delete.p1"))}</p><p>${esc(t("about.privacy.delete.left"))}</p>${bullets(LEFT.map((id) => t("about.privacy.delete.left." + id)))}`)}

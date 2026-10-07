@@ -1,5 +1,6 @@
 /* 注册登录与个人资料（需求见 docs/prd/yalelux-mvp.md）
-   - 身份：耶鲁邮箱（@yale.edu / *.yale.edu / @aya.yale.edu）+ 6 位验证码，服务端校验白名单
+   - 身份：耶鲁邮箱（@yale.edu / *.yale.edu / @aya.yale.edu）+ 6 位验证码，服务端校验白名单；
+     管理员登记过的嘉宾邮箱（guest_emails，RFC 0003 §5）也能这样登录。下文的"耶鲁邮箱"对嘉宾来说就是登录邮箱（会话 via = "yale"）
    - 第一次必须通过耶鲁邮箱验证；之后验证码默认发到已验证的联系邮箱；每 365 天要用耶鲁邮箱重新验证一次
    - 换联系邮箱（已经填过之后）、改资料里的联系方式（已经填过之后）、注销账号，都要求本次登录是通过耶鲁邮箱验证的
      （forbidden / reverify_yale）；换了联系邮箱之后其他设备的登录全部失效
@@ -12,7 +13,6 @@ const { fail, sha256 } = require("./http");
 
 const CODE_TTL = 10 * 60000, RESEND_GAP = 60000, MAX_ATTEMPTS = 5, YALE_REVERIFY_DAYS = 365;
 const PER_EMAIL_HOURLY = 5, PER_IP_HOURLY = 20, VERIFY_IP_HOURLY = 60, GLOBAL_HOURLY = 600;
-const EMAIL_RE = /^[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)+$/; // 小写化之后再校验；不接受显示名、逗号、尖括号
 const HOUR = 3600000;
 
 // 限频用的 IP：IPv4-mapped 转回 IPv4；IPv6 只取前 64 位（一个家庭 / 一台 VPS 通常拥有整个 /64）
@@ -42,13 +42,7 @@ function install(app, ctx) {
     if (arr.length >= max) throw fail("rate_limited", { reason: "too_many_requests" });
     arr.push(now); hits.set(key, arr);
   }
-  const norm = (e) => String(e || "").trim().toLowerCase();
-  const validEmail = (e) => e.length <= 254 && EMAIL_RE.test(e);
-  const isYale = (email) => {
-    if (!validEmail(email)) return false;
-    const d = email.slice(email.lastIndexOf("@") + 1);
-    return ctx.cfg.allowedDomains.some((a) => d === a || d.endsWith("." + a));
-  };
+  const norm = ctx.normEmail, validEmail = ctx.validEmail;
   const mask = (e) => e.replace(/^(.)(.*)(@.*)$/, (m, a, b, c) => a + "*".repeat(Math.max(1, Math.min(b.length, 6))) + c);
   const hashCode = (code) => sha256(ctx.cfg.secret + ":" + code);
   const now = () => new Date().toISOString();
@@ -94,10 +88,11 @@ function install(app, ctx) {
     db.run("UPDATE login_codes SET used_at = ? WHERE id = ?", now(), row.id);
     return row;
   }
-  // 验证码发到哪里：老用户、联系邮箱已验证、一年内验证过耶鲁邮箱 → 联系邮箱（除非用户指定发耶鲁邮箱）
+  // 验证码发到哪里：老用户、联系邮箱已验证、一年内验证过耶鲁邮箱 → 联系邮箱（除非用户指定发耶鲁邮箱）。
+  // 联系邮箱就是登录邮箱（嘉宾通常如此）时按登录邮箱算：收到的是同一个邮箱，这次登录就是 via = "yale"
   function codeTarget(user, email, via) {
     const yaleFresh = user && Date.now() - Date.parse(user.yale_verified_at) < YALE_REVERIFY_DAYS * 86400000;
-    if (user && via !== "yale" && yaleFresh && user.contact_email && user.contact_verified_at) return { to: user.contact_email, via: "contact" };
+    if (user && via !== "yale" && yaleFresh && user.contact_email && user.contact_verified_at && user.contact_email !== email) return { to: user.contact_email, via: "contact" };
     return { to: email, via: "yale" };
   }
   // 让这个人别的设备上的登录全部失效（保留当前这个）
@@ -105,9 +100,11 @@ function install(app, ctx) {
   // 只有这次是用耶鲁邮箱收码登录的会话才能做的事（联系邮箱被盗时，对方换不掉联系邮箱 / 联系方式，也删不了号）
   const requireYale = (req) => { if (req.session.via !== "yale") throw fail("forbidden", { reason: "reverify_yale" }); };
 
+  // 能登录的邮箱：耶鲁邮箱，或者管理员登记过的嘉宾邮箱。其余的直接提示"请用耶鲁邮箱"
+  // （会透露某个非耶鲁邮箱有没有被登记为嘉宾；嘉宾名单不敏感，给打错邮箱的人即时提示更重要，见 RFC 0003 §5）
   app.route("POST", "/auth/request-code", async (req) => {
     const email = norm(req.body.email);
-    if (!isYale(email)) throw fail("invalid", { fields: { email: "not_yale" } });
+    if (!ctx.canLogin(email)) throw fail("invalid", { fields: { email: "not_yale" } });
     limit("ip:" + ipKey(req.ip), PER_IP_HOURLY, HOUR);
     const user = db.get("SELECT * FROM users WHERE login_email = ?", email);
     const t = codeTarget(user, email, req.body.via === "yale" ? "yale" : undefined);
@@ -116,9 +113,10 @@ function install(app, ctx) {
     return { sent: true }; // 不论邮箱是否注册过、发到了哪里，返回都一样
   }, { auth: "none", audit: false });
 
+  // 验证时再查一次名单：嘉宾登记删掉之后，手里还没用的验证码也建立不了新会话
   app.route("POST", "/auth/verify", (req) => {
     const email = norm(req.body.email);
-    if (!isYale(email)) throw fail("invalid", { fields: { email: "not_yale" } });
+    if (!ctx.canLogin(email)) throw fail("invalid", { fields: { email: "not_yale" } });
     limit("verify-ip:" + ipKey(req.ip), VERIFY_IP_HOURLY, HOUR);
     const row = checkCode("login", email, req.body.code);
     const via = row.target === "contact" ? "contact" : "yale";
@@ -157,6 +155,17 @@ function install(app, ctx) {
     // 已经填过联系邮箱之后再换，必须是用耶鲁邮箱登录的（用联系邮箱登录的人不能把它换掉）
     if (u.contact_email && changing) requireYale(req);
     if (!changing && u.contact_verified_at) return me(req);
+    // 和登录邮箱相同（嘉宾通常如此）：登录时已经证明过这个邮箱是本人的，不再发验证码，直接算已验证；
+    // 其余和正常验证一样（其他设备下线；换掉的旧联系邮箱上还没用的登录验证码作废）
+    if (email === u.login_email) {
+      db.tx(() => {
+        db.run("UPDATE users SET contact_email = ?, contact_verified_at = ?, updated_at = ? WHERE id = ?", email, now(), now(), u.id);
+        revokeOthers(u.id, req.session.id);
+        if (changing && u.contact_email) db.run("UPDATE login_codes SET used_at = ? WHERE purpose = 'login' AND user_key = ? AND target = 'contact' AND used_at IS NULL", now(), u.login_email);
+        db.run("UPDATE login_codes SET used_at = ? WHERE purpose = 'contact' AND user_key = ? AND used_at IS NULL", now(), u.id);
+      });
+      return me(req);
+    }
     limit("contact:" + u.id, 5, HOUR);
     const issued = issueCode("contact", u.id, email, req.ip); // 先检查间隔与额度，再改资料
     db.tx(() => {
@@ -185,13 +194,15 @@ function install(app, ctx) {
 
   app.route("POST", "/me/profile", (req) => {
     const year = Number(new Date().toISOString().slice(0, 4));
-    const v = C.validateProfile(req.body, ctx.questions, year);
+    const v = C.validateProfile(req.body, ctx.questions, year, { isGuest: ctx.isGuest(req.user) });
     if (!v.ok) throw fail("invalid", { fields: v.fields });
     const p = C.cleanProfile(req.body, ctx.questions);
     // 联系方式（如微信号）匹配后会给对方看：已经填过之后再改，必须是用耶鲁邮箱登录的（第一次填写不限）
     if (req.user.contact_method && p.contactMethod !== req.user.contact_method) requireYale(req);
-    db.run("UPDATE users SET name = ?, identity = ?, stage = ?, grad_year = ?, job = ?, city = ?, contact_method = ?, answers = ?, profile_done_at = COALESCE(profile_done_at, ?), updated_at = ? WHERE id = ?",
-      p.name, p.identity, p.stage, p.gradYear, p.job, p.city, p.contactMethod, JSON.stringify(p.answers), now(), now(), req.user.id);
+    db.run(`UPDATE users SET name = ?, preferred_name = ?, identity = ?, stage = ?, grad_year = ?, program = ?, job = ?, city = ?, meet_mode = ?, meet_place = ?, free_text = ?,
+      contact_method = ?, answers = ?, profile_done_at = COALESCE(profile_done_at, ?), updated_at = ? WHERE id = ?`,
+      p.name, p.preferredName, p.identity, p.stage, p.gradYear, p.program, p.job, p.city, p.meetMode, p.meetPlace, p.freeText,
+      p.contactMethod, JSON.stringify(p.answers), now(), now(), req.user.id);
     db.run("UPDATE recommendations SET created_at = '' WHERE user_id = ?", req.user.id); // 资料变了，推荐重新算
     return me(req);
   }, { auth: "consented" });
@@ -205,12 +216,13 @@ function install(app, ctx) {
     return me(req);
   }, { auth: "consented" });
 
-  // 注销：删除本人的资料、参与记录、邀请、推荐、会话、验证码、发信记录、访问记录；审计日志保留（只有 id）。
-  // 不要求先同意隐私说明；但要求这次是用耶鲁邮箱登录的
+  // 注销：删除本人的资料、简历文件、参与记录、邀请、推荐、会话、验证码、发信记录、访问记录；审计日志保留（只有 id）。
+  // 嘉宾邮箱的登记（guest_emails）不动：那是组织者的登记。不要求先同意隐私说明；但要求这次是用耶鲁邮箱登录的
   app.route("POST", "/me/delete", (req) => {
     if (req.body.confirm !== "DELETE") throw fail("invalid", { fields: { confirm: "required" } });
     requireYale(req);
     const id = req.user.id, email = req.user.login_email;
+    const resume = db.get("SELECT resume_file FROM users WHERE id = ?", id).resume_file;
     db.tx(() => {
       db.run("DELETE FROM participations WHERE user_id = ?", id);
       db.run("DELETE FROM invites WHERE from_id = ? OR to_id = ?", id, id);
@@ -222,6 +234,7 @@ function install(app, ctx) {
       db.run("DELETE FROM user_visits WHERE user_id = ?", id);
       db.run("DELETE FROM users WHERE id = ?", id);
     });
+    if (resume) ctx.resumes.remove(resume);
     req.endSession(req.req, req.res);
     return { deleted: true };
   });
