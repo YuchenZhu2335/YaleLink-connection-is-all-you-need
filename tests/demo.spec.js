@@ -81,7 +81,7 @@ test("未登录：首页、活动页、隐私说明能看；提示条在顶栏�
   await expect(page.locator(".hero")).toBeVisible();
   const banner = page.locator("#demo-banner");
   await expect(banner).toContainText("000000");
-  await expect(banner).toContainText("admin@yale.edu");
+  await expect(banner.locator('[data-demo-as="student"]')).toBeVisible();
   const [b, top] = await Promise.all([banner.boundingBox(), page.locator("#topbar").boundingBox()]);
   expect(b.y + b.height).toBeLessThanOrEqual(top.y + 1);
   await go(page, "events");
@@ -189,6 +189,20 @@ test("语言切换：界面和演示提示条都换成英文，再切回中文",
   await page.click("#lang-toggle");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator("[data-demo-reset]")).toHaveText("重置");
+  expect(errors).toEqual([]);
+});
+
+test("一键进入：不登录直接看同学视角（有推荐、收件箱、匹配），再一键看管理后台", async ({ page }) => {
+  const errors = watchErrors(page);
+  await go(page, "");
+  await page.locator('[data-demo-as="student"]').click();
+  await expect(page).toHaveURL(/#\/coffee/);
+  await expect(page.locator('[data-act="invite"]').first()).toBeVisible();
+  await go(page, "coffee/matches");
+  await expect(page.locator(".contact").first()).toBeVisible();
+  await page.locator('[data-demo-as="admin"]').click();
+  await expect(page).toHaveURL(/#\/admin/);
+  await expect(page.locator(".stats").first()).toBeVisible();
   expect(errors).toEqual([]);
 });
 

@@ -939,6 +939,37 @@
       try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignore */ }
       location.reload();
     },
+    // 一键进入：不用填邮箱，直接以演示同学（已有匹配和邀请）或管理员身份看完整内容
+    enterAs: function (who) {
+      load();
+      var t = nowIso(), u;
+      if (who === "admin") {
+        u = S.users.filter(function (x) { return x.login_email === ADMIN_EMAILS[0]; })[0];
+        if (!u) {
+          u = newUserRow("u-demo-admin", ADMIN_EMAILS[0], t);
+          S.users.push(u);
+        }
+        if (!u.profile_done_at) {
+          var tpl = S.users.filter(function (x) { return x.demo; })[0] || {};
+          Object.assign(u, { contact_email: "admin@example.com", contact_verified_at: t, consent_version: CV, consent_at: t,
+            name: "赵一鸣", identity: "alumni", stage: "", grad_year: null, job: "ACSSY 组织者", city: "New Haven",
+            contact_method: "微信 acssy-demo", answers: tpl.answers || {}, profile_done_at: t, updated_at: t });
+        }
+        S.session = { userId: u.id, via: "yale", created_at: t };
+        save();
+        location.hash = "#/admin";
+      } else {
+        // 选一位已参加本轮、匹配和收到的邀请最多的演示同学
+        var score = function (x) {
+          return S.invites.filter(function (i) { return (i.status === "accepted" && (i.fromId === x.id || i.toId === x.id)) || (i.status === "pending" && i.toId === x.id); }).length;
+        };
+        u = S.users.filter(function (x) { return x.demo; }).sort(function (a, b2) { return score(b2) - score(a); })[0];
+        S.session = { userId: u.id, via: "yale", created_at: t };
+        save();
+        location.hash = "#/coffee";
+      }
+      location.reload();
+    },
     willAccept: willAccept,
     code: CODE,
     state: function () { load(); return clone(S); }
@@ -946,8 +977,8 @@
 
   /* ---------- 顶部演示提示条（静态，在吸顶顶栏之上） ---------- */
   var TEXT = {
-    zh: { msg: "演示版 · 数据只在你的浏览器里 · 任意 @yale.edu 邮箱登录，验证码 000000 · 管理员 admin@yale.edu", reset: "重置" },
-    en: { msg: "Demo · data stays in your browser · sign in with any @yale.edu email, code 000000 · admin: admin@yale.edu", reset: "Reset" }
+    zh: { msg: "演示版 · 验证码 000000", student: "直接看同学视角", admin: "看管理后台", reset: "重置" },
+    en: { msg: "Demo · code 000000", student: "View as a student", admin: "View admin", reset: "Reset" }
   };
   function lang() { try { return YL.i18n.getLang() === "en" ? "en" : "zh"; } catch (e) { return "zh"; } }
   function paintBanner() {
@@ -957,14 +988,17 @@
       el.id = "demo-banner";
       el.className = "demo-banner";
       el.setAttribute("role", "note");
-      el.innerHTML = '<p class="demo-banner__inner"><span class="demo-banner__msg"></span><button type="button" class="demo-banner__reset" data-demo-reset></button></p>';
+      el.innerHTML = '<p class="demo-banner__inner"><span class="demo-banner__msg"></span><button type="button" class="demo-banner__reset demo-banner__go" data-demo-as="student"></button><button type="button" class="demo-banner__reset demo-banner__go" data-demo-as="admin"></button><button type="button" class="demo-banner__reset" data-demo-reset></button></p>';
       document.body.insertBefore(el, document.body.firstChild);
       el.querySelector("[data-demo-reset]").addEventListener("click", function () { window.YLDemo.reset(); });
+      el.querySelectorAll("[data-demo-as]").forEach(function (btn) { btn.addEventListener("click", function () { window.YLDemo.enterAs(btn.getAttribute("data-demo-as")); }); });
     }
     var tx = TEXT[lang()];
     el.lang = lang() === "en" ? "en" : "zh-CN";
     el.querySelector(".demo-banner__msg").textContent = tx.msg;
     el.querySelector("[data-demo-reset]").textContent = tx.reset;
+    el.querySelector('[data-demo-as="student"]').textContent = tx.student;
+    el.querySelector('[data-demo-as="admin"]').textContent = tx.admin;
   }
   if (document.body) paintBanner(); else document.addEventListener("DOMContentLoaded", paintBanner);
   window.addEventListener("yl:langchange", paintBanner);
