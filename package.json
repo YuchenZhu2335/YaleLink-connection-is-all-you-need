@@ -13,6 +13,8 @@
     "test:unit": "node --test tests/unit/*.test.js",
     "test:server": "node --test tests/server/*.test.js",
     "test:e2e": "playwright test",
+    "build:demo": "node scripts/build-demo.mjs",
+    "test:demo": "playwright test -c playwright.demo.config.js",
     "check": "npm run validate && npm run lint:arch && npm run test:unit && npm run test:server",
     "test": "npm run check && npm run test:e2e"
   },
