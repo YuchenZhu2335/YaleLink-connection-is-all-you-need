@@ -937,7 +937,7 @@
   "profile.identity.guest": "Guest",
   "profile.identity.guestSub": "Invited guest or visiting scholar",
   "profile.identity.student": "Student",
-  "profile.identity.studentSub": "Undergrad, master's, PhD, postdoc or other",
+  "profile.identity.studentSub": "Undergrad to postdoc",
   "profile.links.admin": "Admin",
   "profile.links.adminNeedsYale": "You're an admin, but this session came through your contact email. The admin area needs a Yale email sign-in.",
   "profile.links.adminRelogin": "Sign in with Yale email",

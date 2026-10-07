@@ -937,7 +937,7 @@
   "profile.identity.guest": "嘉宾",
   "profile.identity.guestSub": "受邀嘉宾、访问学者",
   "profile.identity.student": "在读",
-  "profile.identity.studentSub": "本科 / 硕士 / 博士 / 博士后 / 其他",
+  "profile.identity.studentSub": "本科到博士后",
   "profile.links.admin": "管理后台",
   "profile.links.adminNeedsYale": "你是管理员，但这次是通过联系邮箱登录的。进管理后台需要用耶鲁邮箱登录。",
   "profile.links.adminRelogin": "用耶鲁邮箱重新登录",

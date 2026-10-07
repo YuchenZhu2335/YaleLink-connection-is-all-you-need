@@ -586,9 +586,11 @@
     const f = {};
     FILTERS.forEach((k) => (f[k] = String(ctx.query[k] || "")));
     f.mentor = ctx.query.mentor === "1" ? "1" : "";
-    const active = FILTERS.filter((k) => f[k]).length + (f.mentor ? 1 : 0);
+    // inPanel：下面几行标签里选了几个（决定筛选区默认展开、按钮上的数字）；active 再加上"只看导师"（清除筛选、空状态用）
+    const inPanel = FILTERS.filter((k) => f[k]).length;
+    const active = inPanel + (f.mentor ? 1 : 0);
     backPath = browsePath(f);
-    const open = filtersOpen != null ? filtersOpen : active > 0 || window.matchMedia("(min-width: 900px)").matches;
+    const open = filtersOpen != null ? filtersOpen : inPanel > 0 || window.matchMedia("(min-width: 900px)").matches;
     const page = mount(root);
     const env = { ctx, page, people: new Map(), source: "browse", draw: (p) => personHtml(p, { overlap: p.overlapCount || 0 }) };
     page.innerHTML = `<header class="page-head"><div class="page-head__text">
@@ -602,7 +604,7 @@
           <div class="cluster">
             ${active ? `<button type="button" class="btn btn--ghost btn--sm" data-act="clear">${esc(t("coffee.browse.clear"))}</button>` : ""}
             <button type="button" class="chip${f.mentor ? " is-active" : ""}" data-act="mentor" aria-pressed="${!!f.mentor}">${esc(t("coffee.browse.mentorOnly"))}</button>
-            <button type="button" class="btn btn--secondary btn--sm" data-act="toggle" aria-expanded="${open}" aria-controls="coffee-filters">${icon("sliders")}${esc(t("coffee.browse.filters"))}${active ? `<span class="count">${active}</span>` : ""}</button>
+            <button type="button" class="btn btn--secondary btn--sm" data-act="toggle" aria-expanded="${open}" aria-controls="coffee-filters">${icon("sliders")}${esc(t("coffee.browse.filters"))}${inPanel ? `<span class="count">${inPanel}</span>` : ""}</button>
           </div>
         </div>
         <div class="filters" id="coffee-filters"${open ? "" : " hidden"}>
@@ -710,7 +712,7 @@
     return `<article class="person" data-person="${esc(p.id)}">
       <div class="person__head">${avatar(p.name, "lg")}<div class="person__who"><div class="person__title"><h1 class="person__name" tabindex="-1" data-focus>${nameText(p)}</h1>${mentorPill(p)}</div>${metaHtml(p)}</div></div>
       ${blocks}
-      ${typeof p.freeText === "string" && p.freeText.trim() ? `<div class="stack stack--s"><h2 class="field__label">${esc(t("coffee.person.freeText"))}</h2><p class="person__text">${esc(p.freeText.trim())}</p></div>` : ""}
+      ${typeof p.freeText === "string" && p.freeText.trim() ? `<div class="stack stack--s"><h2 class="field__label">${esc(t("coffee.person.freeText"))}</h2><p class="person__text person__text--body">${esc(p.freeText.trim())}</p></div>` : ""}
       ${meet ? `<div class="stack stack--s"><h2 class="field__label">${esc(t("coffee.person.meetTitle"))}</h2><div class="tags">${meet}</div><p class="small faint">${esc(t("coffee.person.meetHint"))}</p></div>` : ""}
       ${p.hasResume ? `<div class="stack stack--s"><h2 class="field__label">${esc(t("coffee.person.resumeTitle"))}</h2><div>${resumeLink(p, "btn btn--secondary btn--sm")}</div></div>` : ""}
       <div class="stack stack--s">

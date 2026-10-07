@@ -33,7 +33,7 @@ function extras(i, email, student) {
   const meetMode = ["online", "newhaven", "either"][i % 3];
   return {
     preferredName: i % 3 === 0 ? PREFERRED[(i / 3) % PREFERRED.length] : "",
-    program: student ? PROGRAMS[(i / 2) % PROGRAMS.length] : "",
+    program: student ? PROGRAMS[Math.floor(i / 2) % PROGRAMS.length] : "",
     meetMode, meetPlace: MEET_PLACES[meetMode][Math.floor(i / 3) % 2],
     freeText: i % 4 === 1 || i % 7 === 0 ? FREE_TEXTS[i % FREE_TEXTS.length] : "",
     role: MENTORS.includes(email) ? "mentor" : "member"

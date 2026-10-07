@@ -693,7 +693,7 @@
       </div>
       <div class="field" data-field="resumeVisibility">
         <span class="field__label" id="pf-rv-l">${esc(t("profile.resume.visTitle"))}</span>
-        <div class="radio-cards" role="radiogroup" aria-labelledby="pf-rv-l">
+        <div class="radio-cards radio-cards--stack" role="radiogroup" aria-labelledby="pf-rv-l">
           ${RESUME_VIS().map((v) => `<label class="radio-card"><input type="radio" name="resumeVisibility" value="${esc(v)}"${vis === v ? " checked" : ""}><span class="radio-card__box"><strong>${esc(t("profile.resume.vis." + v))}</strong><span>${esc(t("profile.resume.vis." + v + "Sub"))}</span></span></label>`).join("")}
         </div>
       </div>`;
