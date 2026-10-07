@@ -387,21 +387,22 @@ window.YL_DEMO_DATA = {
    "contact_email": "demo3@example.com",
    "name": "王子涵",
    "identity": "student",
-   "stage": "undergrad",
+   "stage": "master",
    "grad_year": 2029,
    "job": "",
    "city": "",
    "contact_method": "微信 demo-3（示例）",
    "answers": {
     "goals": [
-     "friends"
+     "industry"
     ],
     "interests": [
-     "hiking",
-     "ball",
-     "music"
+     "food",
+     "photo",
+     "cooking",
+     "fitness"
     ],
-    "field": "law",
+    "field": "other",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -413,8 +414,8 @@ window.YL_DEMO_DATA = {
    "identity": "alumni",
    "stage": "",
    "grad_year": null,
-   "job": "Founder @ 早期创业公司",
-   "city": "New Haven",
+   "job": "Software Engineer @ 某科技公司",
+   "city": "Beijing",
    "contact_method": "微信 demo-4（示例）",
    "answers": {
     "goals": [
@@ -422,11 +423,11 @@ window.YL_DEMO_DATA = {
      "friends"
     ],
     "interests": [
-     "travel",
-     "food",
-     "film"
+     "ball",
+     "running",
+     "cooking"
     ],
-    "field": "public",
+    "field": "biotech",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -446,12 +447,11 @@ window.YL_DEMO_DATA = {
      "industry"
     ],
     "interests": [
-     "cooking",
-     "ball",
-     "podcasts",
-     "running"
+     "hiking",
+     "fitness",
+     "art"
     ],
-    "field": "biotech",
+    "field": "startup",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -464,7 +464,7 @@ window.YL_DEMO_DATA = {
    "stage": "",
    "grad_year": null,
    "job": "Founder @ 早期创业公司",
-   "city": "Boston",
+   "city": "New Haven",
    "contact_method": "微信 demo-6（示例）",
    "answers": {
     "goals": [
@@ -472,11 +472,12 @@ window.YL_DEMO_DATA = {
      "share"
     ],
     "interests": [
-     "travel",
-     "tech",
-     "running"
+     "coffee",
+     "film",
+     "gaming",
+     "fitness"
     ],
-    "field": "academia",
+    "field": "public",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -493,14 +494,15 @@ window.YL_DEMO_DATA = {
    "contact_method": "微信 demo-7（示例）",
    "answers": {
     "goals": [
-     "industry",
-     "academic"
+     "industry"
     ],
     "interests": [
-     "reading",
-     "food"
+     "tech",
+     "cooking",
+     "travel",
+     "photo"
     ],
-    "field": "consulting",
+    "field": "academia",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -512,8 +514,8 @@ window.YL_DEMO_DATA = {
    "identity": "alumni",
    "stage": "",
    "grad_year": null,
-   "job": "Analyst @ 某投行",
-   "city": "Shanghai",
+   "job": "Founder @ 早期创业公司",
+   "city": "New Haven",
    "contact_method": "微信 demo-8（示例）",
    "answers": {
     "goals": [
@@ -521,9 +523,8 @@ window.YL_DEMO_DATA = {
      "share"
     ],
     "interests": [
-     "ball",
-     "coffee",
-     "music"
+     "running",
+     "reading"
     ],
     "field": "data",
     "intro": "毕业几年了，很乐意分享经验。"
@@ -535,22 +536,22 @@ window.YL_DEMO_DATA = {
    "contact_email": "demo9@example.com",
    "name": "钱晓晨",
    "identity": "student",
-   "stage": "undergrad",
+   "stage": "master",
    "grad_year": 2029,
    "job": "",
    "city": "",
    "contact_method": "微信 demo-9（示例）",
    "answers": {
     "goals": [
-     "industry"
+     "academic"
     ],
     "interests": [
-     "food",
-     "boardgames",
-     "hiking",
+     "music",
+     "fitness",
+     "film",
      "podcasts"
     ],
-    "field": "data",
+    "field": "finance",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -563,7 +564,7 @@ window.YL_DEMO_DATA = {
    "stage": "",
    "grad_year": null,
    "job": "PhD Student → Postdoc",
-   "city": "Beijing",
+   "city": "New Haven",
    "contact_method": "微信 demo-10（示例）",
    "answers": {
     "goals": [
@@ -571,10 +572,8 @@ window.YL_DEMO_DATA = {
      "share"
     ],
     "interests": [
-     "ball",
-     "reading",
-     "art",
-     "running"
+     "running",
+     "gaming"
     ],
     "field": "arts",
     "intro": "毕业几年了，很乐意分享经验。"
@@ -586,21 +585,21 @@ window.YL_DEMO_DATA = {
    "contact_email": "demo11@example.com",
    "name": "褚佳宁",
    "identity": "student",
-   "stage": "undergrad",
+   "stage": "phd",
    "grad_year": 2028,
    "job": "",
    "city": "",
    "contact_method": "微信 demo-11（示例）",
    "answers": {
     "goals": [
-     "friends",
-     "academic"
+     "industry"
     ],
     "interests": [
-     "ball",
-     "fitness"
+     "art",
+     "fitness",
+     "tech"
     ],
-    "field": "law",
+    "field": "data",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -612,21 +611,19 @@ window.YL_DEMO_DATA = {
    "identity": "alumni",
    "stage": "",
    "grad_year": null,
-   "job": "Analyst @ 某投行",
-   "city": "New York",
+   "job": "Data Scientist",
+   "city": "Shanghai",
    "contact_method": "微信 demo-12（示例）",
    "answers": {
     "goals": [
-     "friends",
-     "share"
+     "friends"
     ],
     "interests": [
-     "hiking",
-     "travel",
-     "fitness",
-     "music"
+     "tech",
+     "cooking",
+     "travel"
     ],
-    "field": "other",
+    "field": "law",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -636,23 +633,22 @@ window.YL_DEMO_DATA = {
    "contact_email": "demo13@example.com",
    "name": "蒋欣然",
    "identity": "student",
-   "stage": "master",
+   "stage": "undergrad",
    "grad_year": 2027,
    "job": "",
    "city": "",
    "contact_method": "微信 demo-13（示例）",
    "answers": {
     "goals": [
-     "friends",
      "industry"
     ],
     "interests": [
-     "boardgames",
-     "cooking",
+     "reading",
      "hiking",
-     "fitness"
+     "boardgames",
+     "gaming"
     ],
-    "field": "biotech",
+    "field": "public",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -664,19 +660,21 @@ window.YL_DEMO_DATA = {
    "identity": "alumni",
    "stage": "",
    "grad_year": null,
-   "job": "Software Engineer @ 某科技公司",
-   "city": "Bay Area",
+   "job": "Analyst @ 某投行",
+   "city": "Shanghai",
    "contact_method": "微信 demo-14（示例）",
    "answers": {
     "goals": [
+     "friends",
      "share"
     ],
     "interests": [
-     "hiking",
-     "gaming",
+     "running",
+     "food",
+     "fitness",
      "investing"
     ],
-    "field": "academia",
+    "field": "finance",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -686,20 +684,21 @@ window.YL_DEMO_DATA = {
    "contact_email": "demo15@example.com",
    "name": "韩若曦",
    "identity": "student",
-   "stage": "phd",
+   "stage": "master",
    "grad_year": 2029,
    "job": "",
    "city": "",
    "contact_method": "微信 demo-15（示例）",
    "answers": {
     "goals": [
-     "industry"
+     "industry",
+     "academic"
     ],
     "interests": [
-     "boardgames",
-     "reading"
+     "reading",
+     "ball"
     ],
-    "field": "other",
+    "field": "finance",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -711,19 +710,18 @@ window.YL_DEMO_DATA = {
    "identity": "alumni",
    "stage": "",
    "grad_year": null,
-   "job": "Software Engineer @ 某科技公司",
-   "city": "Boston",
+   "job": "PhD Student → Postdoc",
+   "city": "Bay Area",
    "contact_method": "微信 demo-16（示例）",
    "answers": {
     "goals": [
-     "share",
-     "friends"
+     "share"
     ],
     "interests": [
-     "reading",
-     "photo"
+     "tech",
+     "reading"
     ],
-    "field": "academia",
+    "field": "law",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -743,10 +741,12 @@ window.YL_DEMO_DATA = {
      "friends"
     ],
     "interests": [
-     "music",
-     "photo"
+     "investing",
+     "gaming",
+     "art",
+     "ball"
     ],
-    "field": "finance",
+    "field": "other",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -759,17 +759,17 @@ window.YL_DEMO_DATA = {
    "stage": "",
    "grad_year": null,
    "job": "Product Manager",
-   "city": "Boston",
+   "city": "New York",
    "contact_method": "微信 demo-18（示例）",
    "answers": {
     "goals": [
-     "friends"
+     "share"
     ],
     "interests": [
-     "boardgames",
-     "ball"
+     "coffee",
+     "hiking"
     ],
-    "field": "consulting",
+    "field": "tech",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -779,7 +779,7 @@ window.YL_DEMO_DATA = {
    "contact_email": "demo19@example.com",
    "name": "许诺",
    "identity": "student",
-   "stage": "master",
+   "stage": "phd",
    "grad_year": 2027,
    "job": "",
    "city": "",
@@ -789,12 +789,12 @@ window.YL_DEMO_DATA = {
      "friends"
     ],
     "interests": [
-     "food",
-     "investing",
-     "tech",
-     "hiking"
+     "ball",
+     "gaming",
+     "fitness",
+     "travel"
     ],
-    "field": "finance",
+    "field": "tech",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -806,20 +806,20 @@ window.YL_DEMO_DATA = {
    "identity": "alumni",
    "stage": "",
    "grad_year": null,
-   "job": "Software Engineer @ 某科技公司",
-   "city": "New York",
+   "job": "Associate @ 某律所",
+   "city": "Bay Area",
    "contact_method": "微信 demo-20（示例）",
    "answers": {
     "goals": [
      "friends"
     ],
     "interests": [
-     "boardgames",
-     "hiking",
+     "coffee",
+     "gaming",
      "fitness",
-     "cooking"
+     "film"
     ],
-    "field": "academia",
+    "field": "law",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -829,7 +829,7 @@ window.YL_DEMO_DATA = {
    "contact_email": "demo21@example.com",
    "name": "吕知夏",
    "identity": "student",
-   "stage": "phd",
+   "stage": "master",
    "grad_year": 2029,
    "job": "",
    "city": "",
@@ -840,10 +840,12 @@ window.YL_DEMO_DATA = {
      "academic"
     ],
     "interests": [
-     "ball",
-     "music"
+     "art",
+     "running",
+     "coffee",
+     "reading"
     ],
-    "field": "finance",
+    "field": "public",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -856,20 +858,19 @@ window.YL_DEMO_DATA = {
    "stage": "",
    "grad_year": null,
    "job": "Associate @ 某律所",
-   "city": "New Haven",
+   "city": "Beijing",
    "contact_method": "微信 demo-22（示例）",
    "answers": {
     "goals": [
-     "share",
      "friends"
     ],
     "interests": [
      "hiking",
-     "travel",
-     "boardgames",
-     "music"
+     "running",
+     "music",
+     "coffee"
     ],
-    "field": "arts",
+    "field": "biotech",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   },
@@ -886,15 +887,16 @@ window.YL_DEMO_DATA = {
    "contact_method": "微信 demo-23（示例）",
    "answers": {
     "goals": [
-     "industry"
+     "industry",
+     "academic"
     ],
     "interests": [
+     "reading",
+     "travel",
      "coffee",
-     "fitness",
-     "music",
      "podcasts"
     ],
-    "field": "startup",
+    "field": "biotech",
     "intro": "在读，想多认识学长学姐，聊聊求职和生活。"
    }
   },
@@ -906,19 +908,19 @@ window.YL_DEMO_DATA = {
    "identity": "alumni",
    "stage": "",
    "grad_year": null,
-   "job": "Product Manager",
+   "job": "Data Scientist",
    "city": "Bay Area",
    "contact_method": "微信 demo-24（示例）",
    "answers": {
     "goals": [
-     "share"
+     "share",
+     "friends"
     ],
     "interests": [
-     "ball",
-     "music",
-     "film"
+     "travel",
+     "fitness"
     ],
-    "field": "data",
+    "field": "other",
     "intro": "毕业几年了，很乐意分享经验。"
    }
   }

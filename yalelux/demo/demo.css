@@ -26,3 +26,6 @@
 }
 .demo-banner__reset:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; box-shadow: var(--focus-ring); }
 @media (hover: hover) { .demo-banner__reset:hover { background-color: var(--c-accent); color: var(--c-accent-ink); } }
+/* 一键进入的两个按钮：主色填充，比"重置"更醒目 */
+.demo-banner__go { background-color: var(--c-primary); color: var(--c-primary-ink); border-color: var(--c-primary); }
+@media (hover: hover) { .demo-banner__go:hover { background-color: var(--c-primary-hover); color: var(--c-primary-ink); } }
