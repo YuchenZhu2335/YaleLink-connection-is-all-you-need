@@ -1,0 +1,249 @@
+/* ============================================================
+   基础：重置、排版、外壳（顶栏 / 顶部导航 / 主区 / 页脚 / 手机底部标签栏）
+   规范：docs/design/system.md §3.5 排版、§5.0 通用规则、§5.9 标签栏、§5.10 顶栏、§6 布局。
+   颜色一律用 tokens.css 的语义变量；:hover 一律写在 @media (hover: hover) 里；
+   不用 inset 简写、不用 backdrop-filter（老微信内核）。
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: var(--c-bg);
+  color: var(--c-ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-body);
+  /* §3.5：不要 overflow-wrap: anywhere（会把按钮文字从中间拆开） */
+  line-break: strict;
+  word-break: normal;
+  overflow-wrap: break-word;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+:lang(en) body, body:lang(en) { line-height: 1.6; }
+
+h1, h2, h3, h4 { margin: 0; font-family: var(--font-display); font-weight: var(--fw-bold); letter-spacing: 0; color: inherit; }
+h1 { font-size: var(--fs-2xl); line-height: 1.35; }
+h2 { font-size: var(--fs-xl); line-height: 1.45; }
+h3 { font-size: var(--fs-lg); line-height: 1.5; }
+h4 { font-size: var(--fs-md); line-height: 1.5; }
+p, ol, ul, dl, figure, blockquote { margin: 0; }
+strong, b { font-weight: var(--fw-bold); }
+small { font-size: inherit; }
+a { color: var(--c-link); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+@media (hover: hover) { a:hover { text-decoration-thickness: 2px; } }
+img, svg { display: block; max-width: 100%; }
+svg.icon { flex-shrink: 0; max-width: none; }
+button, input, select, textarea { font: inherit; color: inherit; margin: 0; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: .92em; }
+hr { border: 0; border-top: 1px solid var(--c-line); margin: 0; }
+::selection { background-color: var(--c-accent-soft); color: var(--c-ink); }
+[hidden] { display: none !important; }
+
+/* §5.0 焦点：2px 海军蓝外偏 2px + 灯色光晕；在 .inverse 里 --c-focus 自动换成奶白 */
+:focus-visible { outline: var(--border-strong) solid var(--c-focus); outline-offset: 2px; box-shadow: var(--focus-ring); }
+:focus:not(:focus-visible) { outline: none; }
+/* 代码里为了读屏把焦点移到标题 / 主区（tabindex=-1），不画焦点环 */
+[tabindex="-1"]:focus, [tabindex="-1"]:focus-visible { outline: none; box-shadow: none; }
+
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip-link {
+  position: absolute; left: var(--sp-4); top: -200px; z-index: 100;
+  display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--sp-4);
+  background-color: var(--c-surface); color: var(--c-ink); border: 1px solid var(--c-line);
+  border-radius: var(--radius); box-shadow: var(--shadow); font-weight: var(--fw-bold); text-decoration: none;
+}
+.skip-link:focus { top: calc(env(safe-area-inset-top) + var(--sp-2)); }
+.noscript { padding: var(--sp-8) var(--sp-4); text-align: center; }
+
+/* ---------- 字标（§8.3 活字版）：yale 正体 + lux 斜体，同色同字重同基线 ---------- */
+.wordmark {
+  font-family: var(--font-serif);
+  font-weight: var(--fw-medium);
+  font-size: 22px;
+  font-style: normal;
+  letter-spacing: var(--tracking-wordmark);
+  line-height: 1;
+  color: var(--c-ink);
+  font-synthesis: none;
+  font-kerning: normal;
+  white-space: nowrap;
+}
+.wordmark i { font-style: italic; margin-left: -.01em; }
+
+/* ---------- 外壳 ---------- */
+.app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.app.is-ready { opacity: 1; }
+
+/* 手机顶栏（<900）：不透明纸色、不吸顶（把空间留给内容，微信自己已有一条标题栏） */
+.topbar {
+  position: relative; z-index: 20;
+  background-color: var(--c-bg);
+  border-bottom: 1px solid var(--c-line);
+  padding-top: env(safe-area-inset-top);
+}
+.topbar__inner {
+  height: var(--topbar-h);
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+  display: flex; align-items: center; gap: var(--sp-4);
+}
+/* 横排组合（§9）：图形标 1.05F、间距 0.28F、字标 F；立柱底端落在字标基线上 */
+.brand {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  flex-shrink: 0; padding: 11px 4px 11px 0; margin-left: -2px;
+  color: var(--c-ink); text-decoration: none; border-radius: var(--radius);
+}
+.brand__mark { position: relative; top: 3.6px; width: 22px; height: 22px; } /* 图形标底部 10.5/64 落在基线以下：立柱底端 = 字标基线 */
+.brand__word { font-size: 20px; }
+.topnav { display: none; }
+.topbar__actions { margin-left: auto; display: flex; align-items: center; gap: var(--sp-1); }
+.topbar__actions > .btn { margin-left: var(--sp-1); }
+
+/* §5.10 语言切换：显示"另一种语言"的 44×44 文字按钮 */
+.lang-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: var(--tap); min-height: var(--tap); padding: 0 var(--sp-2);
+  border: 0; border-radius: var(--radius); background-color: transparent;
+  color: var(--c-ink-2); font-size: var(--fs-sm); font-weight: var(--fw-bold); line-height: 1;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.lang-toggle .is-on { color: var(--c-ink); }
+.topbar__me {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-width: var(--tap); min-height: var(--tap);
+  color: var(--c-ink); text-decoration: none; border-radius: var(--radius);
+}
+.topbar__name { display: none; } /* 名字在 aria-label 里；顶栏只放拱形头像（§5.10） */
+@media (hover: hover) {
+  .lang-toggle:hover { background-color: var(--c-surface-2); color: var(--c-ink); }
+  .topbar__me:hover .avatar { box-shadow: 0 0 0 2px var(--c-bg), 0 0 0 3.5px var(--c-line-strong); }
+}
+/* 桌面顶栏是 surface 底：光环内圈跟着换，不然头像外面会多一圈纸色 */
+@media (hover: hover) and (min-width: 900px) {
+  .topbar__me:hover .avatar { box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 3.5px var(--c-line-strong); }
+}
+
+.main {
+  flex: 1 0 auto; width: 100%;
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding-top: var(--sp-5);
+  padding-bottom: var(--sp-12);
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+  outline: none;
+}
+
+/* 页脚：双语组合（§9 第 2 种：字标下方左对齐，先中文 tagline、再英文 tagline，行距 0.2F）+ 非官方声明在最后一行（§8.7） */
+.footer { border-top: 1px solid var(--c-line); color: var(--c-ink-3); font-size: var(--fs-sm); line-height: 1.6; }
+.footer__inner {
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding-top: var(--sp-8);
+  padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom));
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+  display: grid; gap: var(--sp-4);
+}
+/* §6.4 横屏安全区：左右内边距 = max(gutter, 安全区)。
+   不支持 max() 的老内核会把带 var() 的整条声明当成无效、内边距变成 0，所以先写上面的普通值，再在这里覆盖 */
+@supports (padding: max(0px)) {
+  .topbar__inner, .main, .footer__inner {
+    padding-left: max(var(--gutter), env(safe-area-inset-left));
+    padding-right: max(var(--gutter), env(safe-area-inset-right));
+  }
+}
+.footer__brand { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); min-width: 0; color: var(--c-ink-2); font-size: var(--fs-sm); line-height: 1.5; font-weight: var(--fw-medium); }
+.footer__brand .wordmark { font-size: 20px; margin-bottom: 2px; }
+.footer__brand > span:not(.wordmark) + span { font-size: var(--fs-tag); font-weight: var(--fw-regular); color: var(--c-ink-3); } /* 第二行（英文 tagline） */
+.footer__links { display: flex; flex-wrap: wrap; gap: 0 var(--sp-5); }
+.footer__links a { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--c-ink-2); text-decoration: none; }
+.footer__note { font-size: var(--fs-tag); color: var(--c-ink-3); text-wrap: pretty; }
+@media (hover: hover) { .footer__links a:hover { color: var(--c-ink); text-decoration: underline; } }
+
+/* ---------- §5.9 手机底部标签栏：5 项等宽，当前 = 变色 + 600 + 图标上方的灯点 ---------- */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  background-color: var(--c-surface);
+  border-top: 1px solid var(--c-line);
+}
+.tabbar__item {
+  position: relative; flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  padding-top: 13px; min-height: var(--tap);
+  color: var(--c-ink-3); text-decoration: none;
+  font-size: var(--fs-xs); font-weight: var(--fw-medium); line-height: 16px;
+  transition: color var(--dur) var(--ease);
+}
+.tabbar__item .icon { width: 24px; height: 24px; }
+.tabbar__label, .tabbar__item__label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+.tabbar__item.is-active, .tabbar__item[aria-current="page"] { color: var(--c-primary); font-weight: var(--fw-bold); }
+/* 灯点：6px，填充 + 1px 描边，居中在图标上方 4px（没有数字，不会和计数徽标混淆） */
+.tabbar__item.is-active::before, .tabbar__item[aria-current="page"]::before {
+  content: ""; position: absolute; top: 3px; left: 50%; margin-left: -3px;
+  width: 6px; height: 6px; border-radius: var(--radius-pill);
+  background-color: var(--c-accent); border: 1px solid var(--c-accent-edge);
+}
+/* 待回复：灯色计数徽标压在图标右上角（徽标左缘离图标中心 7px、顶边比图标高 4px），
+   外面一圈 2px 的 surface 色把它和图标、灯点隔开——灯点在图标正上方，两者至少隔 4px（§5.14） */
+.tabbar__item .count { position: absolute; top: 9px; left: 50%; margin-left: 7px; box-shadow: 0 0 0 2px var(--c-surface); }
+.tabbar__item:focus-visible { outline-offset: -4px; box-shadow: none; border-radius: var(--radius); }
+/* 底部留白只算一次：页脚在主区下面、是最后一个元素，标签栏（和安全区）的高度留在页脚里；主区只留区块间距 32 */
+body.has-tabbar .main { padding-bottom: var(--sp-8); }
+body.has-tabbar .footer__inner { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--sp-6)); }
+
+/* ---------- 桌面 ≥900：顶部导航 64，不透明 surface，没有标签栏 ---------- */
+@media (min-width: 900px) {
+  .topbar { position: -webkit-sticky; position: sticky; top: 0; background-color: var(--c-surface); }
+  .topbar__inner { gap: var(--sp-6); }
+  .brand { gap: 6px; }
+  .brand__mark { top: 3.8px; width: 23px; height: 23px; }
+  .brand__word { font-size: 22px; }
+
+  .topnav { display: flex; align-self: stretch; align-items: stretch; gap: var(--sp-1); margin-left: var(--sp-2); }
+  .topnav__item {
+    position: relative; display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 var(--sp-3);
+    color: var(--c-ink-3); text-decoration: none;
+    font-size: 15px; font-weight: var(--fw-medium); white-space: nowrap;
+    transition: color var(--dur) var(--ease);
+  }
+  .topnav__item .icon { display: none; } /* 桌面导航只用文字链接（§5.10） */
+  .topnav__item.is-active, .topnav__item[aria-current="page"] { color: var(--c-ink); font-weight: var(--fw-bold); }
+  /* 当前链接：2px 海军蓝横线，与导航底边齐平（压在顶栏下沿的细线上） */
+  .topnav__item.is-active::after, .topnav__item[aria-current="page"]::after {
+    content: ""; position: absolute; left: var(--sp-3); right: var(--sp-3); bottom: -1px;
+    height: 2px; background-color: var(--c-primary);
+  }
+  .topnav__item:focus-visible { outline-offset: -6px; box-shadow: none; border-radius: var(--radius); }
+  .topnav__item .count { margin-left: 2px; }
+
+  .tabbar { display: none; }
+  body.has-tabbar .main { padding-bottom: var(--sp-16); }
+  body.has-tabbar .footer__inner { padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom)); }
+  .main { padding-top: var(--sp-10); padding-bottom: var(--sp-16); }
+  .footer__inner { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding-top: var(--sp-10); }
+  .footer__note { grid-column: 1 / -1; }
+}
+@media (hover: hover) and (min-width: 900px) {
+  .topnav__item:hover { color: var(--c-ink); }
+}
+
+/* §4.5 减弱动效：所有时长归零，直接显示最终状态 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+}

@@ -1,0 +1,286 @@
+/* ============================================================
+   Yalelux design tokens · 灯拱 Lantern Arch · v1（2026-10-04）
+   规范：docs/design/system.md。组件只用语义变量，不直接写颜色。
+   ============================================================ */
+@font-face {
+  font-family: "YL Newsreader";
+  src: url("../assets/fonts/newsreader-latin-500-normal.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00B6, U+00B8-00FF, U+0131, U+0152-0153, U+2013, U+20AC, U+2122;
+}
+@font-face { /* 只含 l u x 三个字形，只给字标的活字备用 */
+  font-family: "YL Newsreader";
+  src: url("../assets/fonts/newsreader-italic-lux.woff2") format("woff2");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+006C, U+0075, U+0078;
+}
+
+:root {
+  color-scheme: light;
+
+  /* ---- 底 / 面 / 线 ---- */
+  --c-bg: #F6F1E7;              /* 纸：页面底 */
+  --c-surface: #FFFCF6;         /* 卡片、输入框、标签栏、弹层 */
+  --c-surface-2: #EEE7DA;       /* 下沉：只读标签、分段轨道、截止格 */
+  --c-disabled: #DED6C8;        /* 禁用填充（字用 --c-ink-3，4.13:1） */
+  --c-line: #E3DACB;            /* 装饰细线：卡片边、分隔线（不当控件边界） */
+  --c-line-strong: #8E8371;     /* 控件边界：surface 3.64 / bg 3.31 / surface-2 3.03 */
+  --c-hatch: rgba(27, 38, 56, .06);   /* 截止格斜纹 */
+  --c-scrim: rgba(17, 28, 47, .48);   /* 弹层遮罩 */
+
+  /* ---- 字 ---- */
+  --c-ink: #1B2638;             /* 正文 14.85:1 on surface */
+  --c-ink-2: #4A5365;           /* 次要正文 7.55:1 */
+  --c-ink-3: #5B6475;           /* 说明 / 占位 / 未选中 5.82:1（surface-2 上 4.85） */
+
+  /* ---- 主色：暮色海军蓝 ---- */
+  --c-primary: #1E3A5F;
+  --c-primary-hover: #152C49;
+  --c-primary-ink: #FFF8EB;     /* 10.89:1 */
+  --c-primary-soft: #E4E9F0;
+  --c-link: #1E3A5F;
+
+  /* ---- 灯（lux）：只做填充；在浅底上永远配 1px --c-accent-edge 和墨色字 ---- */
+  --c-accent: #E9A23B;
+  --c-accent-hover: #DC9230;
+  --c-accent-ink: #1B2638;      /* 7.02:1 */
+  --c-accent-edge: #85570A;     /* 6.09:1 on surface */
+  --c-accent-text: #85570A;     /* 浅底上的琥珀色字 */
+  --c-accent-soft: #FBEACB;
+
+  /* ---- 语义色（永远配图标 + 文字） ---- */
+  --c-success: #2E6A4C;
+  --c-success-hover: #24573E;
+  --c-success-ink: #FFF8EB;
+  --c-success-soft: #E0EDE4;
+  --c-warn: #A2480F;
+  --c-warn-soft: #F9E3D3;
+  --c-danger: #9B2C2C;
+  --c-danger-hover: #7F2222;
+  --c-danger-ink: #FFF8EB;
+  --c-danger-soft: #F7E1DF;
+
+  /* ---- 焦点 ---- */
+  --c-focus: #1E3A5F;
+  --c-focus-halo: rgba(233, 162, 59, .32);
+
+  /* ---- 夜色块（.inverse 作用域） ---- */
+  --c-inverse: #111C2F;
+  --c-inverse-surface: #182741;
+  --c-inverse-ink: #F3EBDD;
+  --c-inverse-muted: #ADB4C2;
+  --c-inverse-accent: #F2B457;
+  --c-inverse-line: #2B3C5C;
+  --c-inverse-line-strong: #6B7B99;
+  --c-inverse-primary-hover: #E4D9C5;
+  --c-inverse-link: #9DB8E0;
+
+  /* ---- 头像底色（首字 --c-avatar-ink，全部 ≥11.7:1） ---- */
+  --c-avatar-ink: #1B2638;
+  --c-avatar-0: #E4E9F0;
+  --c-avatar-1: #E0EDE4;
+  --c-avatar-2: #F3E3D9;
+  --c-avatar-3: #E9E4F1;
+  --c-avatar-4: #E8E2D6;
+  --c-avatar-5: #DCEBEE;
+
+  /* ---- 字体 ---- */
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Helvetica Neue", sans-serif;
+  --font-display: var(--font-body);                                   /* 中文标题永远系统黑体 */
+  --font-serif: "YL Newsreader", Georgia, "Times New Roman", serif;    /* 字标、英文模式大标题 */
+  --font-num: "YL Newsreader", var(--font-body);                      /* 大数字、时段时间、验证码 */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --fs-xs: 12px;       /* 标签栏文字、北京时间小字 */
+  --fs-tag: 13px;      /* 标签、徽标、时间戳、中文眉题 */
+  --fs-sm: 14px;       /* 身份行、推荐理由、说明、表单标签 */
+  --fs-md: 16px;       /* 正文、输入、按钮 */
+  --fs-lg: 17px;       /* 人名 h3、长文 */
+  --fs-xl: 20px;       /* h2 */
+  --fs-2xl: 26px;      /* h1 */
+  --fs-3xl: 32px;      /* display */
+  --fs-slot: 16px;     /* 时段格时间（Newsreader） */
+  --fs-num: 22px;      /* "已选 8 个"的 8 */
+  --fs-stat: 28px;     /* 本轮"37 人" */
+  --fs-stat-xl: 40px;  /* 后台概览 */
+  --fs-otp: 24px;      /* 验证码数字 */
+  --lh-tight: 1.25;
+  --lh-heading: 1.4;
+  --lh-body: 1.7;
+  --lh-long: 1.75;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-bold: 600;
+  --tracking-eyebrow: .08em;
+  --tracking-wordmark: -.015em;
+
+  /* ---- 形状 ---- */
+  --radius-xs: 6px;      /* 小徽标 */
+  --radius-s: 10px;      /* 时段格、验证码格 */
+  --radius: 12px;        /* 按钮、输入框、提示条、分段控件、选项卡片 */
+  --radius-l: 16px;      /* 卡片 */
+  --radius-xl: 24px;     /* 底部弹层上角、夜色块、主视觉 */
+  --radius-pill: 999px;  /* 标签、chip、计数徽标 */
+  --radius-arch-s: 18px 18px 8px 8px;     /* 36×42 头像（不要写 999px，会被等比缩小） */
+  --radius-arch-m: 28px 28px 10px 10px;   /* 56×64 头像 */
+  --radius-arch-l: 36px 36px 12px 12px;   /* 72×84 头像 */
+  --border-hair: 1px;
+  --border-control: 1.5px;
+  --border-strong: 2px;
+
+  /* ---- 阴影（墨蓝色调；卡片默认无阴影） ---- */
+  --shadow-s: 0 1px 2px rgba(27, 38, 56, .06), 0 1px 0 rgba(27, 38, 56, .03);
+  --shadow: 0 8px 20px -10px rgba(27, 38, 56, .20);
+  --shadow-l: 0 12px 32px -12px rgba(27, 38, 56, .24);
+  --shadow-up: 0 -8px 24px -12px rgba(27, 38, 56, .20);
+  --focus-ring: 0 0 0 4px var(--c-focus-halo);
+
+  /* ---- 间距（4px 基数） ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --sp-20: 80px;
+
+  /* ---- 尺寸 ---- */
+  --tap: 44px;
+  --btn-h: 48px;
+  --btn-h-sm: 44px;
+  --btn-h-lg: 56px;
+  --input-h: 48px;
+  --chip-h: 40px;        /* 视觉 40，点击区用 ::after 扩到 44 */
+  --slot-h: 56px;        /* 手机两行（美东 + 北京）；桌面矩阵 44 */
+
+  /* ---- 动效 ---- */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --dur: 160ms;          /* 状态切换 */
+  --dur-lamp: 200ms;     /* 时段"亮灯" */
+  --dur-sheet: 240ms;    /* 底部弹层 */
+  --dur-connect: 600ms;  /* 匹配成功：拱线画出 */
+
+  /* ---- 布局 ---- */
+  --topbar-h: 52px;
+  --tabbar-h: 64px;
+  --savebar-h: 72px;
+  --content-max: 1200px;
+  --content-medium: 760px;
+  --content-narrow: 560px;
+  --measure: 34em;
+  --gutter: 16px;
+}
+
+@media (min-width: 600px) {
+  :root { --gutter: 24px; }
+}
+@media (min-width: 900px) {
+  :root {
+    --topbar-h: 64px;
+    --gutter: 32px;
+    --fs-xl: 22px;
+    --fs-2xl: 32px;
+    --fs-3xl: 48px;
+    --fs-stat-xl: 48px;
+    --slot-h: 44px;
+  }
+}
+@media (min-width: 1440px) {
+  :root { --gutter: 40px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --c-bg: #0E1726;
+    --c-surface: #16223A;
+    --c-surface-2: #1E2B45;
+    --c-disabled: #2A3650;
+    --c-line: #2A3A57;
+    --c-line-strong: #6B7B99;     /* surface 3.71 / bg 4.21 / surface-2 3.31 */
+    --c-hatch: rgba(243, 235, 221, .07);
+    --c-scrim: rgba(0, 0, 0, .60);
+    --c-ink: #F3EBDD;             /* 13.40 on surface */
+    --c-ink-2: #C3C9D4;           /* 9.54 */
+    --c-ink-3: #A3ABBA;           /* 6.87 */
+    --c-primary: #A9C1E8;         /* 8.67 on surface */
+    --c-primary-hover: #C3D4F0;
+    --c-primary-ink: #10203A;     /* 8.90 */
+    --c-primary-soft: #22365A;
+    --c-link: #A9C1E8;
+    --c-accent: #F2B457;          /* 8.64 on surface：暗底上无需描边 */
+    --c-accent-hover: #F6C273;
+    --c-accent-ink: #111C2F;      /* 9.29 */
+    --c-accent-edge: #F2B457;
+    --c-accent-text: #F2B457;
+    --c-accent-soft: #3A2D17;
+    --c-success: #8FD1AE;
+    --c-success-hover: #A8DDC1;
+    --c-success-ink: #111C2F;
+    --c-success-soft: #173326;
+    --c-warn: #F5B98A;
+    --c-warn-soft: #3A2616;
+    --c-danger: #F0A090;
+    --c-danger-hover: #F4B5A8;
+    --c-danger-ink: #111C2F;
+    --c-danger-soft: #3D1D1D;
+    --c-focus: #F3EBDD;
+    --c-focus-halo: rgba(242, 180, 87, .40);
+    --c-inverse: #1C2C4A;         /* 暗色模式里夜色块要比页面亮一级，否则会消失 */
+    --c-inverse-surface: #243657;
+    --c-inverse-line: #33466B;
+    --c-inverse-line-strong: #8A97AD;
+    --c-avatar-ink: #F3EBDD;
+    --c-avatar-0: #22365A;
+    --c-avatar-1: #1F3A2D;
+    --c-avatar-2: #45302A;
+    --c-avatar-3: #322D4A;
+    --c-avatar-4: #3A352C;
+    --c-avatar-5: #1E3B44;
+    --shadow-s: 0 1px 2px rgba(0, 0, 0, .35);
+    --shadow: 0 8px 20px -10px rgba(0, 0, 0, .55);
+    --shadow-l: 0 12px 32px -12px rgba(0, 0, 0, .60);
+    --shadow-up: 0 -8px 24px -12px rgba(0, 0, 0, .55);
+  }
+}
+
+/* 夜色块：活动轮横幅、匹配成功页头、toast。每屏最多一个（toast 不算）。
+   块内组件照常用 --c-* 变量，自动换成夜色值。 */
+.inverse {
+  --c-bg: var(--c-inverse);
+  --c-surface: var(--c-inverse-surface);
+  --c-surface-2: var(--c-inverse);
+  --c-line: var(--c-inverse-line);
+  --c-line-strong: var(--c-inverse-line-strong);
+  --c-ink: var(--c-inverse-ink);
+  --c-ink-2: var(--c-inverse-muted);
+  --c-ink-3: var(--c-inverse-muted);
+  --c-primary: var(--c-inverse-ink);
+  --c-primary-hover: var(--c-inverse-primary-hover);
+  --c-primary-ink: var(--c-inverse);
+  --c-link: var(--c-inverse-link);
+  --c-accent: var(--c-inverse-accent);
+  --c-accent-edge: var(--c-inverse-accent);
+  --c-accent-text: var(--c-inverse-accent);
+  --c-accent-ink: var(--c-inverse);
+  --c-focus: var(--c-inverse-ink);
+  background-color: var(--c-inverse);
+  color: var(--c-inverse-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0ms;
+    --dur-lamp: 0ms;
+    --dur-sheet: 0ms;
+    --dur-connect: 0ms;
+  }
+}

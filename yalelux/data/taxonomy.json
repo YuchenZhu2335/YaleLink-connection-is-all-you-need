@@ -1,0 +1,727 @@
+{
+  "_comment": "分类词表 / Controlled vocabularies. 所有 label 必须 {zh, en} 双语。新增分类请同时更新 docs/data-model.md。",
+  "schools": [
+    {
+      "id": "yc",
+      "label": {
+        "zh": "耶鲁学院（本科）",
+        "en": "Yale College"
+      }
+    },
+    {
+      "id": "som",
+      "label": {
+        "zh": "管理学院 SOM",
+        "en": "School of Management"
+      }
+    },
+    {
+      "id": "seas",
+      "label": {
+        "zh": "工程与应用科学学院",
+        "en": "Engineering & Applied Science"
+      }
+    },
+    {
+      "id": "gsas",
+      "label": {
+        "zh": "研究生院 GSAS",
+        "en": "Graduate School (GSAS)"
+      }
+    },
+    {
+      "id": "yls",
+      "label": {
+        "zh": "法学院",
+        "en": "Law School"
+      }
+    },
+    {
+      "id": "ysph",
+      "label": {
+        "zh": "公共卫生学院",
+        "en": "School of Public Health"
+      }
+    },
+    {
+      "id": "ysm",
+      "label": {
+        "zh": "医学院",
+        "en": "School of Medicine"
+      }
+    },
+    {
+      "id": "jackson",
+      "label": {
+        "zh": "杰克逊全球事务学院",
+        "en": "Jackson School"
+      }
+    },
+    {
+      "id": "ysoa",
+      "label": {
+        "zh": "建筑学院",
+        "en": "School of Architecture"
+      }
+    },
+    {
+      "id": "other",
+      "label": {
+        "zh": "其他学院",
+        "en": "Other"
+      }
+    }
+  ],
+  "industries": [
+    {
+      "id": "finance",
+      "label": {
+        "zh": "金融 / 投行",
+        "en": "Finance / IB"
+      },
+      "emoji": "🏦"
+    },
+    {
+      "id": "consulting",
+      "label": {
+        "zh": "咨询",
+        "en": "Consulting"
+      },
+      "emoji": "📈"
+    },
+    {
+      "id": "tech",
+      "label": {
+        "zh": "科技 / 互联网",
+        "en": "Tech"
+      },
+      "emoji": "💻"
+    },
+    {
+      "id": "quant",
+      "label": {
+        "zh": "量化",
+        "en": "Quant"
+      },
+      "emoji": "📐"
+    },
+    {
+      "id": "data",
+      "label": {
+        "zh": "数据科学 / AI",
+        "en": "Data Science / AI"
+      },
+      "emoji": "🤖"
+    },
+    {
+      "id": "biotech",
+      "label": {
+        "zh": "生物医药",
+        "en": "Biotech / Pharma"
+      },
+      "emoji": "🧬"
+    },
+    {
+      "id": "academia",
+      "label": {
+        "zh": "学术 / 科研",
+        "en": "Academia"
+      },
+      "emoji": "🎓"
+    },
+    {
+      "id": "law",
+      "label": {
+        "zh": "法律",
+        "en": "Law"
+      },
+      "emoji": "⚖️"
+    },
+    {
+      "id": "startup",
+      "label": {
+        "zh": "创业",
+        "en": "Startup"
+      },
+      "emoji": "🚀"
+    }
+  ],
+  "offers": [
+    {
+      "id": "referral",
+      "label": {
+        "zh": "内推",
+        "en": "Referral"
+      },
+      "emoji": "🤝"
+    },
+    {
+      "id": "mock",
+      "label": {
+        "zh": "模拟面试",
+        "en": "Mock interview"
+      },
+      "emoji": "🎯"
+    },
+    {
+      "id": "resume",
+      "label": {
+        "zh": "简历修改",
+        "en": "Resume review"
+      },
+      "emoji": "📄"
+    },
+    {
+      "id": "coffee",
+      "label": {
+        "zh": "咖啡聊天",
+        "en": "Coffee chat"
+      },
+      "emoji": "☕"
+    },
+    {
+      "id": "mentor",
+      "label": {
+        "zh": "长期辅导",
+        "en": "Mentoring"
+      },
+      "emoji": "🌱"
+    }
+  ],
+  "postCategories": [
+    {
+      "id": "industry",
+      "label": {
+        "zh": "行业研究",
+        "en": "Industry research"
+      },
+      "emoji": "📊"
+    },
+    {
+      "id": "career",
+      "label": {
+        "zh": "求职经验",
+        "en": "Job search"
+      },
+      "emoji": "💼"
+    },
+    {
+      "id": "resume",
+      "label": {
+        "zh": "简历案例",
+        "en": "Resume case"
+      },
+      "emoji": "📄"
+    },
+    {
+      "id": "life",
+      "label": {
+        "zh": "生活经验",
+        "en": "Life"
+      },
+      "emoji": "🧭"
+    },
+    {
+      "id": "startup",
+      "label": {
+        "zh": "创业分享",
+        "en": "Startup"
+      },
+      "emoji": "🚀"
+    },
+    {
+      "id": "acssy",
+      "label": {
+        "zh": "学联公告",
+        "en": "ACSSY notice"
+      },
+      "emoji": "📣"
+    }
+  ],
+  "lifeCategories": [
+    {
+      "id": "housing",
+      "label": {
+        "zh": "租房",
+        "en": "Housing"
+      },
+      "emoji": "🏠"
+    },
+    {
+      "id": "food",
+      "label": {
+        "zh": "吃饭",
+        "en": "Food"
+      },
+      "emoji": "🍜"
+    },
+    {
+      "id": "health",
+      "label": {
+        "zh": "医疗",
+        "en": "Health"
+      },
+      "emoji": "🏥"
+    },
+    {
+      "id": "banking",
+      "label": {
+        "zh": "银行 / 信用",
+        "en": "Banking"
+      },
+      "emoji": "💳"
+    },
+    {
+      "id": "transport",
+      "label": {
+        "zh": "交通",
+        "en": "Transport"
+      },
+      "emoji": "🚆"
+    },
+    {
+      "id": "visa",
+      "label": {
+        "zh": "签证 / 身份",
+        "en": "Visa"
+      },
+      "emoji": "🛂"
+    },
+    {
+      "id": "shopping",
+      "label": {
+        "zh": "购物 / 生活",
+        "en": "Shopping"
+      },
+      "emoji": "🛒"
+    }
+  ],
+  "jobTypes": [
+    {
+      "id": "newgrad",
+      "label": {
+        "zh": "校招 / 应届",
+        "en": "New grad"
+      }
+    },
+    {
+      "id": "intern",
+      "label": {
+        "zh": "实习",
+        "en": "Internship"
+      }
+    },
+    {
+      "id": "experienced",
+      "label": {
+        "zh": "社招",
+        "en": "Experienced"
+      }
+    }
+  ],
+  "eventTypes": [
+    {
+      "id": "acssy",
+      "label": {
+        "zh": "学联活动",
+        "en": "ACSSY"
+      },
+      "emoji": "🎉"
+    },
+    {
+      "id": "meetup",
+      "label": {
+        "zh": "校友小聚",
+        "en": "Meetup"
+      },
+      "emoji": "🍻"
+    },
+    {
+      "id": "career",
+      "label": {
+        "zh": "职业分享",
+        "en": "Career"
+      },
+      "emoji": "💼"
+    },
+    {
+      "id": "startup",
+      "label": {
+        "zh": "创业",
+        "en": "Startup"
+      },
+      "emoji": "🚀"
+    },
+    {
+      "id": "outdoor",
+      "label": {
+        "zh": "运动 / 户外",
+        "en": "Outdoor"
+      },
+      "emoji": "🥾"
+    }
+  ],
+  "startupCategories": [
+    {
+      "id": "program",
+      "label": {
+        "zh": "孵化 / 加速",
+        "en": "Programs"
+      }
+    },
+    {
+      "id": "funding",
+      "label": {
+        "zh": "资金 / 竞赛",
+        "en": "Funding"
+      }
+    },
+    {
+      "id": "space",
+      "label": {
+        "zh": "空间 / 设备",
+        "en": "Space"
+      }
+    },
+    {
+      "id": "course",
+      "label": {
+        "zh": "课程",
+        "en": "Courses"
+      }
+    },
+    {
+      "id": "community",
+      "label": {
+        "zh": "社群",
+        "en": "Community"
+      }
+    }
+  ],
+  "projectNeeds": [
+    {
+      "id": "cofounder-tech",
+      "label": {
+        "zh": "技术合伙人",
+        "en": "Technical co-founder"
+      }
+    },
+    {
+      "id": "cofounder-biz",
+      "label": {
+        "zh": "商业合伙人",
+        "en": "Business co-founder"
+      }
+    },
+    {
+      "id": "design",
+      "label": {
+        "zh": "设计",
+        "en": "Design"
+      }
+    },
+    {
+      "id": "funding",
+      "label": {
+        "zh": "融资 / 投资人",
+        "en": "Funding"
+      }
+    },
+    {
+      "id": "legal",
+      "label": {
+        "zh": "法务",
+        "en": "Legal"
+      }
+    },
+    {
+      "id": "marketing",
+      "label": {
+        "zh": "市场 / 增长",
+        "en": "Marketing"
+      }
+    },
+    {
+      "id": "research",
+      "label": {
+        "zh": "科研 / 专家",
+        "en": "Research / experts"
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "idea",
+      "label": {
+        "zh": "想法阶段",
+        "en": "Idea"
+      }
+    },
+    {
+      "id": "mvp",
+      "label": {
+        "zh": "MVP",
+        "en": "MVP"
+      }
+    },
+    {
+      "id": "seed",
+      "label": {
+        "zh": "种子轮",
+        "en": "Seed"
+      }
+    },
+    {
+      "id": "growth",
+      "label": {
+        "zh": "增长期",
+        "en": "Growth"
+      }
+    }
+  ],
+  "badges": [
+    {
+      "id": "pioneer",
+      "label": {
+        "zh": "创始成员",
+        "en": "Founding member"
+      },
+      "emoji": "🏅",
+      "desc": {
+        "zh": "YaleLink 第一批共建者",
+        "en": "Among the first YaleLink builders"
+      }
+    },
+    {
+      "id": "mentor",
+      "label": {
+        "zh": "引路人",
+        "en": "Mentor"
+      },
+      "emoji": "🌱",
+      "desc": {
+        "zh": "帮助过 10 位以上同学",
+        "en": "Helped 10+ members"
+      }
+    },
+    {
+      "id": "author",
+      "label": {
+        "zh": "作者",
+        "en": "Author"
+      },
+      "emoji": "✍️",
+      "desc": {
+        "zh": "发布过帖子",
+        "en": "Published a post"
+      }
+    },
+    {
+      "id": "teammate",
+      "label": {
+        "zh": "组队达人",
+        "en": "Teammate"
+      },
+      "emoji": "🎯",
+      "desc": {
+        "zh": "加入过求职小组",
+        "en": "Joined a study group"
+      }
+    },
+    {
+      "id": "active",
+      "label": {
+        "zh": "活动常客",
+        "en": "Regular"
+      },
+      "emoji": "📅",
+      "desc": {
+        "zh": "报名过活动",
+        "en": "RSVP'd to an event"
+      }
+    },
+    {
+      "id": "founder",
+      "label": {
+        "zh": "创业者",
+        "en": "Founder"
+      },
+      "emoji": "🚀",
+      "desc": {
+        "zh": "发布过创业项目",
+        "en": "Posted a startup project"
+      }
+    },
+    {
+      "id": "alumni",
+      "label": {
+        "zh": "校友",
+        "en": "Alumni"
+      },
+      "emoji": "🎓",
+      "desc": {
+        "zh": "通过校友邮箱验证",
+        "en": "Verified via alumni email"
+      }
+    },
+    {
+      "id": "student",
+      "label": {
+        "zh": "在校生",
+        "en": "Student"
+      },
+      "emoji": "📚",
+      "desc": {
+        "zh": "通过 yale.edu 邮箱验证",
+        "en": "Verified via yale.edu email"
+      }
+    }
+  ],
+  "circleTypes": [
+    {
+      "id": "interest",
+      "label": {
+        "zh": "兴趣",
+        "en": "Interest"
+      },
+      "emoji": "🎨"
+    },
+    {
+      "id": "region",
+      "label": {
+        "zh": "地区",
+        "en": "Region"
+      },
+      "emoji": "📍"
+    },
+    {
+      "id": "industry",
+      "label": {
+        "zh": "行业",
+        "en": "Industry"
+      },
+      "emoji": "🏢"
+    }
+  ],
+  "departments": [
+    {
+      "id": "career",
+      "label": {
+        "zh": "职业发展部",
+        "en": "Career Development"
+      }
+    },
+    {
+      "id": "events",
+      "label": {
+        "zh": "活动部",
+        "en": "Events"
+      }
+    },
+    {
+      "id": "media",
+      "label": {
+        "zh": "宣传部",
+        "en": "Media & Design"
+      }
+    },
+    {
+      "id": "outreach",
+      "label": {
+        "zh": "外联部",
+        "en": "Outreach & Sponsorship"
+      }
+    },
+    {
+      "id": "secretariat",
+      "label": {
+        "zh": "秘书处",
+        "en": "Secretariat"
+      }
+    }
+  ],
+  "contactKinds": [
+    {
+      "id": "venue",
+      "label": {
+        "zh": "场地",
+        "en": "Venue"
+      },
+      "emoji": "🏛️"
+    },
+    {
+      "id": "sponsor",
+      "label": {
+        "zh": "赞助",
+        "en": "Sponsor"
+      },
+      "emoji": "💰"
+    },
+    {
+      "id": "vendor",
+      "label": {
+        "zh": "供应商",
+        "en": "Vendor"
+      },
+      "emoji": "🍱"
+    },
+    {
+      "id": "school",
+      "label": {
+        "zh": "学校部门",
+        "en": "University office"
+      },
+      "emoji": "🎓"
+    },
+    {
+      "id": "partner",
+      "label": {
+        "zh": "合作组织",
+        "en": "Partner org"
+      },
+      "emoji": "🤝"
+    },
+    {
+      "id": "speaker",
+      "label": {
+        "zh": "嘉宾 / 讲者",
+        "en": "Speaker"
+      },
+      "emoji": "🎤"
+    }
+  ],
+  "templateKinds": [
+    {
+      "id": "email",
+      "label": {
+        "zh": "邮件",
+        "en": "Email"
+      },
+      "emoji": "✉️"
+    },
+    {
+      "id": "wechat",
+      "label": {
+        "zh": "微信推送",
+        "en": "WeChat post"
+      },
+      "emoji": "💬"
+    },
+    {
+      "id": "notice",
+      "label": {
+        "zh": "通知",
+        "en": "Notice"
+      },
+      "emoji": "📣"
+    },
+    {
+      "id": "form",
+      "label": {
+        "zh": "表单 / 问卷",
+        "en": "Form"
+      },
+      "emoji": "📝"
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+[
+  { "id": "pb-gala", "category": "acssy", "emoji": "🎉", "title": { "zh": "大型晚会（中秋 / 春节）", "en": "Large gala (Mid-Autumn / Spring Festival)" }, "scale": { "zh": "200–350 人", "en": "200–350 guests" }, "leadTime": { "zh": "提前 8 周启动", "en": "Start 8 weeks out" }, "summary": { "zh": "学联每年最大的两场活动。核心是场地、餐饮、节目与志愿者四条线并行，宣传节奏三波。", "en": "ACSSY's two biggest nights of the year. Four parallel tracks — venue, catering, program, volunteers — with three promotion waves." }, "keyPoints": [
+      { "zh": "场地必须提前 8 周锁定，学校大场地只有 Commons 与 Woolsey 两个选择，晚一周就没了。", "en": "Lock the venue 8 weeks out — only Commons and Woolsey fit, and they go within a week." },
+      { "zh": "餐饮人数按报名的 85% 下单，历年到场率在 80–88% 之间。", "en": "Order catering at 85% of RSVPs; historical show rate is 80–88%." },
+      { "zh": "节目单不超过 12 个，总时长控制在 100 分钟内，观众后半场流失严重。", "en": "Cap the program at 12 acts / 100 minutes — audiences drain in the second half." },
+      { "zh": "志愿者至少 20 人，分签到 / 后勤 / 舞台 / 摄影四组，活动前一天必须走一遍流程。", "en": "At least 20 volunteers in four squads (check-in / logistics / stage / photo); run a full walkthrough the day before." },
+      { "zh": "赞助商权益兑现清单要在活动前一周核对一次，活动后发照片证明。", "en": "Check the sponsor-benefit checklist a week before; send proof photos afterwards." }
+    ], "phases": [
+      { "id": "kickoff", "name": { "zh": "立项", "en": "Kickoff" }, "timing": { "zh": "T-8 周", "en": "T-8 weeks" }, "tasks": [
+        { "title": { "zh": "确定负责人、预算与日期", "en": "Confirm lead, budget and date" }, "role": "events", "days": -56 },
+        { "title": { "zh": "提交场地申请（Commons）", "en": "Submit venue request (Commons)" }, "role": "events", "days": -56 },
+        { "title": { "zh": "启动赞助邀约", "en": "Start sponsor outreach" }, "role": "outreach", "days": -52 } ] },
+      { "id": "prep", "name": { "zh": "筹备", "en": "Preparation" }, "timing": { "zh": "T-6 ~ T-3 周", "en": "T-6 to T-3 weeks" }, "tasks": [
+        { "title": { "zh": "节目征集与初选", "en": "Call for and shortlist performances" }, "role": "events", "days": -42 },
+        { "title": { "zh": "餐饮供应商比价并签约", "en": "Compare and sign catering vendor" }, "role": "outreach", "days": -35 },
+        { "title": { "zh": "主视觉与海报设计", "en": "Key visual and poster design" }, "role": "media", "days": -35 },
+        { "title": { "zh": "发布志愿者招募", "en": "Publish volunteer call" }, "role": "events", "days": -28 },
+        { "title": { "zh": "第一波推送：开放报名", "en": "Promo wave 1: RSVP opens" }, "role": "media", "days": -21 } ] },
+      { "id": "final", "name": { "zh": "冲刺", "en": "Final stretch" }, "timing": { "zh": "T-2 周 ~ T-1 天", "en": "T-2 weeks to T-1 day" }, "tasks": [
+        { "title": { "zh": "确认节目单与彩排时间", "en": "Lock program and rehearsal schedule" }, "role": "events", "days": -14 },
+        { "title": { "zh": "向餐饮确认人数（报名 × 85%）", "en": "Confirm headcount with caterer (RSVPs × 85%)" }, "role": "outreach", "days": -10 },
+        { "title": { "zh": "第二波推送：截止前提醒", "en": "Promo wave 2: deadline reminder" }, "role": "media", "days": -7 },
+        { "title": { "zh": "志愿者分组与培训", "en": "Assign and brief volunteers" }, "role": "events", "days": -5 },
+        { "title": { "zh": "赞助商权益核对", "en": "Sponsor benefits check" }, "role": "outreach", "days": -7 },
+        { "title": { "zh": "全流程走场", "en": "Full walkthrough" }, "role": "events", "days": -1 } ] },
+      { "id": "day", "name": { "zh": "活动日", "en": "Event day" }, "timing": { "zh": "T", "en": "T" }, "tasks": [
+        { "title": { "zh": "场地布置与签到台", "en": "Setup and check-in desk" }, "role": "events", "days": 0 },
+        { "title": { "zh": "摄影与实时推送", "en": "Photography and live posts" }, "role": "media", "days": 0 } ] },
+      { "id": "wrap", "name": { "zh": "收尾", "en": "Wrap-up" }, "timing": { "zh": "T+1 ~ T+7 天", "en": "T+1 to T+7 days" }, "tasks": [
+        { "title": { "zh": "感谢信 + 反馈问卷", "en": "Thank-you note + feedback survey" }, "role": "media", "days": 1 },
+        { "title": { "zh": "报销与结算", "en": "Reimbursements and settlement" }, "role": "secretariat", "days": 5 },
+        { "title": { "zh": "复盘并更新本 SOP", "en": "Retro and update this playbook" }, "role": "events", "days": 7 } ] }
+    ], "materials": [
+      { "name": { "zh": "预算表模板", "en": "Budget sheet template" }, "kind": "sheet", "link": "" },
+      { "name": { "zh": "节目单 & 流程表 2025", "en": "Program & run-of-show 2025" }, "kind": "doc", "link": "" },
+      { "name": { "zh": "志愿者分工表", "en": "Volunteer roster" }, "kind": "sheet", "link": "" },
+      { "name": { "zh": "主视觉源文件 2025", "en": "Key visual source files 2025" }, "kind": "design", "link": "" }
+    ], "templateIds": ["t01", "t02", "t03", "t04", "t06"], "contactIds": ["k01", "k03", "k04", "k06"], "history": [
+      { "year": 2025, "name": { "zh": "中秋晚会 2025", "en": "Mid-Autumn Gala 2025" }, "attendance": 260, "notes": { "zh": "报名 310，到场 260。餐饮略多。节目 14 个偏长，后半场走了约 1/4。", "en": "310 RSVPs, 260 showed. Slight catering surplus. 14 acts ran long; about a quarter left in the second half." } },
+      { "year": 2025, "name": { "zh": "春节晚会 2025", "en": "Spring Festival Gala 2025" }, "attendance": 300, "notes": { "zh": "Woolsey Hall。赞助 2 家。签到排队 20 分钟，建议增加签到台到 4 个。", "en": "Woolsey Hall, two sponsors. Check-in queue hit 20 minutes — use four desks next time." } }
+    ], "maintainerId": "u13" },
+
+  { "id": "pb-panel", "category": "career", "emoji": "💼", "title": { "zh": "校友职业分享会", "en": "Alumni career panel" }, "scale": { "zh": "40–100 人", "en": "40–100 attendees" }, "leadTime": { "zh": "提前 4 周启动", "en": "Start 4 weeks out" }, "summary": { "zh": "职业发展部的标准活动：约嘉宾、定场地、收问题、直播、整理成帖子沉淀到本站。", "en": "Career Development's standard event: book speakers, venue, collect questions, stream, and write it up as a post here." }, "keyPoints": [
+      { "zh": "嘉宾 3 周前约定，给一页提纲；2–3 位嘉宾最合适。", "en": "Book speakers 3 weeks out with a one-page outline; 2–3 speakers is ideal." },
+      { "zh": "提前收集同学问题，现场问题质量差别很大。", "en": "Collect questions in advance — live questions vary wildly in quality." },
+      { "zh": "一定要录像或整理文字稿，发到「行业研究」，这是活动价值的一半。", "en": "Always record or write it up and publish under Industry Research — that's half the value." }
+    ], "phases": [
+      { "id": "kickoff", "name": { "zh": "立项", "en": "Kickoff" }, "timing": { "zh": "T-4 周", "en": "T-4 weeks" }, "tasks": [
+        { "title": { "zh": "确定主题与嘉宾名单", "en": "Set topic and speaker list" }, "role": "career", "days": -28 },
+        { "title": { "zh": "发出嘉宾邀请", "en": "Send speaker invitations" }, "role": "career", "days": -26 },
+        { "title": { "zh": "预约教室（Evans Hall）", "en": "Book room (Evans Hall)" }, "role": "events", "days": -24 } ] },
+      { "id": "prep", "name": { "zh": "筹备", "en": "Preparation" }, "timing": { "zh": "T-3 ~ T-1 周", "en": "T-3 to T-1 weeks" }, "tasks": [
+        { "title": { "zh": "海报与推送", "en": "Poster and announcement" }, "role": "media", "days": -18 },
+        { "title": { "zh": "收集同学问题（表单）", "en": "Collect student questions (form)" }, "role": "career", "days": -10 },
+        { "title": { "zh": "确认线上直播链接", "en": "Set up stream link" }, "role": "media", "days": -5 },
+        { "title": { "zh": "主持稿与问题清单", "en": "Host script and question list" }, "role": "career", "days": -3 } ] },
+      { "id": "day", "name": { "zh": "活动日", "en": "Event day" }, "timing": { "zh": "T", "en": "T" }, "tasks": [
+        { "title": { "zh": "签到、录像、控场", "en": "Check-in, recording, timekeeping" }, "role": "events", "days": 0 } ] },
+      { "id": "wrap", "name": { "zh": "收尾", "en": "Wrap-up" }, "timing": { "zh": "T+1 ~ T+7 天", "en": "T+1 to T+7 days" }, "tasks": [
+        { "title": { "zh": "感谢嘉宾 + 反馈问卷", "en": "Thank speakers + survey" }, "role": "career", "days": 1 },
+        { "title": { "zh": "整理文字稿发布到行业研究", "en": "Publish write-up under Industry Research" }, "role": "career", "days": 7 } ] }
+    ], "materials": [
+      { "name": { "zh": "主持稿模板", "en": "Host script template" }, "kind": "doc", "link": "" },
+      { "name": { "zh": "问题收集表单", "en": "Question collection form" }, "kind": "form", "link": "" }
+    ], "templateIds": ["t05", "t04", "t06"], "contactIds": ["k02", "k08", "k04"], "history": [
+      { "year": 2025, "name": { "zh": "科技校招分享会 2025", "en": "Tech Recruiting Panel 2025" }, "attendance": 72, "notes": { "zh": "线上 40 人。提前收到 35 个问题，效果远好于现场问。", "en": "40 online. 35 questions collected in advance — far better than live Q&A." } }
+    ], "maintainerId": "u10" },
+
+  { "id": "pb-orientation", "category": "acssy", "emoji": "🎒", "title": { "zh": "新生迎新周", "en": "Orientation week" }, "scale": { "zh": "150–250 名新生", "en": "150–250 new students" }, "leadTime": { "zh": "提前 10 周（6 月）启动", "en": "Start 10 weeks out (June)" }, "summary": { "zh": "接机、临时住宿、IKEA 拼车、签证讲座、迎新晚宴五个子活动，跨越 8 月两周。", "en": "Five sub-events over two weeks in August: airport pickups, temporary housing, IKEA carpools, visa session, welcome dinner." }, "keyPoints": [
+      { "zh": "6 月就要建新生群并发问卷，收集到达时间。", "en": "Create the newcomer group and send the arrival survey in June." },
+      { "zh": "接机志愿者需要有车的在校生，提前一个月排班。", "en": "Airport pickups need students with cars — schedule a month ahead." },
+      { "zh": "与 OISS 合办签证讲座，官方背书很重要。", "en": "Co-host the visa session with OISS; the official backing matters." }
+    ], "phases": [
+      { "id": "kickoff", "name": { "zh": "立项", "en": "Kickoff" }, "timing": { "zh": "6 月", "en": "June" }, "tasks": [
+        { "title": { "zh": "建新生群 + 到达问卷", "en": "Newcomer group + arrival survey" }, "role": "secretariat", "days": -70 },
+        { "title": { "zh": "联系 OISS 合办讲座", "en": "Coordinate visa session with OISS" }, "role": "outreach", "days": -60 } ] },
+      { "id": "prep", "name": { "zh": "筹备", "en": "Preparation" }, "timing": { "zh": "7 月", "en": "July" }, "tasks": [
+        { "title": { "zh": "招募有车志愿者并排班", "en": "Recruit drivers and schedule pickups" }, "role": "events", "days": -30 },
+        { "title": { "zh": "更新生活指南（租房 / 银行 / 采购）", "en": "Update life guides (housing / banking / shopping)" }, "role": "media", "days": -30 },
+        { "title": { "zh": "迎新晚宴场地与餐饮", "en": "Welcome dinner venue and catering" }, "role": "outreach", "days": -21 } ] },
+      { "id": "day", "name": { "zh": "迎新两周", "en": "The two weeks" }, "timing": { "zh": "8 月中下旬", "en": "Mid–late August" }, "tasks": [
+        { "title": { "zh": "接机与临时住宿协调", "en": "Pickups and temporary housing" }, "role": "events", "days": -7 },
+        { "title": { "zh": "IKEA 拼车", "en": "IKEA carpools" }, "role": "events", "days": -3 },
+        { "title": { "zh": "签证讲座 + 迎新晚宴", "en": "Visa session + welcome dinner" }, "role": "events", "days": 0 } ] },
+      { "id": "wrap", "name": { "zh": "收尾", "en": "Wrap-up" }, "timing": { "zh": "9 月初", "en": "Early September" }, "tasks": [
+        { "title": { "zh": "新生反馈 + 更新 SOP", "en": "Newcomer feedback + update playbook" }, "role": "secretariat", "days": 7 } ] }
+    ], "materials": [
+      { "name": { "zh": "到达信息问卷", "en": "Arrival survey" }, "kind": "form", "link": "" },
+      { "name": { "zh": "接机排班表", "en": "Pickup roster" }, "kind": "sheet", "link": "" }
+    ], "templateIds": ["t03", "t04", "t06"], "contactIds": ["k05", "k03", "k06"], "history": [
+      { "year": 2026, "name": { "zh": "迎新周 2026", "en": "Orientation 2026" }, "attendance": 210, "notes": { "zh": "接机 64 人次，IKEA 拼车 3 批。反馈最多的是希望更早拿到租房指南。", "en": "64 pickups, three IKEA runs. Top feedback: publish the housing guide earlier." } }
+    ], "maintainerId": "u13" },
+
+  { "id": "pb-meetup", "category": "meetup", "emoji": "🍻", "title": { "zh": "地区 / 社群小型聚会", "en": "Regional or circle meetup" }, "scale": { "zh": "10–40 人", "en": "10–40 people" }, "leadTime": { "zh": "提前 2 周", "en": "2 weeks out" }, "summary": { "zh": "任何校友都能发起的轻量流程：定时间地点、发推送、收报名、当天签到、发照片。", "en": "The lightweight flow any alum can run: pick time and place, announce, collect RSVPs, check in, share photos." }, "keyPoints": [
+      { "zh": "选可以 AA 且能预留位置的地方；预留人数按报名的 80%。", "en": "Pick a place that splits bills and takes reservations; reserve for 80% of RSVPs." },
+      { "zh": "活动前一天在群里 @ 全体提醒一次。", "en": "Remind everyone in the group the day before." }
+    ], "phases": [
+      { "id": "prep", "name": { "zh": "筹备", "en": "Preparation" }, "timing": { "zh": "T-2 周", "en": "T-2 weeks" }, "tasks": [
+        { "title": { "zh": "定时间、地点并预订", "en": "Pick time and place, reserve" }, "role": "events", "days": -14 },
+        { "title": { "zh": "发布活动与推送", "en": "Publish event and announce" }, "role": "media", "days": -12 } ] },
+      { "id": "day", "name": { "zh": "活动日", "en": "Event day" }, "timing": { "zh": "T", "en": "T" }, "tasks": [
+        { "title": { "zh": "前一天提醒 + 当天签到", "en": "Reminder the day before + check-in" }, "role": "events", "days": -1 } ] },
+      { "id": "wrap", "name": { "zh": "收尾", "en": "Wrap-up" }, "timing": { "zh": "T+1", "en": "T+1" }, "tasks": [
+        { "title": { "zh": "发照片 + 记录下次建议", "en": "Share photos + note suggestions" }, "role": "media", "days": 1 } ] }
+    ], "materials": [], "templateIds": ["t04", "t06"], "contactIds": ["k07"], "history": [], "maintainerId": "u01" }
+]

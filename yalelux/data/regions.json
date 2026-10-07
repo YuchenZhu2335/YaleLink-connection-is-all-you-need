@@ -1,0 +1,10 @@
+[
+  { "id": "new-haven", "name": { "zh": "纽黑文", "en": "New Haven" }, "country": "US", "emoji": "🏛️" },
+  { "id": "nyc", "name": { "zh": "纽约", "en": "New York" }, "country": "US", "emoji": "🗽" },
+  { "id": "boston", "name": { "zh": "波士顿", "en": "Boston" }, "country": "US", "emoji": "🦞" },
+  { "id": "bay-area", "name": { "zh": "湾区", "en": "Bay Area" }, "country": "US", "emoji": "🌉" },
+  { "id": "beijing", "name": { "zh": "北京", "en": "Beijing" }, "country": "CN", "emoji": "🏯" },
+  { "id": "shanghai", "name": { "zh": "上海", "en": "Shanghai" }, "country": "CN", "emoji": "🌆" },
+  { "id": "hongkong", "name": { "zh": "香港", "en": "Hong Kong" }, "country": "HK", "emoji": "🌃" },
+  { "id": "london", "name": { "zh": "伦敦", "en": "London" }, "country": "UK", "emoji": "🎡" }
+]

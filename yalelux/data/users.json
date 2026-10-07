@@ -1,0 +1,621 @@
+[
+  {
+    "id": "u01",
+    "name": {
+      "zh": "王思远",
+      "en": "Siyuan Wang"
+    },
+    "school": "som",
+    "degree": {
+      "zh": "MBA",
+      "en": "MBA"
+    },
+    "classYear": 2019,
+    "region": "nyc",
+    "industry": "consulting",
+    "title": {
+      "zh": "项目经理",
+      "en": "Engagement Manager"
+    },
+    "company": {
+      "zh": "麦肯锡",
+      "en": "McKinsey & Company"
+    },
+    "offers": [
+      "referral",
+      "mock",
+      "coffee"
+    ],
+    "skills": [
+      "cofounder-biz",
+      "marketing"
+    ],
+    "bio": {
+      "zh": "SOM 毕业后一直在纽约做咨询，主要看消费与零售。每年帮学弟学妹做 case 模拟面试，欢迎约。",
+      "en": "Consulting in NYC since SOM, mostly consumer & retail. I run case mock interviews for students every recruiting season — reach out."
+    },
+    "points": 480,
+    "badges": [
+      "pioneer",
+      "mentor"
+    ],
+    "featured": true
+  },
+  {
+    "id": "u02",
+    "name": {
+      "zh": "李婧",
+      "en": "Jing Li"
+    },
+    "school": "seas",
+    "degree": {
+      "zh": "计算机硕士",
+      "en": "MS Computer Science"
+    },
+    "classYear": 2021,
+    "region": "bay-area",
+    "industry": "tech",
+    "title": {
+      "zh": "软件工程师",
+      "en": "Software Engineer"
+    },
+    "company": {
+      "zh": "Google",
+      "en": "Google"
+    },
+    "offers": [
+      "referral",
+      "mock",
+      "resume"
+    ],
+    "skills": [
+      "cofounder-tech"
+    ],
+    "bio": {
+      "zh": "做搜索基础设施。可以内推 Google 校招与实习，也乐意帮看简历里的项目描述。",
+      "en": "Search infra at Google. Happy to refer for new-grad and intern roles and to review project bullets on resumes."
+    },
+    "points": 420,
+    "badges": [
+      "pioneer"
+    ],
+    "featured": true
+  },
+  {
+    "id": "u03",
+    "name": {
+      "zh": "陈昊",
+      "en": "Hao Chen"
+    },
+    "school": "yc",
+    "degree": {
+      "zh": "经济学学士",
+      "en": "BA Economics"
+    },
+    "classYear": 2018,
+    "region": "hongkong",
+    "industry": "finance",
+    "title": {
+      "zh": "副总裁",
+      "en": "Vice President"
+    },
+    "company": {
+      "zh": "高盛",
+      "en": "Goldman Sachs"
+    },
+    "offers": [
+      "referral",
+      "mock"
+    ],
+    "skills": [
+      "funding"
+    ],
+    "bio": {
+      "zh": "香港 IBD，覆盖 TMT。每年秋招前会办一次投行 superday 模拟。",
+      "en": "IBD in Hong Kong covering TMT. I host a mock superday before every fall recruiting cycle."
+    },
+    "points": 390,
+    "badges": [
+      "mentor"
+    ]
+  },
+  {
+    "id": "u04",
+    "name": {
+      "zh": "张宇桐",
+      "en": "Yutong Zhang"
+    },
+    "school": "gsas",
+    "degree": {
+      "zh": "生物学博士",
+      "en": "PhD Biology"
+    },
+    "classYear": 2022,
+    "region": "boston",
+    "industry": "biotech",
+    "title": {
+      "zh": "科学家",
+      "en": "Scientist"
+    },
+    "company": {
+      "zh": "Moderna",
+      "en": "Moderna"
+    },
+    "offers": [
+      "coffee",
+      "mentor"
+    ],
+    "skills": [
+      "research"
+    ],
+    "bio": {
+      "zh": "从学术转工业界的博士，愿意聊 PhD 出路、波士顿生活。",
+      "en": "PhD who moved from academia to industry. Happy to talk PhD career paths and life in Boston."
+    },
+    "points": 210,
+    "badges": []
+  },
+  {
+    "id": "u05",
+    "name": {
+      "zh": "刘沐晨",
+      "en": "Muchen Liu"
+    },
+    "school": "som",
+    "degree": {
+      "zh": "MBA",
+      "en": "MBA"
+    },
+    "classYear": 2023,
+    "region": "shanghai",
+    "industry": "startup",
+    "title": {
+      "zh": "创始人 & CEO",
+      "en": "Founder & CEO"
+    },
+    "company": {
+      "zh": "启明 AI 教育",
+      "en": "Qiming AI Education"
+    },
+    "offers": [
+      "coffee"
+    ],
+    "skills": [
+      "cofounder-biz",
+      "marketing"
+    ],
+    "bio": {
+      "zh": "Tsai CITY 孵化项目出身，回国做 AI 教育。想聊回国创业、Tsai CITY 申请经验的同学欢迎找我。",
+      "en": "Started at Tsai CITY, now building AI education in Shanghai. Ask me about founding in China or applying to Tsai CITY."
+    },
+    "points": 300,
+    "badges": [
+      "founder"
+    ],
+    "featured": true
+  },
+  {
+    "id": "u06",
+    "name": {
+      "zh": "赵一诺",
+      "en": "Yinuo Zhao"
+    },
+    "school": "yls",
+    "degree": {
+      "zh": "法律硕士 LLM",
+      "en": "LLM"
+    },
+    "classYear": 2020,
+    "region": "beijing",
+    "industry": "law",
+    "title": {
+      "zh": "律师",
+      "en": "Associate"
+    },
+    "company": {
+      "zh": "金杜律师事务所",
+      "en": "King & Wood Mallesons"
+    },
+    "offers": [
+      "resume",
+      "coffee"
+    ],
+    "skills": [
+      "legal"
+    ],
+    "bio": {
+      "zh": "跨境并购与合规。可以帮创业同学看早期股权与合规问题（非正式意见）。",
+      "en": "Cross-border M&A and compliance. Informal early-stage equity/compliance questions welcome."
+    },
+    "points": 180,
+    "badges": []
+  },
+  {
+    "id": "u07",
+    "name": {
+      "zh": "周凯文",
+      "en": "Kevin Zhou"
+    },
+    "school": "yc",
+    "degree": {
+      "zh": "数学与计算机学士",
+      "en": "BS Math & CS"
+    },
+    "classYear": 2024,
+    "region": "nyc",
+    "industry": "quant",
+    "title": {
+      "zh": "量化研究员",
+      "en": "Quant Researcher"
+    },
+    "company": {
+      "zh": "Jane Street",
+      "en": "Jane Street"
+    },
+    "offers": [
+      "mock",
+      "referral"
+    ],
+    "skills": [
+      "cofounder-tech"
+    ],
+    "bio": {
+      "zh": "刚毕业两年，对量化面试流程记忆犹新，可以陪练概率题与脑筋急转弯。",
+      "en": "Two years out, still remember every quant interview round. Happy to drill probability and brainteasers."
+    },
+    "points": 260,
+    "badges": []
+  },
+  {
+    "id": "u08",
+    "name": {
+      "zh": "黄雅琪",
+      "en": "Yaqi Huang"
+    },
+    "school": "ysph",
+    "degree": {
+      "zh": "公共卫生硕士",
+      "en": "MPH"
+    },
+    "classYear": 2022,
+    "region": "london",
+    "industry": "data",
+    "title": {
+      "zh": "数据科学家",
+      "en": "Data Scientist"
+    },
+    "company": {
+      "zh": "德勤",
+      "en": "Deloitte"
+    },
+    "offers": [
+      "resume",
+      "mock"
+    ],
+    "skills": [
+      "research"
+    ],
+    "bio": {
+      "zh": "伦敦校友群发起人之一。欧洲求职/签证经验可以分享。",
+      "en": "Co-founded the London alumni group. Can share Europe job-search and visa experience."
+    },
+    "points": 150,
+    "badges": []
+  },
+  {
+    "id": "u09",
+    "name": {
+      "zh": "吴承泽",
+      "en": "Chengze Wu"
+    },
+    "school": "jackson",
+    "degree": {
+      "zh": "全球事务硕士",
+      "en": "MPP Global Affairs"
+    },
+    "classYear": 2021,
+    "region": "beijing",
+    "industry": "consulting",
+    "title": {
+      "zh": "咨询顾问",
+      "en": "Consultant"
+    },
+    "company": {
+      "zh": "波士顿咨询 BCG",
+      "en": "BCG"
+    },
+    "offers": [
+      "referral",
+      "mock",
+      "coffee"
+    ],
+    "skills": [
+      "cofounder-biz"
+    ],
+    "bio": {
+      "zh": "北京办公室。国内咨询秋招节奏与美国很不一样，可以帮忙梳理时间线。",
+      "en": "Beijing office. China consulting recruiting runs on a very different clock from the US — happy to walk through the timeline."
+    },
+    "points": 330,
+    "badges": []
+  },
+  {
+    "id": "u10",
+    "name": {
+      "zh": "孙悦",
+      "en": "Yue Sun"
+    },
+    "school": "yc",
+    "degree": {
+      "zh": "本科在读",
+      "en": "Undergraduate"
+    },
+    "classYear": 2026,
+    "region": "new-haven",
+    "industry": "tech",
+    "title": {
+      "zh": "ACSSY 职业发展部部长",
+      "en": "ACSSY Career Development Lead"
+    },
+    "company": {
+      "zh": "耶鲁学联",
+      "en": "ACSSY"
+    },
+    "offers": [
+      "coffee"
+    ],
+    "skills": [
+      "design",
+      "marketing"
+    ],
+    "bio": {
+      "zh": "负责本学年的校招信息汇总与求职小组组织。有活动想法直接私信。",
+      "en": "Runs this year's recruiting digests and study groups. DM me with event ideas."
+    },
+    "points": 520,
+    "badges": [
+      "pioneer",
+      "student"
+    ],
+    "featured": true,
+    "acssy": {
+      "role": "lead",
+      "department": "career"
+    }
+  },
+  {
+    "id": "u11",
+    "name": {
+      "zh": "郑博文",
+      "en": "Bowen Zheng"
+    },
+    "school": "gsas",
+    "degree": {
+      "zh": "统计学博士",
+      "en": "PhD Statistics"
+    },
+    "classYear": 2020,
+    "region": "bay-area",
+    "industry": "academia",
+    "title": {
+      "zh": "助理教授",
+      "en": "Assistant Professor"
+    },
+    "company": {
+      "zh": "斯坦福大学",
+      "en": "Stanford University"
+    },
+    "offers": [
+      "mentor",
+      "coffee"
+    ],
+    "skills": [
+      "research"
+    ],
+    "bio": {
+      "zh": "学术求职（faculty job market）踩过的坑都可以聊。",
+      "en": "Ask me anything about the faculty job market — I made most of the mistakes already."
+    },
+    "points": 240,
+    "badges": []
+  },
+  {
+    "id": "u12",
+    "name": {
+      "zh": "林芷若",
+      "en": "Zhiruo Lin"
+    },
+    "school": "som",
+    "degree": {
+      "zh": "MBA",
+      "en": "MBA"
+    },
+    "classYear": 2017,
+    "region": "shanghai",
+    "industry": "finance",
+    "title": {
+      "zh": "投资总监",
+      "en": "Investment Director"
+    },
+    "company": {
+      "zh": "红杉中国",
+      "en": "Sequoia China"
+    },
+    "offers": [
+      "coffee",
+      "mentor"
+    ],
+    "skills": [
+      "funding"
+    ],
+    "bio": {
+      "zh": "看早期科技与消费。校友项目愿意第一时间看 deck。",
+      "en": "Early-stage tech and consumer. Yale-founded projects get a first look at their deck."
+    },
+    "points": 350,
+    "badges": [
+      "mentor"
+    ]
+  },
+  {
+    "id": "u13",
+    "name": {
+      "zh": "何知远",
+      "en": "Zhiyuan He"
+    },
+    "school": "gsas",
+    "degree": {
+      "zh": "经济学博士在读",
+      "en": "PhD candidate, Economics"
+    },
+    "classYear": 2028,
+    "region": "new-haven",
+    "industry": "academia",
+    "title": {
+      "zh": "ACSSY 活动部部长",
+      "en": "ACSSY Events Lead"
+    },
+    "company": {
+      "zh": "耶鲁学联",
+      "en": "ACSSY"
+    },
+    "offers": [
+      "coffee"
+    ],
+    "skills": [
+      "marketing"
+    ],
+    "bio": {
+      "zh": "负责学联大型活动执行。中秋晚会、迎新周的 SOP 主要由活动部维护。",
+      "en": "Runs ACSSY's large events. The gala and orientation playbooks are maintained by the Events team."
+    },
+    "points": 410,
+    "badges": [
+      "pioneer",
+      "student"
+    ],
+    "acssy": {
+      "role": "lead",
+      "department": "events"
+    }
+  },
+  {
+    "id": "u14",
+    "name": {
+      "zh": "陈雨桐",
+      "en": "Yutong Chen"
+    },
+    "school": "yc",
+    "degree": {
+      "zh": "本科在读",
+      "en": "Undergraduate"
+    },
+    "classYear": 2027,
+    "region": "new-haven",
+    "industry": "tech",
+    "title": {
+      "zh": "ACSSY 宣传部部员",
+      "en": "ACSSY Media team member"
+    },
+    "company": {
+      "zh": "耶鲁学联",
+      "en": "ACSSY"
+    },
+    "offers": [],
+    "skills": [
+      "design"
+    ],
+    "bio": {
+      "zh": "做海报和推送。",
+      "en": "Posters and posts."
+    },
+    "points": 120,
+    "badges": [
+      "student"
+    ],
+    "acssy": {
+      "role": "member",
+      "department": "media"
+    }
+  },
+  {
+    "id": "u15",
+    "name": {
+      "zh": "高一帆",
+      "en": "Yifan Gao"
+    },
+    "school": "som",
+    "degree": {
+      "zh": "MBA 在读",
+      "en": "MBA candidate"
+    },
+    "classYear": 2027,
+    "region": "new-haven",
+    "industry": "finance",
+    "title": {
+      "zh": "ACSSY 外联部部员",
+      "en": "ACSSY Outreach member"
+    },
+    "company": {
+      "zh": "耶鲁学联",
+      "en": "ACSSY"
+    },
+    "offers": [
+      "coffee"
+    ],
+    "skills": [
+      "cofounder-biz"
+    ],
+    "bio": {
+      "zh": "负责赞助与合作方对接。",
+      "en": "Handles sponsors and partner organizations."
+    },
+    "points": 150,
+    "badges": [
+      "student"
+    ],
+    "acssy": {
+      "role": "member",
+      "department": "outreach"
+    }
+  },
+  {
+    "id": "u16",
+    "name": {
+      "zh": "宋昕",
+      "en": "Xin Song"
+    },
+    "school": "ysph",
+    "degree": {
+      "zh": "MPH 在读",
+      "en": "MPH candidate"
+    },
+    "classYear": 2027,
+    "region": "new-haven",
+    "industry": "data",
+    "title": {
+      "zh": "ACSSY 活动部部员",
+      "en": "ACSSY Events member"
+    },
+    "company": {
+      "zh": "耶鲁学联",
+      "en": "ACSSY"
+    },
+    "offers": [],
+    "skills": [
+      "research"
+    ],
+    "bio": {
+      "zh": "活动执行与志愿者协调。",
+      "en": "Event execution and volunteer coordination."
+    },
+    "points": 95,
+    "badges": [
+      "student"
+    ],
+    "acssy": {
+      "role": "member",
+      "department": "events"
+    }
+  }
+]

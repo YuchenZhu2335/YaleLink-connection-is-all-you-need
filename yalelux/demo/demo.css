@@ -1,0 +1,28 @@
+/* 演示版专用：顶部一行提示条（不吸顶，在顶栏之上）。只用项目的设计变量（web/css/tokens.css）。
+   Demo-only banner above the top bar; uses the project's design tokens. */
+.demo-banner {
+  background-color: var(--c-accent-soft);
+  border-bottom: 1px solid var(--c-accent-edge);
+  color: var(--c-ink);
+  padding-top: env(safe-area-inset-top);
+}
+/* 安全区已经由提示条让出，顶栏不再重复留 */
+.demo-banner ~ .app .topbar { padding-top: 0; }
+.demo-banner__inner {
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: var(--sp-1) var(--gutter);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-tag); line-height: 1.5; text-align: center;
+}
+.demo-banner__msg { min-width: 0; overflow-wrap: anywhere; }
+.demo-banner__reset {
+  flex-shrink: 0;
+  min-height: 28px; padding: 0 var(--sp-3);
+  border: 1px solid var(--c-accent-edge); border-radius: var(--radius-pill);
+  background-color: var(--c-surface); color: var(--c-ink);
+  font: inherit; font-weight: var(--fw-bold); cursor: pointer;
+}
+.demo-banner__reset:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; box-shadow: var(--focus-ring); }
+@media (hover: hover) { .demo-banner__reset:hover { background-color: var(--c-accent); color: var(--c-accent-ink); } }

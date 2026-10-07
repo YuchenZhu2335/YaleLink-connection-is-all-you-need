@@ -1,0 +1,53 @@
+[
+  { "id": "c01", "name": { "zh": "中秋晚会 2026", "en": "Mid-Autumn Gala 2026" }, "eventId": "e01", "playbookId": "pb-gala", "leadId": "u13", "department": "events", "status": "active", "date": "2026-09-25", "memberIds": ["u13", "u14", "u15", "u16", "u10"], "tasks": [
+      { "id": "c01-1", "phase": "kickoff", "title": { "zh": "确定负责人、预算与日期", "en": "Confirm lead, budget and date" }, "role": "events", "assigneeId": "u13", "due": "2026-07-31", "status": "done", "updates": [{ "at": "2026-07-30", "by": "u13", "text": { "zh": "预算 $6,500，日期定 9/25。", "en": "Budget $6,500; date set for 9/25." } }] },
+      { "id": "c01-2", "phase": "kickoff", "title": { "zh": "提交场地申请（Commons）", "en": "Submit venue request (Commons)" }, "role": "events", "assigneeId": "u13", "due": "2026-07-31", "status": "done", "updates": [{ "at": "2026-08-05", "by": "u13", "text": { "zh": "Commons 已确认，18:00–22:00。", "en": "Commons confirmed, 6–10 pm." } }] },
+      { "id": "c01-3", "phase": "kickoff", "title": { "zh": "启动赞助邀约", "en": "Start sponsor outreach" }, "role": "outreach", "assigneeId": "u15", "due": "2026-08-04", "status": "done", "updates": [{ "at": "2026-08-12", "by": "u15", "text": { "zh": "券商已口头确认 $2,000，等合同。", "en": "Brokerage verbally confirmed $2,000; contract pending." } }] },
+      { "id": "c01-4", "phase": "prep", "title": { "zh": "节目征集与初选", "en": "Call for and shortlist performances" }, "role": "events", "assigneeId": "u16", "due": "2026-08-14", "status": "done", "updates": [{ "at": "2026-08-20", "by": "u16", "text": { "zh": "收到 19 个报名，初选 12 个。", "en": "19 submissions, 12 shortlisted." } }] },
+      { "id": "c01-5", "phase": "prep", "title": { "zh": "餐饮供应商比价并签约", "en": "Compare and sign catering vendor" }, "role": "outreach", "assigneeId": "u15", "due": "2026-08-21", "status": "doing", "updates": [{ "at": "2026-08-28", "by": "u15", "text": { "zh": "两家报价，人均 $18 / $21，倾向前者，等素食方案。", "en": "Two quotes, $18 / $21 per head; leaning to the first, waiting on vegetarian menu." } }] },
+      { "id": "c01-6", "phase": "prep", "title": { "zh": "主视觉与海报设计", "en": "Key visual and poster design" }, "role": "media", "assigneeId": "u14", "due": "2026-08-21", "status": "done", "updates": [] },
+      { "id": "c01-7", "phase": "prep", "title": { "zh": "发布志愿者招募", "en": "Publish volunteer call" }, "role": "events", "assigneeId": "u16", "due": "2026-08-28", "status": "doing", "updates": [{ "at": "2026-09-01", "by": "u16", "text": { "zh": "已发本站与三个群，目前 11/20。", "en": "Posted here and in three groups; 11/20 so far." } }] },
+      { "id": "c01-8", "phase": "prep", "title": { "zh": "第一波推送：开放报名", "en": "Promo wave 1: RSVP opens" }, "role": "media", "assigneeId": "u14", "due": "2026-09-04", "status": "todo", "updates": [] },
+      { "id": "c01-9", "phase": "final", "title": { "zh": "确认节目单与彩排时间", "en": "Lock program and rehearsal schedule" }, "role": "events", "assigneeId": null, "due": "2026-09-11", "status": "todo", "updates": [] },
+      { "id": "c01-10", "phase": "final", "title": { "zh": "向餐饮确认人数（报名 × 85%）", "en": "Confirm headcount with caterer (RSVPs × 85%)" }, "role": "outreach", "assigneeId": "u15", "due": "2026-09-15", "status": "todo", "updates": [] },
+      { "id": "c01-11", "phase": "final", "title": { "zh": "第二波推送：截止前提醒", "en": "Promo wave 2: deadline reminder" }, "role": "media", "assigneeId": null, "due": "2026-09-18", "status": "todo", "updates": [] },
+      { "id": "c01-12", "phase": "final", "title": { "zh": "志愿者分组与培训", "en": "Assign and brief volunteers" }, "role": "events", "assigneeId": null, "due": "2026-09-20", "status": "todo", "updates": [] },
+      { "id": "c01-13", "phase": "final", "title": { "zh": "赞助商权益核对", "en": "Sponsor benefits check" }, "role": "outreach", "assigneeId": "u15", "due": "2026-09-18", "status": "todo", "updates": [] },
+      { "id": "c01-14", "phase": "final", "title": { "zh": "全流程走场", "en": "Full walkthrough" }, "role": "events", "assigneeId": "u13", "due": "2026-09-24", "status": "todo", "updates": [] },
+      { "id": "c01-15", "phase": "day", "title": { "zh": "场地布置与签到台", "en": "Setup and check-in desk" }, "role": "events", "assigneeId": null, "due": "2026-09-25", "status": "todo", "updates": [] },
+      { "id": "c01-16", "phase": "day", "title": { "zh": "摄影与实时推送", "en": "Photography and live posts" }, "role": "media", "assigneeId": null, "due": "2026-09-25", "status": "todo", "updates": [] },
+      { "id": "c01-17", "phase": "wrap", "title": { "zh": "感谢信 + 反馈问卷", "en": "Thank-you note + feedback survey" }, "role": "media", "assigneeId": null, "due": "2026-09-26", "status": "todo", "updates": [] },
+      { "id": "c01-18", "phase": "wrap", "title": { "zh": "报销与结算", "en": "Reimbursements and settlement" }, "role": "secretariat", "assigneeId": null, "due": "2026-09-30", "status": "todo", "updates": [] },
+      { "id": "c01-19", "phase": "wrap", "title": { "zh": "复盘并更新本 SOP", "en": "Retro and update this playbook" }, "role": "events", "assigneeId": "u13", "due": "2026-10-02", "status": "todo", "updates": [] }
+    ], "volunteerRoles": [
+      { "id": "checkin", "role": { "zh": "签到组", "en": "Check-in" }, "count": 6, "filled": 4, "shift": { "zh": "17:30–19:30", "en": "5:30–7:30 pm" } },
+      { "id": "logistics", "role": { "zh": "后勤组（餐饮 / 布置）", "en": "Logistics (catering / setup)" }, "count": 8, "filled": 4, "shift": { "zh": "16:00–22:30", "en": "4:00–10:30 pm" } },
+      { "id": "stage", "role": { "zh": "舞台组", "en": "Stage" }, "count": 4, "filled": 2, "shift": { "zh": "17:00–22:00", "en": "5:00–10:00 pm" } },
+      { "id": "photo", "role": { "zh": "摄影组", "en": "Photography" }, "count": 2, "filled": 1, "shift": { "zh": "18:00–22:00", "en": "6:00–10:00 pm" } }
+    ], "notices": [
+      { "at": "2026-09-01", "by": "u13", "text": { "zh": "本周重点：餐饮签约、第一波推送。周四晚例会。", "en": "This week: sign catering, promo wave 1. Team sync Thursday evening." } },
+      { "at": "2026-08-20", "by": "u16", "text": { "zh": "节目初选完成，12 个节目，名单见共享表。", "en": "Program shortlisted: 12 acts, see the shared sheet." } }
+    ] },
+
+  { "id": "c02", "name": { "zh": "咨询校招分享会 2026", "en": "Consulting Recruiting Night 2026" }, "eventId": "e02", "playbookId": "pb-panel", "leadId": "u10", "department": "career", "status": "active", "date": "2026-09-12", "memberIds": ["u10", "u14", "u16"], "tasks": [
+      { "id": "c02-1", "phase": "kickoff", "title": { "zh": "确定主题与嘉宾名单", "en": "Set topic and speaker list" }, "role": "career", "assigneeId": "u10", "due": "2026-08-15", "status": "done", "updates": [] },
+      { "id": "c02-2", "phase": "kickoff", "title": { "zh": "发出嘉宾邀请", "en": "Send speaker invitations" }, "role": "career", "assigneeId": "u10", "due": "2026-08-17", "status": "done", "updates": [{ "at": "2026-08-22", "by": "u10", "text": { "zh": "王思远、吴承泽两位校友确认。", "en": "Siyuan Wang and Chengze Wu confirmed." } }] },
+      { "id": "c02-3", "phase": "kickoff", "title": { "zh": "预约教室（Evans Hall）", "en": "Book room (Evans Hall)" }, "role": "events", "assigneeId": "u16", "due": "2026-08-19", "status": "done", "updates": [] },
+      { "id": "c02-4", "phase": "prep", "title": { "zh": "海报与推送", "en": "Poster and announcement" }, "role": "media", "assigneeId": "u14", "due": "2026-08-25", "status": "done", "updates": [] },
+      { "id": "c02-5", "phase": "prep", "title": { "zh": "收集同学问题（表单）", "en": "Collect student questions (form)" }, "role": "career", "assigneeId": "u10", "due": "2026-09-02", "status": "doing", "updates": [{ "at": "2026-09-02", "by": "u10", "text": { "zh": "已收 28 个问题。", "en": "28 questions so far." } }] },
+      { "id": "c02-6", "phase": "prep", "title": { "zh": "确认线上直播链接", "en": "Set up stream link" }, "role": "media", "assigneeId": null, "due": "2026-09-07", "status": "todo", "updates": [] },
+      { "id": "c02-7", "phase": "prep", "title": { "zh": "主持稿与问题清单", "en": "Host script and question list" }, "role": "career", "assigneeId": "u10", "due": "2026-09-09", "status": "todo", "updates": [] },
+      { "id": "c02-8", "phase": "day", "title": { "zh": "签到、录像、控场", "en": "Check-in, recording, timekeeping" }, "role": "events", "assigneeId": null, "due": "2026-09-12", "status": "todo", "updates": [] },
+      { "id": "c02-9", "phase": "wrap", "title": { "zh": "感谢嘉宾 + 反馈问卷", "en": "Thank speakers + survey" }, "role": "career", "assigneeId": null, "due": "2026-09-13", "status": "todo", "updates": [] },
+      { "id": "c02-10", "phase": "wrap", "title": { "zh": "整理文字稿发布到行业研究", "en": "Publish write-up under Industry Research" }, "role": "career", "assigneeId": null, "due": "2026-09-19", "status": "todo", "updates": [] }
+    ], "volunteerRoles": [
+      { "id": "checkin", "role": { "zh": "签到 & 录像", "en": "Check-in & recording" }, "count": 2, "filled": 1, "shift": { "zh": "18:30–20:30", "en": "6:30–8:30 pm" } }
+    ], "notices": [ { "at": "2026-09-02", "by": "u10", "text": { "zh": "问题收集到周五截止，宣传部请再推一次。", "en": "Question form closes Friday — Media, one more push please." } } ] },
+
+  { "id": "c03", "name": { "zh": "迎新周 2026", "en": "Orientation Week 2026" }, "eventId": null, "playbookId": "pb-orientation", "leadId": "u13", "department": "events", "status": "done", "date": "2026-08-22", "memberIds": ["u13", "u16", "u14", "u15"], "tasks": [
+      { "id": "c03-1", "phase": "kickoff", "title": { "zh": "建新生群 + 到达问卷", "en": "Newcomer group + arrival survey" }, "role": "secretariat", "assigneeId": "u13", "due": "2026-06-13", "status": "done", "updates": [] },
+      { "id": "c03-2", "phase": "prep", "title": { "zh": "招募有车志愿者并排班", "en": "Recruit drivers and schedule pickups" }, "role": "events", "assigneeId": "u16", "due": "2026-07-23", "status": "done", "updates": [] },
+      { "id": "c03-3", "phase": "day", "title": { "zh": "签证讲座 + 迎新晚宴", "en": "Visa session + welcome dinner" }, "role": "events", "assigneeId": "u13", "due": "2026-08-22", "status": "done", "updates": [] },
+      { "id": "c03-4", "phase": "wrap", "title": { "zh": "新生反馈 + 更新 SOP", "en": "Newcomer feedback + update playbook" }, "role": "secretariat", "assigneeId": "u13", "due": "2026-08-29", "status": "done", "updates": [{ "at": "2026-08-29", "by": "u13", "text": { "zh": "反馈 96 份，已更新 SOP 关键点。", "en": "96 responses; playbook key points updated." } }] }
+    ], "volunteerRoles": [], "notices": [] }
+]

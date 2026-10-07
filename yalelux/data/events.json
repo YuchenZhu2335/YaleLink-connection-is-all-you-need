@@ -1,0 +1,245 @@
+[
+  {
+    "id": "e01",
+    "title": {
+      "zh": "ACSSY 2026 中秋晚会",
+      "en": "ACSSY Mid-Autumn Gala 2026"
+    },
+    "type": "acssy",
+    "region": "new-haven",
+    "date": "2026-09-25",
+    "time": "18:30 – 21:30",
+    "venue": {
+      "zh": "Yale Commons",
+      "en": "Yale Commons"
+    },
+    "hostId": "u10",
+    "hostOrg": {
+      "zh": "耶鲁中国学生学者联合会",
+      "en": "ACSSY"
+    },
+    "description": {
+      "zh": "学联年度最大活动：月饼、节目、抽奖，欢迎带家属与朋友。\n\n需要志愿者 20 名，报名后会有人联系你。",
+      "en": "ACSSY's biggest night of the year: mooncakes, performances and a raffle. Family and friends welcome.\n\nWe need 20 volunteers — RSVP and someone will reach out."
+    },
+    "capacity": 300,
+    "going": 187,
+    "tags": [
+      "中秋",
+      "年度活动"
+    ],
+    "campaignId": "c01"
+  },
+  {
+    "id": "e02",
+    "title": {
+      "zh": "咨询校招分享会：MBB 校友面对面",
+      "en": "Consulting Recruiting Night with MBB Alumni"
+    },
+    "type": "career",
+    "region": "new-haven",
+    "date": "2026-09-12",
+    "time": "19:00 – 20:30",
+    "venue": {
+      "zh": "SOM Evans Hall 2400",
+      "en": "SOM Evans Hall 2400"
+    },
+    "hostId": "u01",
+    "hostOrg": {
+      "zh": "ACSSY 职业发展部",
+      "en": "ACSSY Career Development"
+    },
+    "description": {
+      "zh": "麦肯锡、BCG 校友讲今年校招的变化，现场做一个 case 演示。线上同步。",
+      "en": "McKinsey and BCG alumni on what changed in this year's recruiting, with a live case demo. Streamed online."
+    },
+    "capacity": 80,
+    "going": 64,
+    "tags": [
+      "咨询",
+      "校招"
+    ],
+    "campaignId": "c02"
+  },
+  {
+    "id": "e03",
+    "title": {
+      "zh": "纽约校友九月小聚",
+      "en": "NYC Alumni September Drinks"
+    },
+    "type": "meetup",
+    "region": "nyc",
+    "date": "2026-09-18",
+    "time": "19:00 – 22:00",
+    "venue": {
+      "zh": "Midtown，具体地址报名后告知",
+      "en": "Midtown — address sent after RSVP"
+    },
+    "hostId": "u01",
+    "hostOrg": {
+      "zh": "纽约校友群",
+      "en": "NYC alumni chapter"
+    },
+    "description": {
+      "zh": "每月一次的固定小聚，新到纽约的同学优先认识人。AA。",
+      "en": "Monthly get-together; new arrivals in NYC get first dibs on introductions. Split the bill."
+    },
+    "capacity": 40,
+    "going": 28,
+    "tags": [
+      "小聚"
+    ],
+    "circleId": "ci-nyc"
+  },
+  {
+    "id": "e04",
+    "title": {
+      "zh": "湾区科技校友徒步",
+      "en": "Bay Area Tech Alumni Hike"
+    },
+    "type": "outdoor",
+    "region": "bay-area",
+    "date": "2026-10-03",
+    "time": "09:00 – 13:00",
+    "venue": {
+      "zh": "Rancho San Antonio",
+      "en": "Rancho San Antonio Preserve"
+    },
+    "hostId": "u02",
+    "hostOrg": {
+      "zh": "湾区校友群",
+      "en": "Bay Area alumni chapter"
+    },
+    "description": {
+      "zh": "轻松路线，边走边聊内推与跳槽。徒步后附近午饭。",
+      "en": "Easy trail; referral and job-switch chat on the way. Lunch nearby afterwards."
+    },
+    "capacity": 25,
+    "going": 14,
+    "tags": [
+      "徒步"
+    ],
+    "circleId": "ci-hiking"
+  },
+  {
+    "id": "e05",
+    "title": {
+      "zh": "北京校友秋招经验交流",
+      "en": "Beijing Alumni: Campus Recruiting Exchange"
+    },
+    "type": "career",
+    "region": "beijing",
+    "date": "2026-09-20",
+    "time": "14:00 – 17:00",
+    "venue": {
+      "zh": "朝阳区某联合办公空间",
+      "en": "A coworking space in Chaoyang"
+    },
+    "hostId": "u09",
+    "hostOrg": {
+      "zh": "北京校友群",
+      "en": "Beijing alumni chapter"
+    },
+    "description": {
+      "zh": "回国秋招的同学与已入职校友面对面：咨询、互联网、券商三个圆桌。",
+      "en": "Returning grads meet employed alumni: consulting, internet and brokerage roundtables."
+    },
+    "capacity": 50,
+    "going": 37,
+    "tags": [
+      "秋招",
+      "回国"
+    ],
+    "circleId": "ci-beijing"
+  },
+  {
+    "id": "e06",
+    "title": {
+      "zh": "上海创业校友 Demo Night",
+      "en": "Shanghai Founders Demo Night"
+    },
+    "type": "startup",
+    "region": "shanghai",
+    "date": "2026-10-16",
+    "time": "18:30 – 21:00",
+    "venue": {
+      "zh": "徐汇区，报名后告知",
+      "en": "Xuhui — details after RSVP"
+    },
+    "hostId": "u05",
+    "hostOrg": {
+      "zh": "上海校友群 × 红杉中国",
+      "en": "Shanghai chapter × Sequoia China"
+    },
+    "description": {
+      "zh": "5 个校友项目各 8 分钟路演，林芷若校友与两位投资人现场点评。",
+      "en": "Five alumni projects pitch for 8 minutes each; Zhiruo Lin and two investors give feedback."
+    },
+    "capacity": 60,
+    "going": 41,
+    "tags": [
+      "路演",
+      "投资人"
+    ],
+    "circleId": "ci-founders"
+  },
+  {
+    "id": "e07",
+    "title": {
+      "zh": "香港投行 Superday 模拟",
+      "en": "Hong Kong Mock Superday"
+    },
+    "type": "career",
+    "region": "hongkong",
+    "date": "2026-09-06",
+    "time": "10:00 – 16:00",
+    "venue": {
+      "zh": "中环，线上线下同步",
+      "en": "Central — hybrid"
+    },
+    "hostId": "u03",
+    "hostOrg": {
+      "zh": "投行 Superday 冲刺小组",
+      "en": "IB Superday Sprint group"
+    },
+    "description": {
+      "zh": "全流程模拟：3 轮技术 + 行为面，当场反馈。名额有限。",
+      "en": "Full simulation: three technical rounds plus behavioral, feedback on the spot. Limited seats."
+    },
+    "capacity": 16,
+    "going": 15,
+    "tags": [
+      "投行",
+      "模拟面试"
+    ]
+  },
+  {
+    "id": "e08",
+    "title": {
+      "zh": "伦敦校友夏日野餐（已结束）",
+      "en": "London Alumni Summer Picnic (past)"
+    },
+    "type": "meetup",
+    "region": "london",
+    "date": "2026-07-19",
+    "time": "13:00 – 17:00",
+    "venue": {
+      "zh": "Hyde Park",
+      "en": "Hyde Park"
+    },
+    "hostId": "u08",
+    "hostOrg": {
+      "zh": "伦敦校友群",
+      "en": "London alumni chapter"
+    },
+    "description": {
+      "zh": "保留作为往期活动示例。",
+      "en": "Kept as an example of a past event."
+    },
+    "capacity": 30,
+    "going": 22,
+    "tags": [
+      "野餐"
+    ]
+  }
+]
