@@ -168,7 +168,8 @@ test("见到了吗：回答之后还能改", async ({ browser }) => {
   const slot = card.locator('[data-act="schedule"]').first();
   if (await slot.count()) {
     await slot.click();
-    await expect(card.locator(".time.is-selected")).toBeVisible();
+    // 约定后的"已约定"摘要（收起的"改时间"面板里也有一个选中的按钮，所以只认摘要这个 span）
+    await expect(card.locator("span.time.is-selected")).toBeVisible();
     await expect(card.locator(".notice--info, .notice--success")).toHaveCount(0);
     await expect(card).not.toContainText("谢谢告诉我们");
   }
