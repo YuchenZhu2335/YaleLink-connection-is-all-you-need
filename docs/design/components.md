@@ -48,9 +48,10 @@
 
 ## 标签、计数
 
-- 只读标签：`YL.ui.tag(label, "tag--goal")`；容器 `tags`。修饰：`tag--goal`（诉求）、`tag--shared`（共同兴趣：字前自动画 6px 灯点，不用再放图标）、`tag--theme`（活动主题，描边）
+- 只读标签：`YL.ui.tag(label, "tag--goal")`；容器 `tags`。修饰：`tag--goal`（诉求）、`tag--shared`（共同兴趣：字前自动画 6px 灯点，不用再放图标）、`tag--theme`（活动主题，描边）、`tag--meet`（见面方式，描边 + 前面的 `mapPin` 图标：`<span class="tag tag--meet">${icon("mapPin")}线上</span>`，放在标签行第一个）
 - 计数：`<span class="count">3</span>` 灯色（等你处理的事：收件箱）；`count--neutral` 中性（结果数、筛选数、表格页签；放在按钮里的 `.count` 自动是中性的）。必须带数字
 - 状态小标签 `pill`（高 24、圆角 6）：默认（"未回应"）、`pill--success`、`pill--warn`、`pill--danger`、`pill--incoming`、`pill--waiting`（虚线）
+- 导师标记 `pill pill--mentor`（海军蓝浅底，`cap` 图标在前）：身份记号，不是状态，所以不用灯色；放在名字同一行（见人物卡的 `person__title`）
 
 ## 筛选与问卷选项
 
@@ -89,6 +90,19 @@
 - 控件：`input`、`textarea`、`select`；验证码 `input input--code`（一个 input：`inputmode="numeric" autocomplete="one-time-code" maxlength="6"`，Newsreader 等宽数字，按 6 格排开；格距 48，视口 <400 / <360 自动缩到 42 / 36，320 宽也放得下，填满 6 位不会横向滚动）；输入框 + 按钮同一行 `input-row`
 - `.form` 和 `.field` 都是单列 `minmax(0, 1fr)` 网格：里面再宽的东西也不会把卡片撑出屏幕
 - 报错：`YL.ui.showFieldErrors(form, error.fields, "模块名")`（错误文字前自动画圆形叹号）；清除：`clearFieldErrors(form)`；字数 `field__count`（超出加 `is-over`）
+- 单选卡的说明是一整句话时（如"谁能看我的简历"）加 `radio-cards--stack`：一行一张，说明按正常规则折行（默认的 `radio-cards` 两列并排，说明只在空格处换行，长句会撑出卡片）
+- 文件（简历上传，选好就传，不跟表单一起提交）：
+
+  ```html
+  <div class="field" data-field="resume">
+    <div class="filebox">                                      <!-- 没上传：filebox filebox--empty（虚线框） -->
+      <span class="filebox__icon">${icon("check")}</span>
+      <div class="filebox__main"><p class="filebox__name">resume.pdf</p><p class="filebox__meta">312 KB · 10月7日 上传</p></div>
+      <button class="btn btn--secondary btn--sm">上传 PDF</button>   <!-- 可选：放不下时换到下一行、靠右 -->
+    </div>
+  </div>
+  ```
+  上传中把 `filebox__meta` 换成进度条 `<div class="progress" role="progressbar" aria-valuenow="45"><span data-pct="45"></span></div>`（宽度渲染后用 CSSOM 设置）；`<input type="file">` 放在 `field` 里、`sr-only` + `tabindex="-1"`，由按钮触发
 - 首次填写进度（圆圈里的数字 / 勾由 CSS 画）：`<ol class="steps"><li class="steps__item is-done">同意说明</li><li class="steps__item is-current" aria-current="step">联系邮箱</li><li class="steps__item">资料</li></ol>`
 
 ## 人物卡
@@ -98,14 +112,18 @@
   <div class="person__head">
     ${avatar(name)}                                            <!-- 拱形 56×64 -->
     <div class="person__who">
-      <a class="person__name" href="#/coffee/p/ID">林可欣</a>
-      <p class="person__meta"><span>硕士 · 2027 届</span><span>科技互联网</span></p>   <!-- span 之间自动加"·" -->
+      <div class="person__title">                               <!-- 名字放不下时省略号截断；后面的标记不缩 -->
+        <a class="person__name" href="#/coffee/p/ID">王五 <span class="person__alias">· Wu</span></a>   <!-- 英文名 / 常用称呼：常规字重、ink-2 -->
+        <span class="pill pill--mentor">${icon("cap")}导师</span>                                     <!-- 只有导师才有 -->
+      </div>
+      <p class="person__meta"><span>硕士</span><span>2027 届</span><span>Environmental Management</span><span>科技互联网</span></p>   <!-- span 之间自动加"·" -->
     </div>
     <button class="icon-btn" aria-label="不感兴趣：林可欣">${icon("x")}</button>      <!-- 可选：右上角 -->
   </div>
   <ul class="person__reasons"><li class="reason"><span>你们都喜欢徒步、咖啡</span></li></ul>   <!-- 灯点由 CSS 画；旧代码里的图标会被隐藏 -->
   <div class="tags">…</div>
   <p class="person__intro">一句话介绍</p>                      <!-- 列表里最多 2 行 -->
+  <p class="person__text">还有什么想说的（保留换行）</p>  <!-- 只在个人页和收件箱的邀请卡上；个人页加 person__text--body（和题目答案一样大） -->
   <p class="person__note">邀请留言</p>
   <div class="person__foot">                                  <!-- 手机：说明一行、按钮另起一行占满 48；≥600 并排 -->
     <span class="person__overlap">${icon("clock")} 3 个共同空闲时间</span>
@@ -126,6 +144,8 @@
 没有共同空闲时间时 `person__overlap person__overlap--none`。
 
 匹配后的联系方式：`<div class="contact"><div><p class="contact__label">微信</p><p class="contact__value">demo-123</p></div><button class="btn btn--secondary btn--sm">复制</button></div>`
+
+匹配页"在哪儿见"（地点以被邀请的一方为准）：被邀请一方的地点用 `contact`（和联系方式一样醒目），另一方的用 `contact contact--minor`（透明底 + 细线，值 16 / 500）；没填时值换成 `<p class="contact__value contact__value--none">一句说明</p>`（14 常规 ink-3），不放复制按钮
 
 头像：`avatar(name)` 默认 56×64；`avatar(name, "sm")` 36×42（顶栏、列表）；`"lg"` 72×84（匹配页头、详情）；`"xs"` 24×28。全部是拱形（`avatar--s` / `avatar--l` 是同样尺寸的别名）。
 

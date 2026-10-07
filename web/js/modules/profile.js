@@ -766,7 +766,7 @@
   // 简历区的事件（只绑一次；里面的内容每次重画）
   function bindResume(box, ctx) {
     paintResume(box);
-    let saving = false;
+    let visSeq = 0; // 连点两个选项时只认最后一次的结果
     box.addEventListener("click", async (e) => {
       const b = e.target.closest("[data-resume-act]");
       if (!b || b.disabled || uploading) return;
@@ -797,11 +797,10 @@
         if (file) startUpload(file, ctx);
         return;
       }
-      if (x.name !== "resumeVisibility" || saving) return;
-      saving = true;
+      if (x.name !== "resumeVisibility") return;
+      const seq = ++visSeq;
       const r = await YL.api.post("/me/resume/settings", { visibility: x.value });
-      saving = false;
-      if (!ctx.isActive()) return;
+      if (!ctx.isActive() || seq !== visSeq) return;
       if (!r.ok) {
         const me = YL.auth.user() || {};
         YL.ui.$$('input[name="resumeVisibility"]', box).forEach((i) => { i.checked = !!me.resume && i.value === me.resume.visibility; });

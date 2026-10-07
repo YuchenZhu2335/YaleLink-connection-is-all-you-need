@@ -331,19 +331,22 @@
   function membersHtml(d) {
     const guests = Array.isArray(d.guests) ? d.guests : [];
     const mentors = Array.isArray(d.mentors) ? d.mentors : [];
-    const faintDash = `<span class="faint">${DASH}</span>`;
-    const guestRows = guests.map((g) => `<tr>
-        <td><span class="break-all">${esc(g.email)}</span></td>
-        <td>${g.note ? esc(g.note) : faintDash}</td>
-        <td><div class="cluster">${g.registered ? pill(t("admin.members.registered"), "pill--success", "check") + (g.name ? `<span class="small muted">${esc(g.name)}</span>` : "") : pill(t("admin.members.notRegistered"))}</div></td>
-        <td class="nowrap">${esc(when(g.createdAt))}</td>
-        <td><button type="button" class="btn btn--danger-ghost btn--sm" data-act="guest-del" data-email="${esc(g.email)}" aria-label="${esc(t("admin.members.removeGuestLabel", { email: g.email }))}">${icon("trash")}<span>${esc(t("admin.members.remove"))}</span></button></td>
-      </tr>`);
-    const mentorRows = mentors.map((x) => `<tr>
-        <td><div class="cluster"><strong>${esc(x.name || DASH)}</strong>${pill(t("admin.members.mentor"), "pill--mentor", "cap")}</div></td>
-        <td><span class="break-all">${esc(x.loginEmail || "")}</span></td>
-        <td><button type="button" class="btn btn--secondary btn--sm" data-act="mentor-off" data-email="${esc(x.loginEmail || "")}" aria-label="${esc(t("admin.members.unmarkLabel", { name: x.name || x.loginEmail || "" }))}"><span>${esc(t("admin.members.unmark"))}</span></button></td>
-      </tr>`);
+    // 列表而不是表格：邮箱很长，手机上表格会被压成一个字一行，删除按钮也要横向滚动才看得到
+    const guestRows = guests.map((g) => `<li class="list__item">
+        <div class="list__main">
+          <span class="list__title break-all">${esc(g.email)}</span>
+          <span class="list__sub">${esc([g.note, t("admin.members.addedAt", { when: when(g.createdAt) })].filter(Boolean).join(" · "))}</span>
+          <span class="cluster">${g.registered ? pill(t("admin.members.registered"), "pill--success", "check") + (g.name ? `<span class="small muted">${esc(g.name)}</span>` : "") : pill(t("admin.members.notRegistered"))}</span>
+        </div>
+        <button type="button" class="btn btn--danger-ghost btn--sm" data-act="guest-del" data-email="${esc(g.email)}" aria-label="${esc(t("admin.members.removeGuestLabel", { email: g.email }))}">${icon("trash")}<span>${esc(t("admin.members.remove"))}</span></button>
+      </li>`);
+    const mentorRows = mentors.map((x) => `<li class="list__item">
+        <div class="list__main">
+          <span class="cluster"><span class="list__title">${esc(x.name || DASH)}</span>${pill(t("admin.members.mentor"), "pill--mentor", "cap")}</span>
+          <span class="list__sub break-all">${esc(x.loginEmail || "")}</span>
+        </div>
+        <button type="button" class="btn btn--secondary btn--sm" data-act="mentor-off" data-email="${esc(x.loginEmail || "")}" aria-label="${esc(t("admin.members.unmarkLabel", { name: x.name || x.loginEmail || "" }))}"><span>${esc(t("admin.members.unmark"))}</span></button>
+      </li>`);
     const emailInput = (id, label, ph) => `<div class="field" data-field="email">
         <label class="field__label" for="${id}">${esc(label)}<span class="req" aria-hidden="true">*</span></label>
         <input class="input" type="email" id="${id}" name="email" maxlength="120" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(ph)}">
@@ -363,7 +366,7 @@
           <div class="cluster cluster--end"><button type="submit" class="btn btn--primary btn--sm">${icon("plus")}<span>${esc(t("admin.members.addGuest"))}</span></button></div>
         </div></form>
         ${guests.length
-          ? table(t("admin.members.guestsTitle"), [esc(t("admin.col.email")), esc(t("admin.col.note")), esc(t("admin.col.account")), esc(t("admin.col.added")), esc(t("admin.col.actions"))], guestRows)
+          ? `<div class="card"><ul class="list" aria-label="${esc(t("admin.members.guestsTitle"))}">${guestRows.join("")}</ul></div>`
           : `<div class="card card--quiet">${empty("mail", t("admin.members.noGuests"), t("admin.members.noGuestsBody"))}</div>`}
       </section>
       <section class="stack" aria-labelledby="am-mentors">
@@ -374,7 +377,7 @@
           <div class="cluster cluster--end"><button type="submit" class="btn btn--primary btn--sm">${icon("cap")}<span>${esc(t("admin.members.markMentor"))}</span></button></div>
         </div></form>
         ${mentors.length
-          ? table(t("admin.members.mentorsTitle"), [esc(t("admin.col.name")), esc(t("admin.col.loginEmail")), esc(t("admin.col.actions"))], mentorRows)
+          ? `<div class="card"><ul class="list" aria-label="${esc(t("admin.members.mentorsTitle"))}">${mentorRows.join("")}</ul></div>`
           : `<div class="card card--quiet">${empty("user", t("admin.members.noMentors"), t("admin.members.noMentorsBody"))}</div>`}
       </section>`;
   }
